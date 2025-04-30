@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build
+        run: xcodebuild -scheme 100DaysRebuild -destination 'platform=iOS Simulator,name=iPhone 13' clean build
+
+      - name: Test
+        run: xcodebuild -scheme 100DaysRebuild -destination 'platform=iOS Simulator,name=iPhone 13' test
