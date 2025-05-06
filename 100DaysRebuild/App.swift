@@ -1,9 +1,22 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseAuth
+import GoogleSignIn
+import UIKit
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        return true
+    }
+    
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        return GIDSignIn.sharedInstance.handle(url)
+    }
+}
 
 @main
 struct App100Days: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var subscriptionService = SubscriptionService.shared
     
@@ -35,14 +48,14 @@ struct AppContentView: View {
                         .environmentObject(subscriptionService)
                 }
             } else {
-                SimpleAuthView()
+                AuthView()
                     .environmentObject(subscriptionService)
             }
         }
     }
 }
 
-struct SimpleAuthView: View {
+struct AuthView: View {
     @State private var email = ""
     @State private var password = ""
     @EnvironmentObject var userSession: UserSession
