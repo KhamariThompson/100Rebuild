@@ -21,11 +21,15 @@
 
 /* Begin PBXFileReference section */
 		5482AADA2DC25D9600AF37F0 /* 100DaysRebuild.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = 100DaysRebuild.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		54ED09332DC6B52C00D6DBDC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5482AADC2DC25D9600AF37F0 /* 100DaysRebuild */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			children = (
+				54ED09332DC6B52C00D6DBDC /* Info.plist */,
+			);
 			path = 100DaysRebuild;
 			sourceTree = "<group>";
 		};
@@ -289,11 +293,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 5392LZDF92;
+				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -319,11 +322,10 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = 5392LZDF92;
+				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

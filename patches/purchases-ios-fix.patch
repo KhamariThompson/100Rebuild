@@ -1,0 +1,23 @@
+diff --git a/Package.swift b/Package.swift
+index xxxxxxx..yyyyyyy 100644
+--- a/Package.swift
++++ b/Package.swift
+@@ -9,7 +9,7 @@ let package = Package(
+     platforms: [.iOS(.v13), .macOS(.v10_15), .watchOS(.v6), .tvOS(.v13), .visionOS(.v1)],
+     products: [
+         .library(name: "RevenueCat", targets: ["RevenueCat"]),
+-        .library(name: "ReceiptParser", targets: ["ReceiptParser"])
++        .library(name: "ReceiptParser", targets: ["ReceiptParser"]),
+     ],
+     targets: [
+         .target(
+@@ -46,7 +46,7 @@ let package = Package(
+ 
+ // Needed to read info from our private repo packages.
+ func readPackageFile(_ fileURL: URL) throws -> [String: Any] {
+-    let data = try Data(contentsOf: fileURL)
++    let data = try Data(contentsOf: fileURL, encoding: .utf8)
+     guard let result = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+         throw NSError(domain: "JSONError", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid JSON"])
+     }
+ } 

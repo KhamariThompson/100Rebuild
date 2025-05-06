@@ -23,6 +23,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 class SceneDelegate: NSObject, UIWindowSceneDelegate {
+    var window: UIWindow?
+    
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        // Use this method to set up the scene
+        if let windowScene = scene as? UIWindowScene {
+            // Handle connection options if needed
+            if let urlContext = connectionOptions.urlContexts.first {
+                GIDSignIn.sharedInstance.handle(urlContext.url)
+            }
+        }
+    }
+    
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         guard let url = URLContexts.first?.url else { return }
         GIDSignIn.sharedInstance.handle(url)
