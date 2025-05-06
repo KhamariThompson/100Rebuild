@@ -130,7 +130,7 @@ class AuthViewModel: ObservableObject {
     }
     
     func signOut() async throws {
-        try await auth.signOut()
+        try auth.signOut()
     }
     
     func resetPassword(email: String) async throws {
