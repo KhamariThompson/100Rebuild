@@ -3,14 +3,29 @@ import FirebaseCore
 import FirebaseAuth
 import GoogleSignIn
 import UIKit
+import AuthenticationServices
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        FirebaseApp.configure()
         return true
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         return GIDSignIn.sharedInstance.handle(url)
+    }
+    
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let sceneConfig = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        sceneConfig.delegateClass = SceneDelegate.self
+        return sceneConfig
+    }
+}
+
+class SceneDelegate: NSObject, UIWindowSceneDelegate {
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        guard let url = URLContexts.first?.url else { return }
+        GIDSignIn.sharedInstance.handle(url)
     }
 }
 
@@ -21,7 +36,7 @@ struct App100Days: App {
     @StateObject private var subscriptionService = SubscriptionService.shared
     
     init() {
-        FirebaseApp.configure()
+        // FirebaseApp is now configured in AppDelegate
     }
     
     var body: some Scene {
@@ -29,6 +44,9 @@ struct App100Days: App {
             AppContentView()
                 .environmentObject(userSession)
                 .environmentObject(subscriptionService)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }
