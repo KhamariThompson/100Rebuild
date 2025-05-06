@@ -62,13 +62,12 @@ class FirebaseService {
         
         // Configure Firestore settings
         let settings = FirestoreSettings()
-        settings.isPersistenceEnabled = true
-        settings.cacheSizeBytes = FirestoreCacheSizeUnlimited
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
         firestore?.settings = settings
     }
     
     // MARK: - Auth Methods
-    func signIn(email: String, password: String) async throws -> User {
+    func signIn(email: String, password: String) async throws -> FirebaseAuth.User {
         guard let auth = auth else {
             throw FirebaseError.notConfigured
         }
@@ -81,7 +80,7 @@ class FirebaseService {
         }
     }
     
-    func signUp(email: String, password: String) async throws -> User {
+    func signUp(email: String, password: String) async throws -> FirebaseAuth.User {
         guard let auth = auth else {
             throw FirebaseError.notConfigured
         }
@@ -94,7 +93,7 @@ class FirebaseService {
         }
     }
     
-    func signOut() throws {
+    func signOut() async throws {
         guard let auth = auth else {
             throw FirebaseError.notConfigured
         }
@@ -126,7 +125,13 @@ class FirebaseService {
         }
         
         do {
-            try await firestore.collection(collection).document(documentId).setData(from: data, merge: true)
+            let docRef = firestore.collection(collection).document(documentId)
+            
+            // Convert the generic type to a dictionary using Firestore's encoder
+            let encodedData = try Firestore.Encoder().encode(data)
+            
+            // Use the standard setData method instead of the generic one
+            try await docRef.setData(encodedData, merge: true)
         } catch {
             throw FirebaseError.firestoreError(error)
         }
@@ -359,5 +364,15 @@ class FirebaseService {
         } catch {
             throw FirebaseError.storageError(error)
         }
+    }
+    
+    func uploadFile(data: Data, path: String) async throws -> String {
+        guard let storage = storage else {
+            throw FirebaseError.notConfigured
+        }
+        
+        let storageRef = storage.reference().child(path)
+        _ = try await storageRef.putDataAsync(data)
+        return try await storageRef.downloadURL().absoluteString
     }
 } 

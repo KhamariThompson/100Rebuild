@@ -9,58 +9,16 @@ struct SubscriptionView: View {
             ScrollView {
                 VStack(spacing: 32) {
                     // Header
-                    VStack(spacing: 16) {
-                        Text("Unlock Pro Features")
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .foregroundColor(.theme.text)
-                        
-                        Text("Take your journey to the next level")
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.top)
+                    headerView
                     
                     // Features List
-                    ForEach(ProFeatureSection.allCases, id: \.self) { section in
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text(section.rawValue)
-                                .font(.headline)
-                                .foregroundColor(.theme.text)
-                            
-                            ForEach(viewModel.features.filter { $0.section == section }) { feature in
-                                FeatureRow(feature: feature)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
+                    featuresListView
                     
                     // Purchase Button
-                    Button(action: {
-                        Task {
-                            await viewModel.purchase()
-                        }
-                    }) {
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        } else {
-                            Text("Upgrade to Pro")
-                                .font(.headline)
-                        }
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .padding(.horizontal)
+                    purchaseButtonView
                     
                     // Restore Purchases
-                    Button("Restore Purchases") {
-                        Task {
-                            await viewModel.restorePurchases()
-                        }
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.theme.accent)
+                    restorePurchasesButton
                 }
             }
             .navigationBarItems(trailing: Button("Close") {
@@ -73,37 +31,70 @@ struct SubscriptionView: View {
             }
         }
     }
-}
-
-private struct FeatureRow: View {
-    let feature: ProFeature
     
-    var body: some View {
-        HStack(spacing: 16) {
-            Text(feature.icon)
-                .font(.title2)
+    private var headerView: some View {
+        VStack(spacing: 16) {
+            Text("Unlock Pro Features")
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(.theme.text)
             
-            VStack(alignment: .leading, spacing: 4) {
-                Text(feature.title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.theme.text)
-                
-                Text(feature.description)
-                    .font(.caption)
-                    .foregroundColor(.theme.subtext)
+            Text("Take your journey to the next level")
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.top)
+    }
+    
+    private var featuresListView: some View {
+        ForEach(ProFeatureSection.allCases, id: \.self) { section in
+            featureSectionView(for: section)
+        }
+    }
+    
+    private func featureSectionView(for section: ProFeatureSection) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(section.rawValue)
+                .font(.headline)
+                .foregroundColor(.theme.text)
+            
+            ForEach(viewModel.features.filter { $0.section == section }) { feature in
+                FeatureRow(icon: feature.icon, title: feature.title, description: feature.description)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.theme.surface)
-        )
+        .padding(.horizontal)
+    }
+    
+    private var purchaseButtonView: some View {
+        Button(action: {
+            Task {
+                await viewModel.purchase()
+            }
+        }) {
+            if viewModel.isLoading {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            } else {
+                Text("Upgrade to Pro")
+                    .font(.headline)
+            }
+        }
+        .buttonStyle(.primary)
+        .padding(.horizontal)
+    }
+    
+    private var restorePurchasesButton: some View {
+        Button("Restore Purchases") {
+            Task {
+                await viewModel.restorePurchases()
+            }
+        }
+        .font(.subheadline)
+        .foregroundColor(.theme.accent)
     }
 }
 
-// Preview provider
 struct SubscriptionView_Previews: PreviewProvider {
     static var previews: some View {
         SubscriptionView()

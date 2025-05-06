@@ -1,8 +1,9 @@
 import SwiftUI
+import FirebaseAuth
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var userSession: UserSessionService
+    @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     
@@ -10,126 +11,23 @@ struct SettingsView: View {
     @State private var showingChangeEmail = false
     @State private var showingChangePassword = false
     @State private var showingDeleteAccount = false
-    @State private var showingPaywall = false
     @State private var isRestoringPurchases = false
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var isNotificationsEnabled = false
+    @State private var showingDeleteConfirmation = false
     
     private let themeOptions = ["light", "dark", "system"]
     
     var body: some View {
         NavigationView {
-            List {
-                // Notifications Section
-                Section(header: Text("Notifications")) {
-                    Toggle("Daily Reminders", isOn: $notificationService.isNotificationsEnabled)
-                        .onChange(of: notificationService.isNotificationsEnabled) { newValue in
-                            if newValue {
-                                notificationService.scheduleDailyReminder()
-                            } else {
-                                notificationService.cancelAllNotifications()
-                            }
-                        }
-                }
-                
-                // Account Section
-                Section(header: Text("Account")) {
-                    Button(action: { showingChangeEmail = true }) {
-                        HStack {
-                            Image(systemName: "envelope")
-                            Text("Change Email")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                        }
-                    }
-                    
-                    Button(action: { showingChangePassword = true }) {
-                        HStack {
-                            Image(systemName: "lock")
-                            Text("Change Password")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                        }
-                    }
-                }
-                
-                // Appearance Section
-                Section(header: Text("Appearance")) {
-                    Picker("Theme", selection: $appTheme) {
-                        ForEach(themeOptions, id: \.self) { theme in
-                            Text(theme.capitalized)
-                                .tag(theme)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-                
-                // Membership Section
-                Section(header: Text("Membership")) {
-                    if subscriptionService.isProUser {
-                        HStack {
-                            Image(systemName: "sparkles")
-                            Text("Pro Member")
-                            Spacer()
-                            if let renewalDate = subscriptionService.renewalDate {
-                                Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
-                                    .font(.caption)
-                                    .foregroundColor(.theme.subtext)
-                            }
-                        }
-                        
-                        Button(action: restorePurchases) {
-                            HStack {
-                                Image(systemName: "arrow.clockwise")
-                                Text("Restore Purchases")
-                                if isRestoringPurchases {
-                                    Spacer()
-                                    ProgressView()
-                                }
-                            }
-                        }
-                        .disabled(isRestoringPurchases)
-                    } else {
-                        Button(action: { showingPaywall = true }) {
-                            HStack {
-                                Image(systemName: "crown.fill")
-                                Text("Upgrade to Pro")
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                            }
-                        }
-                    }
-                }
-                
-                // Danger Zone Section
-                Section(header: Text("Danger Zone")) {
-                    Button(action: { showingDeleteAccount = true }) {
-                        HStack {
-                            Image(systemName: "trash")
-                            Text("Delete Account")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                        }
-                        .foregroundColor(.red)
-                    }
-                    
-                    Button(action: signOut) {
-                        HStack {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                            Text("Sign Out")
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                        }
-                        .foregroundColor(.red)
-                    }
-                }
+            Form {
+                notificationsContent
+                accountContent
+                appearanceContent
+                membershipContent()
+                aboutContent
             }
-            .listStyle(InsetGroupedListStyle())
             .navigationTitle("Settings")
             .navigationBarItems(trailing: Button("Done") { dismiss() })
             .sheet(isPresented: $showingChangeEmail) {
@@ -138,11 +36,18 @@ struct SettingsView: View {
             .sheet(isPresented: $showingChangePassword) {
                 ChangePasswordView()
             }
-            .sheet(isPresented: $showingDeleteAccount) {
-                DeleteAccountView()
-            }
-            .sheet(isPresented: $showingPaywall) {
+            .sheet(isPresented: $subscriptionService.showPaywall) {
                 PaywallView()
+            }
+            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await handleDeleteAccount()
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone.")
             }
             .alert("Error", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}
@@ -152,32 +57,196 @@ struct SettingsView: View {
         }
     }
     
+    private var notificationsContent: some View {
+        Group {
+            Section {
+                Toggle("Daily Reminders", isOn: $isNotificationsEnabled)
+                    .onChange(of: isNotificationsEnabled) { oldValue, newValue in
+                        Task {
+                            await handleNotificationToggle(newValue)
+                        }
+                    }
+            } header: {
+                Text("Notifications")
+            }
+        }
+    }
+    
+    private var accountContent: some View {
+        Group {
+            Section {
+                Button(action: { showingChangeEmail = true }) {
+                    Label("Change Email", systemImage: "envelope")
+                }
+                
+                Button(action: { showingChangePassword = true }) {
+                    Label("Change Password", systemImage: "lock")
+                }
+                
+                Button(action: { 
+                    Task {
+                        await handleSignOut()
+                    }
+                }) {
+                    Label("Sign Out", systemImage: "arrow.right.square")
+                        .foregroundColor(.red)
+                }
+                
+                Button(action: { showingDeleteConfirmation = true }) {
+                    Label("Delete Account", systemImage: "trash")
+                        .foregroundColor(.red)
+                }
+            } header: {
+                Text("Account")
+            }
+        }
+    }
+    
+    private var appearanceContent: some View {
+        Group {
+            Section {
+                Picker("Theme", selection: $appTheme) {
+                    ForEach(themeOptions, id: \.self) { theme in
+                        Text(theme.capitalized)
+                            .tag(theme)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+            } header: {
+                Text("Appearance")
+            }
+        }
+    }
+    
+    private func membershipContent() -> some View {
+        Group {
+            Section {
+                if subscriptionService.isProUser {
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("Pro Member")
+                        Spacer()
+                        if let renewalDate = subscriptionService.renewalDate {
+                            Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
+                                .font(.caption)
+                                .foregroundColor(.theme.subtext)
+                        }
+                    }
+                    
+                    Button(action: restorePurchases) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Restore Purchases")
+                            if isRestoringPurchases {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isRestoringPurchases)
+                } else {
+                    Button(action: {
+                        subscriptionService.presentSubscriptionSheet()
+                    }) {
+                        Label("Upgrade to Pro", systemImage: "star.fill")
+                    }
+                }
+            } header: {
+                Text("Membership")
+            }
+        }
+    }
+    
+    private var aboutContent: some View {
+        Group {
+            Section {
+                Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Label("Privacy Policy", systemImage: "hand.raised")
+                }
+                
+                Link(destination: URL(string: "https://example.com/terms")!) {
+                    Label("Terms of Service", systemImage: "doc.text")
+                }
+                
+                HStack {
+                    Label("Version", systemImage: "info.circle")
+                    Spacer()
+                    Text("1.0.0")
+                        .foregroundColor(.gray)
+                }
+            } header: {
+                Text("About")
+            }
+        }
+    }
+    
+    private func handleNotificationToggle(_ isEnabled: Bool) async {
+        do {
+            if isEnabled {
+                try await notificationService.scheduleDailyReminder()
+            } else {
+                notificationService.cancelAllNotifications()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+    
+    private func handleSignOut() async {
+        do {
+            try await userSession.signOut()
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+    
     private func restorePurchases() {
         isRestoringPurchases = true
         Task {
             do {
-                try await subscriptionService.restorePurchases()
+                try await subscriptionService.purchaseSubscription(plan: .monthly)
+                await MainActor.run {
+                    isRestoringPurchases = false
+                }
             } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                    isRestoringPurchases = false
+                }
             }
-            isRestoringPurchases = false
         }
     }
     
-    private func signOut() {
+    private func handleDeleteAccount() async {
         do {
-            try userSession.signOut()
+            guard let user = Auth.auth().currentUser else {
+                throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
+            }
+            
+            try await user.delete()
+            try await userSession.signOut()
+            
+            await MainActor.run {
+                errorMessage = ""
+                showingError = false
+            }
         } catch {
-            errorMessage = error.localizedDescription
-            showingError = true
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
         }
     }
 }
 
 struct ChangeEmailView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var userSession: UserSessionService
+    @EnvironmentObject var userSession: UserSession
     @State private var newEmail = ""
     @State private var password = ""
     @State private var isUpdating = false
@@ -222,7 +291,7 @@ struct ChangeEmailView: View {
         isUpdating = true
         Task {
             do {
-                try await userSession.updateEmail(newEmail, password: password)
+                try await updateEmailWithUserSession()
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -231,11 +300,24 @@ struct ChangeEmailView: View {
             isUpdating = false
         }
     }
+    
+    private func updateEmailWithUserSession() async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
+        }
+        
+        // Reauthenticate user
+        let credential = EmailAuthProvider.credential(withEmail: user.email ?? "", password: password)
+        try await user.reauthenticate(with: credential)
+        
+        // Update email with verification
+        try await user.sendEmailVerification(beforeUpdatingEmail: newEmail)
+    }
 }
 
 struct ChangePasswordView: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var userSession: UserSessionService
+    @EnvironmentObject var userSession: UserSession
     @State private var currentPassword = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -266,7 +348,7 @@ struct ChangePasswordView: View {
                             Text("Update Password")
                         }
                     }
-                    .disabled(currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty || newPassword != confirmPassword || isUpdating)
+                    .disabled(currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty || isUpdating)
                 }
             }
             .navigationTitle("Change Password")
@@ -283,7 +365,7 @@ struct ChangePasswordView: View {
         isUpdating = true
         Task {
             do {
-                try await userSession.updatePassword(currentPassword, newPassword: newPassword)
+                try await updatePasswordWithUserSession()
                 dismiss()
             } catch {
                 errorMessage = error.localizedDescription
@@ -292,60 +374,31 @@ struct ChangePasswordView: View {
             isUpdating = false
         }
     }
+    
+    private func updatePasswordWithUserSession() async throws {
+        guard let user = Auth.auth().currentUser else {
+            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
+        }
+        
+        // Check if passwords match
+        if newPassword != confirmPassword {
+            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "New passwords do not match"])
+        }
+        
+        // Reauthenticate user
+        let credential = EmailAuthProvider.credential(withEmail: user.email ?? "", password: currentPassword)
+        try await user.reauthenticate(with: credential)
+        
+        // Update password
+        try await user.updatePassword(to: newPassword)
+    }
 }
 
-struct DeleteAccountView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var userSession: UserSessionService
-    @State private var password = ""
-    @State private var isDeleting = false
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section {
-                    Text("Are you sure you want to delete your account? This action cannot be undone.")
-                        .foregroundColor(.red)
-                    
-                    SecureField("Enter Password to Confirm", text: $password)
-                        .textContentType(.password)
-                }
-                
-                Section {
-                    Button(action: deleteAccount) {
-                        if isDeleting {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        } else {
-                            Text("Delete Account")
-                                .foregroundColor(.red)
-                        }
-                    }
-                    .disabled(password.isEmpty || isDeleting)
-                }
-            }
-            .navigationTitle("Delete Account")
-            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
-            .alert("Error", isPresented: $showingError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
-            }
-        }
-    }
-    
-    private func deleteAccount() {
-        isDeleting = true
-        Task {
-            do {
-                try await userSession.deleteAccount(password: password)
-            } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-            isDeleting = false
-        }
+struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        SettingsView()
+            .environmentObject(UserSession.shared)
+            .environmentObject(SubscriptionService.shared)
+            .environmentObject(NotificationService.shared)
     }
 } 

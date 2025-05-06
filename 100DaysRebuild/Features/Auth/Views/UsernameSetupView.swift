@@ -2,56 +2,52 @@ import SwiftUI
 
 struct UsernameSetupView: View {
     @StateObject private var viewModel = UsernameSetupViewModel()
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var userSession: UserSession
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 24) {
-                // Username Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Choose a Username")
-                        .font(.headline)
-                        .foregroundColor(.theme.text)
-                    
-                    TextField("Username", text: $viewModel.username)
-                        .textFieldStyle(.roundedBorder)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                }
-                
-                // Submit Button
-                Button(action: {
-                    Task {
-                        await viewModel.submitUsername()
-                    }
-                }) {
-                    if viewModel.isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    } else {
-                        Text("Continue")
-                            .font(.headline)
-                    }
-                }
-                .buttonStyle(.primary)
-                .disabled(!viewModel.isValid || viewModel.isLoading)
-                
-                Spacer()
+        VStack(spacing: 20) {
+            Text("Choose Your Username")
+                .font(.title)
+                .bold()
+            
+            Text("This will be your display name in the app")
+                .foregroundColor(.gray)
+            
+            TextField("Username", text: $viewModel.username)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .autocapitalization(.none)
+                .padding()
+            
+            if let error = viewModel.error {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.caption)
             }
+            
+            Button(action: {
+                Task {
+                    await viewModel.saveUsername()
+                }
+            }) {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                } else {
+                    Text("Continue")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.username.isEmpty || viewModel.isLoading)
             .padding()
-            .navigationTitle("Welcome!")
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.errorMessage)
-            }
         }
+        .padding()
     }
 }
 
-// Preview provider
 struct UsernameSetupView_Previews: PreviewProvider {
     static var previews: some View {
         UsernameSetupView()
+            .environmentObject(UserSession.shared)
     }
 } 

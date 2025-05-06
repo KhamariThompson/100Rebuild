@@ -1,41 +1,53 @@
-import Foundation
+import SwiftUI
 import FirebaseAuth
 import FirebaseFirestore
 
 enum AuthState {
     case loading
-    case signedIn(User)
+    case signedIn(FirebaseAuth.User)
     case signedOut
 }
 
-@MainActor
-class UserSessionService: ObservableObject {
-    static let shared = UserSessionService()
+class UserSession: ObservableObject {
+    static let shared = UserSession()
     
     @Published private(set) var authState: AuthState = .loading
-    @Published private(set) var currentUser: User?
+    @Published private(set) var isAuthenticated = false
+    @Published private(set) var hasCompletedOnboarding = false
+    @Published private(set) var currentUser: FirebaseAuth.User?
     @Published private(set) var username: String?
     
     private let auth = Auth.auth()
     private let firestore = Firestore.firestore()
+    private var stateListener: AuthStateDidChangeListenerHandle?
     
     private init() {
         setupAuthStateListener()
     }
     
     private func setupAuthStateListener() {
-        auth.addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in
+        stateListener = auth.addStateDidChangeListener { [weak self] _, user in
+            DispatchQueue.main.async {
                 if let user = user {
                     self?.authState = .signedIn(user)
                     self?.currentUser = user
-                    await self?.loadUserProfile()
+                    self?.isAuthenticated = true
+                    Task {
+                        await self?.loadUserProfile()
+                    }
                 } else {
                     self?.authState = .signedOut
                     self?.currentUser = nil
+                    self?.isAuthenticated = false
                     self?.username = nil
                 }
             }
+        }
+    }
+    
+    deinit {
+        if let listener = stateListener {
+            auth.removeStateDidChangeListener(listener)
         }
     }
     
@@ -49,15 +61,33 @@ class UserSessionService: ObservableObject {
                 .getDocument()
             
             if let data = document.data() {
-                username = data["username"] as? String
+                await MainActor.run {
+                    self.username = data["username"] as? String
+                    self.hasCompletedOnboarding = self.username != nil
+                }
             }
         } catch {
             print("Error loading user profile: \(error)")
         }
     }
     
-    func signOut() throws {
+    func signIn(email: String, password: String) async throws {
+        let result = try await auth.signIn(withEmail: email, password: password)
+        await MainActor.run {
+            self.currentUser = result.user
+            self.isAuthenticated = true
+            self.authState = .signedIn(result.user)
+        }
+    }
+    
+    func signOut() async throws {
         try auth.signOut()
+        await MainActor.run {
+            currentUser = nil
+            isAuthenticated = false
+            authState = .signedOut
+            username = nil
+        }
     }
     
     func updateUsername(_ newUsername: String) async throws {
@@ -68,7 +98,10 @@ class UserSessionService: ObservableObject {
             .document(userId)
             .setData(["username": newUsername], merge: true)
         
-        username = newUsername
+        await MainActor.run {
+            self.username = newUsername
+            self.hasCompletedOnboarding = true
+        }
     }
     
     // MARK: - Routing Helpers

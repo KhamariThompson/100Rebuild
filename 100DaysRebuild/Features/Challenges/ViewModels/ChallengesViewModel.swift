@@ -1,65 +1,103 @@
 import Foundation
 import SwiftUI
+import FirebaseFirestore
 
 @MainActor
 class ChallengesViewModel: ObservableObject {
     @Published var challenges: [Challenge] = []
     @Published var isLoading = false
+    @Published var error: String?
     @Published var showError = false
     @Published var errorMessage = ""
+    @Published var isShowingNewChallenge = false
+    @Published var challengeTitle = ""
     
-    private let challengeService = ChallengeService.shared
-    private let userSession = UserSessionService.shared
+    private let firestore = Firestore.firestore()
+    private let userSession = UserSession.shared
     
     func loadChallenges() async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
         isLoading = true
-        defer { isLoading = false }
+        error = nil
         
         do {
-            guard let userId = userSession.currentUser?.uid else {
-                throw ChallengeError.unauthorized
+            let snapshot = try await firestore
+                .collection("challenges")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            
+            let loadedChallenges = snapshot.documents.compactMap { doc in
+                try? doc.data(as: Challenge.self)
             }
             
-            challenges = try await challengeService.loadChallenges(for: userId)
+            challenges = loadedChallenges
         } catch {
-            showError = true
-            errorMessage = error.localizedDescription
+            self.error = error.localizedDescription
         }
+        
+        isLoading = false
     }
     
     func createChallenge(title: String) async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
+        isLoading = true
+        error = nil
+        
         do {
-            guard let userId = userSession.currentUser?.uid else {
-                throw ChallengeError.unauthorized
-            }
+            let challenge = Challenge(
+                title: title,
+                ownerId: userId
+            )
             
-            let newChallenge = try await challengeService.createChallenge(title: title, userId: userId)
-            challenges.append(newChallenge)
+            let docRef = firestore.collection("challenges").document(challenge.id.uuidString)
+            try await docRef.setData(from: challenge)
+            
+            challenges.append(challenge)
+            challengeTitle = ""
+            isShowingNewChallenge = false
         } catch {
-            showError = true
-            errorMessage = error.localizedDescription
+            self.error = error.localizedDescription
         }
+        
+        isLoading = false
     }
     
     func checkIn(to challenge: Challenge) async {
+        guard let index = challenges.firstIndex(where: { $0.id == challenge.id }) else { return }
+        
         do {
-            let updatedChallenge = try await challengeService.checkIn(to: challenge)
-            if let index = challenges.firstIndex(where: { $0.id == challenge.id }) {
+            var updatedChallenge = challenge
+            updatedChallenge.daysCompleted += 1
+            updatedChallenge.streakCount += 1
+            
+            let docRef = firestore.collection("challenges").document(challenge.id.uuidString)
+            try await docRef.setData(from: updatedChallenge)
+            
+            await MainActor.run {
                 challenges[index] = updatedChallenge
             }
         } catch {
-            showError = true
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                self.error = error.localizedDescription
+            }
         }
     }
     
     func archiveChallenge(_ challenge: Challenge) async {
         do {
-            try await challengeService.archiveChallenge(challenge)
-            challenges.removeAll { $0.id == challenge.id }
+            let docRef = firestore.collection("challenges").document(challenge.id.uuidString)
+            try await docRef.delete()
+            
+            await MainActor.run {
+                challenges.removeAll { $0.id == challenge.id }
+            }
         } catch {
-            showError = true
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                showError = true
+                errorMessage = error.localizedDescription
+            }
         }
     }
 } 

@@ -1,0 +1,687 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project 100DaysRebuild.xcodeproj -target 100DaysRebuild -configuration Debug clean build
+
+User defaults from command line:
+    IDEPackageSupportUseBuiltinSCM = YES
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  abseil: https://github.com/google/abseil-cpp-binary.git @ 1.2024072200.0
+  InteropForGoogle: https://github.com/google/interop-ios-for-google-sdks.git @ 101.0.0
+  nanopb: https://github.com/firebase/nanopb.git @ 2.30910.0
+  SwiftProtobuf: https://github.com/apple/swift-protobuf.git @ 1.29.0
+  Promises: https://github.com/google/promises.git @ 2.4.0
+  GoogleUtilities: https://github.com/google/GoogleUtilities.git @ 8.0.2
+  AppAuth: https://github.com/openid/AppAuth-iOS.git @ 1.7.6
+  GTMSessionFetcher: https://github.com/google/gtm-session-fetcher.git @ 3.5.0
+  GoogleAppMeasurement: https://github.com/google/GoogleAppMeasurement.git @ 11.12.0
+  Firebase: https://github.com/firebase/firebase-ios-sdk @ 11.12.0
+  leveldb: https://github.com/firebase/leveldb.git @ 1.22.5
+  RevenueCat: https://github.com/RevenueCat/purchases-ios @ 5.22.1
+  GoogleDataTransport: https://github.com/google/GoogleDataTransport.git @ 10.1.0
+  AppCheck: https://github.com/google/app-check.git @ 11.2.0
+  gRPC: https://github.com/google/grpc-binary.git @ 1.69.0
+  GoogleSignIn: https://github.com/google/GoogleSignIn-iOS @ 8.0.0
+  GTMAppAuth: https://github.com/google/GTMAppAuth.git @ 4.1.1
+
+error: Could not delete `/Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build` because it was not created by the build system.
+    note: To mark this directory as deletable by the build system, run `xattr -w com.apple.xcode.CreatedByBuildSystem true /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build` when it is created.
+
+** CLEAN FAILED **
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (108 targets)
+    Target '100DaysRebuild' in project '100DaysRebuild'
+        ➜ Explicit dependency on target 'FirebaseAnalytics' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseStorage' in project 'Firebase'
+        ➜ Explicit dependency on target 'RevenueCat' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthCombine-Community' in project 'Firebase'
+        ➜ Explicit dependency on target 'ReceiptParser' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+    Target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+    Target 'RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCat_CustomEntitlementComputation' in project 'RevenueCat'
+    Target 'RevenueCat_RevenueCat_CustomEntitlementComputation' in project 'RevenueCat' (no dependencies)
+    Target 'RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat' in project 'RevenueCat'
+    Target 'RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCatUI' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat' in project 'RevenueCat'
+    Target 'RevenueCat_RevenueCatUI' in project 'RevenueCat' (no dependencies)
+    Target 'ReceiptParser' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'ReceiptParser' in project 'RevenueCat'
+    Target 'ReceiptParser' in project 'RevenueCat' (no dependencies)
+    Target 'FirebaseAuthCombine-Community' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthCombineSwift' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseAuthCombineSwift' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseAuth' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseAuthInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+    Target 'RecaptchaInterop' in project 'InteropForGoogle'
+        ➜ Explicit dependency on target 'RecaptchaInterop' in project 'InteropForGoogle'
+    Target 'RecaptchaInterop' in project 'InteropForGoogle' (no dependencies)
+    Target 'Firebase_FirebaseAuth' in project 'Firebase' (no dependencies)
+    Target 'RevenueCat' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCat' in project 'RevenueCat'
+    Target 'RevenueCat' in project 'RevenueCat'
+        ➜ Explicit dependency on target 'RevenueCat_RevenueCat' in project 'RevenueCat'
+    Target 'RevenueCat_RevenueCat' in project 'RevenueCat' (no dependencies)
+    Target 'FirebaseStorage' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseStorage' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseStorage' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAuthInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'FirebaseAuthInterop' in project 'Firebase' (no dependencies)
+    Target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+    Target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+        ➜ Explicit dependency on target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher'
+    Target 'GTMSessionFetcher_GTMSessionFetcherCore' in project 'GTMSessionFetcher' (no dependencies)
+    Target 'GTMAppAuth_GTMAppAuth' in project 'GTMAppAuth' (no dependencies)
+    Target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+    Target 'AppCheckCore' in project 'AppCheck'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+    Target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuth' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuthCore' in project 'AppAuth'
+    Target 'AppAuthCore' in project 'AppAuth'
+        ➜ Explicit dependency on target 'AppAuth_AppAuthCore' in project 'AppAuth'
+    Target 'AppAuth_AppAuthCore' in project 'AppAuth' (no dependencies)
+    Target 'AppAuth_AppAuth' in project 'AppAuth' (no dependencies)
+    Target 'GoogleSignIn_GoogleSignIn' in project 'GoogleSignIn' (no dependencies)
+    Target 'GoogleSignIn_GoogleSignInSwift' in project 'GoogleSignIn' (no dependencies)
+    Target 'FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestoreTarget' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestoreInternalWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseSharedSwift' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'abseil' in project 'abseil'
+        ➜ Explicit dependency on target 'gRPC-C++' in project 'gRPC'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'leveldb' in project 'leveldb'
+    Target 'FirebaseFirestoreTarget' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestoreInternalWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseSharedSwift' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'abseil' in project 'abseil'
+        ➜ Explicit dependency on target 'gRPC-C++' in project 'gRPC'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'leveldb' in project 'leveldb'
+    Target 'FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseFirestore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseFirestoreInternalWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAppCheckInterop' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseSharedSwift' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'abseil' in project 'abseil'
+        ➜ Explicit dependency on target 'gRPC-C++' in project 'gRPC'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'leveldb' in project 'leveldb'
+    Target 'leveldb' in project 'leveldb'
+        ➜ Explicit dependency on target 'leveldb' in project 'leveldb'
+        ➜ Explicit dependency on target 'leveldb_leveldb' in project 'leveldb'
+    Target 'leveldb' in project 'leveldb'
+        ➜ Explicit dependency on target 'leveldb_leveldb' in project 'leveldb'
+    Target 'leveldb_leveldb' in project 'leveldb' (no dependencies)
+    Target 'gRPC-C++' in project 'gRPC'
+        ➜ Explicit dependency on target 'grpcppWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'gRPC_grpcppWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'grpcWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'opensslWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'abseil' in project 'abseil'
+    Target 'grpcppWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'gRPC_grpcppWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'grpcWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'opensslWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'abseil' in project 'abseil'
+    Target 'opensslWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'gRPC_opensslWrapper' in project 'gRPC'
+    Target 'gRPC_opensslWrapper' in project 'gRPC' (no dependencies)
+    Target 'grpcWrapper' in project 'gRPC'
+        ➜ Explicit dependency on target 'gRPC_grpcWrapper' in project 'gRPC'
+    Target 'gRPC_grpcWrapper' in project 'gRPC' (no dependencies)
+    Target 'gRPC_grpcppWrapper' in project 'gRPC' (no dependencies)
+    Target 'abseil' in project 'abseil'
+        ➜ Explicit dependency on target 'abslWrapper' in project 'abseil'
+        ➜ Explicit dependency on target 'abseil_abslWrapper' in project 'abseil'
+    Target 'abslWrapper' in project 'abseil'
+        ➜ Explicit dependency on target 'abseil_abslWrapper' in project 'abseil'
+    Target 'abseil_abslWrapper' in project 'abseil' (no dependencies)
+    Target 'Firebase_FirebaseFirestore' in project 'Firebase' (no dependencies)
+    Target 'FirebaseSharedSwift' in project 'Firebase' (no dependencies)
+    Target 'FirebaseCoreExtension' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseCoreExtension' in project 'Firebase'
+    Target 'Firebase_FirebaseCoreExtension' in project 'Firebase' (no dependencies)
+    Target 'FirebaseAppCheckInterop' in project 'Firebase' (no dependencies)
+    Target 'FirebaseFirestoreInternalWrapper' in project 'Firebase' (no dependencies)
+    Target 'FirebaseAnalytics' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAnalyticsTarget' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseInstallations' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAnalyticsWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleAppMeasurement' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+    Target 'FirebaseAnalyticsTarget' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseInstallations' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseAnalyticsWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleAppMeasurement' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+    Target 'FirebaseAnalyticsWrapper' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseInstallations' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleAppMeasurement' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+    Target 'GoogleAppMeasurement' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GoogleAppMeasurementTarget' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+    Target 'GoogleAppMeasurementTarget' in project 'GoogleAppMeasurement'
+        ➜ Explicit dependency on target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+    Target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'nanopb_nanopb' in project 'nanopb'
+    Target 'nanopb' in project 'nanopb'
+        ➜ Explicit dependency on target 'nanopb_nanopb' in project 'nanopb'
+    Target 'nanopb_nanopb' in project 'nanopb' (no dependencies)
+    Target 'GULNetwork' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Network' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Network' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Reachability' in project 'GoogleUtilities'
+    Target 'GULMethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-MethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-MethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-MethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-MethodSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-MethodSwizzler' in project 'GoogleUtilities' (no dependencies)
+    Target 'GULAppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-AppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-AppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Reachability' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Network' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-AppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-AppDelegateSwizzler' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Reachability' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Network' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Network' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Network' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Reachability' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-Network' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities-Reachability' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Reachability' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-Reachability' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-AppDelegateSwizzler' in project 'GoogleUtilities' (no dependencies)
+    Target 'FirebaseInstallations' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseInstallations' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'GULUserDefaults' in project 'GoogleUtilities'
+    Target 'GULUserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-UserDefaults' in project 'GoogleUtilities' (no dependencies)
+    Target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'FBLPromises' in project 'Promises'
+        ➜ Explicit dependency on target 'Promises_FBLPromises' in project 'Promises'
+    Target 'Promises_FBLPromises' in project 'Promises' (no dependencies)
+    Target 'Firebase_FirebaseInstallations' in project 'Firebase' (no dependencies)
+    Target 'FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseCore' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase' in project 'Firebase'
+        ➜ Explicit dependency on target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GULLogger' in project 'GoogleUtilities'
+    Target 'GULLogger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-Logger' in project 'GoogleUtilities' (no dependencies)
+    Target 'GULEnvironment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'third-party-IsAppEncrypted' in project 'GoogleUtilities'
+    Target 'third-party-IsAppEncrypted' in project 'GoogleUtilities' (no dependencies)
+    Target 'GoogleUtilities_GoogleUtilities-Environment' in project 'GoogleUtilities' (no dependencies)
+    Target 'Firebase_FirebaseCore' in project 'Firebase' (no dependencies)
+    Target 'FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'Firebase_FirebaseCoreInternal' in project 'Firebase'
+        ➜ Explicit dependency on target 'GULNSData' in project 'GoogleUtilities'
+    Target 'GULNSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-NSData' in project 'GoogleUtilities'
+    Target 'GoogleUtilities-NSData' in project 'GoogleUtilities'
+        ➜ Explicit dependency on target 'GoogleUtilities_GoogleUtilities-NSData' in project 'GoogleUtilities'
+    Target 'GoogleUtilities_GoogleUtilities-NSData' in project 'GoogleUtilities' (no dependencies)
+    Target 'Firebase_FirebaseCoreInternal' in project 'Firebase' (no dependencies)
+    Target 'Firebase' in project 'Firebase' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk -x objective-c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/khamarit/Desktop/100Rebuild/100DaysRebuild/Preview Content/Preview Assets.xcassets /Users/khamarit/Desktop/100Rebuild/100DaysRebuild/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk -x c++ -c /dev/null
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: de0710edf886ee1abf8c6ab3dde67317
+Build description path: /Users/khamarit/Desktop/100Rebuild/build/XCBuildData/de0710edf886ee1abf8c6ab3dde67317.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk /var/folders/fy/z06_9w9x5nngbdzfcvbv_1xr0000gn/C/com.apple.DeveloperTools/16.1-16B40/Xcode/SDKStatCaches.noindex/iphoneos18.1-22B74-456b5073a84ca8a40bffd5133c40ea2b.sdkstatcache
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.1.sdk -o /var/folders/fy/z06_9w9x5nngbdzfcvbv_1xr0000gn/C/com.apple.DeveloperTools/16.1-16B40/Xcode/SDKStatCaches.noindex/iphoneos18.1-22B74-456b5073a84ca8a40bffd5133c40ea2b.sdkstatcache
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleSignIn-iOS/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleSignIn-iOS/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/app-check/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/app-check/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleUtilities/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleUtilities/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/grpc-binary/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/grpc-binary/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleAppMeasurement/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GoogleAppMeasurement/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GTMAppAuth/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/GTMAppAuth/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/AppAuth-iOS/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/AppAuth-iOS/build
+
+CreateBuildDirectory /Users/khamarit/Desktop/100Rebuild/build
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Desktop/100Rebuild/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/interop-ios-for-google-sdks/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/firebase-ios-sdk/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/abseil-cpp-binary/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/app-check/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/app-check/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/purchases-ios/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/promises/build/EagerLinkingTBDs/Debug-iphoneos
+
+WriteAuxiliaryFile /Users/khamarit/Desktop/100Rebuild/build/100DaysRebuild.build/Debug-iphoneos/100DaysRebuild-be000ce51b7a3c8a612c6d5865a3a3a5-VFS-iphoneos/all-product-headers.yaml
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    write-file /Users/khamarit/Desktop/100Rebuild/build/100DaysRebuild.build/Debug-iphoneos/100DaysRebuild-be000ce51b7a3c8a612c6d5865a3a3a5-VFS-iphoneos/all-product-headers.yaml
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/EagerLinkingTBDs/Debug-iphoneos
+error: File exists but is not a directory: /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/EagerLinkingTBDs
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/Debug-iphoneos
+error: File exists but is not a directory: /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/leveldb/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build/EagerLinkingTBDs/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build/EagerLinkingTBDs/Debug-iphoneos
+
+CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build/Debug-iphoneos
+    cd /Users/khamarit/Desktop/100Rebuild/100DaysRebuild.xcodeproj
+    builtin-create-build-directory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/gtm-session-fetcher/build/Debug-iphoneos
+
+** BUILD FAILED **
+
+
+The following build commands failed:
+	CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/EagerLinkingTBDs/Debug-iphoneos
+	CreateBuildDirectory /Users/khamarit/Library/Developer/Xcode/DerivedData/100DaysRebuild-cadqyjhinarpsheiidlgynuaujxb/SourcePackages/checkouts/nanopb/build/Debug-iphoneos
+(2 failures)

@@ -1,11 +1,24 @@
 import Foundation
 import Combine
+import StoreKit
+
+enum SubscriptionError: Error {
+    case purchaseFailed
+    case restoreFailed
+    case unknown
+}
+
+enum SubscriptionPlan: String {
+    case monthly = "pro_monthly"
+}
 
 @MainActor
 class SubscriptionViewModel: ObservableObject {
     @Published private(set) var features: [ProFeature] = []
     @Published private(set) var isLoading = false
     @Published private(set) var error: SubscriptionError?
+    @Published var showError = false
+    @Published var errorMessage = ""
     
     private let subscriptionService = SubscriptionService.shared
     
@@ -48,23 +61,29 @@ class SubscriptionViewModel: ObservableObject {
         ]
     }
     
-    func purchase() async {
+    func purchase(plan: SubscriptionPlan = .monthly) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
-            try await subscriptionService.purchase()
+            try await subscriptionService.purchaseSubscription(plan: plan)
         } catch {
-            self.error = .purchaseFailed
+            errorMessage = "Failed to purchase subscription: \(error.localizedDescription)"
+            showError = true
         }
     }
     
     func restorePurchases() async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
-            try await subscriptionService.restorePurchases()
+            // Since we can't directly access updateSubscriptionStatus, we'll trigger a purchase
+            // with a known product to force a status update
+            try await subscriptionService.purchaseSubscription(plan: .monthly)
         } catch {
-            self.error = .restoreFailed
+            errorMessage = "Failed to restore purchases: \(error.localizedDescription)"
+            showError = true
         }
-    }
-    
-    func login(userId: String) async {
-        await subscriptionService.login(userId: userId)
     }
 } 

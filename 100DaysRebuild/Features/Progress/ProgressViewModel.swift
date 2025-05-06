@@ -30,8 +30,9 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         case .loadProgress:
             // TODO: Implement progress loading
             break
-        case .viewMilestone(let milestoneId):
+        case .viewMilestone(let id):
             // TODO: Implement milestone view
+            print("Will view milestone with ID: \(id)")
             break
         case .shareProgress:
             // TODO: Implement progress sharing

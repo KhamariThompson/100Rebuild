@@ -6,9 +6,30 @@ struct ChallengeCardView: View {
     
     @State private var isAnimating = false
     @State private var scale: CGFloat = 1.0
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    
+    private func handleCheckIn() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            isAnimating = true
+            scale = 0.95
+        }
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        onCheckIn()
+        
+        // Reset animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                scale = 1.0
+            }
+        }
+    }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             // Title and Streak
             HStack {
                 Text(challenge.title)
@@ -33,9 +54,21 @@ struct ChallengeCardView: View {
                 .foregroundColor(.theme.subtext)
             
             // Progress Bar
-            ProgressView(value: challenge.progressPercentage)
-                .tint(.theme.accent)
-                .scaleEffect(x: 1, y: 0.5)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Rectangle()
+                        .foregroundColor(Color.theme.surface)
+                        .frame(height: 6)
+                        .cornerRadius(3)
+                    
+                    Rectangle()
+                        .foregroundColor(Color.theme.accent)
+                        .frame(width: max(0, min(geometry.size.width, geometry.size.width * CGFloat(challenge.progressPercentage))), height: 6)
+                        .cornerRadius(3)
+                }
+            }
+            .frame(height: 6)
+            .padding(.vertical, 8)
             
             // Days Remaining
             Text("\(challenge.daysRemaining) days remaining")
@@ -44,25 +77,7 @@ struct ChallengeCardView: View {
             
             // Check-in Button
             if !challenge.isCompletedToday && !challenge.isCompleted {
-                Button(action: {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                        isAnimating = true
-                        scale = 0.95
-                    }
-                    
-                    // Haptic feedback
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                    
-                    onCheckIn()
-                    
-                    // Reset animation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                            scale = 1.0
-                        }
-                    }
-                }) {
+                Button(action: handleCheckIn) {
                     Text("Check In")
                         .font(.headline)
                         .foregroundColor(.white)
@@ -108,10 +123,20 @@ struct ChallengeCardView: View {
             }
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .background(Color.theme.surface)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
+
+struct ChallengeCardView_Previews: PreviewProvider {
+    static var previews: some View {
+        ChallengeCardView(
+            challenge: Challenge(title: "Test Challenge", ownerId: "test"),
+            onCheckIn: {}
         )
+        .environmentObject(SubscriptionService.shared)
     }
 } 

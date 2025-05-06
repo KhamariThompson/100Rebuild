@@ -1,40 +1,107 @@
 import SwiftUI
+import UIKit
 
 struct AuthView: View {
-    @StateObject private var viewModel = AuthViewModel()
+    @ObservedObject private var viewModel = AuthViewModel.shared
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                // Logo and Title
-                VStack(spacing: 16) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.theme.accent)
+            Form {
+                Section {
+                    Button(action: signInWithGoogle) {
+                        HStack {
+                            Image(systemName: "g.circle.fill")
+                            Text("Sign in with Google")
+                        }
+                    }
                     
-                    Text("100Days")
-                        .font(.largeTitle)
-                        .foregroundColor(.theme.text)
+                    Button(action: signInWithApple) {
+                        HStack {
+                            Image(systemName: "apple.logo")
+                            Text("Sign in with Apple")
+                        }
+                    }
                 }
-                .padding(.top, 60)
                 
-                // Auth Buttons
-                VStack(spacing: 16) {
-                    Button(action: { viewModel.handle(.signIn) }) {
+                Section {
+                    TextField("Email", text: $viewModel.email)
+                        .textContentType(.emailAddress)
+                        .autocapitalization(.none)
+                    
+                    SecureField("Password", text: $viewModel.password)
+                        .textContentType(.password)
+                    
+                    Button(action: signIn) {
                         Text("Sign In")
                     }
-                    .buttonStyle(.primary)
-                    
-                    Button(action: { viewModel.handle(.signUp) }) {
+                    .disabled(viewModel.email.isEmpty || viewModel.password.isEmpty)
+                }
+                
+                Section {
+                    Button(action: signUp) {
                         Text("Create Account")
                     }
-                    .buttonStyle(.secondary)
                 }
-                .padding(.horizontal)
-                
-                Spacer()
             }
-            .background(Color.theme.background.ignoresSafeArea())
+            .navigationTitle("Welcome")
+            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
+            .alert("Error", isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                if let error = viewModel.error {
+                    Text(error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    private func signInWithGoogle() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = windowScene.windows.first,
+              let rootViewController = window.rootViewController else {
+            return
+        }
+        
+        Task {
+            do {
+                try await viewModel.signInWithGoogle(presenting: rootViewController)
+            } catch {
+                viewModel.error = error
+            }
+        }
+    }
+    
+    private func signInWithApple() {
+        Task {
+            do {
+                try await viewModel.signInWithApple()
+            } catch {
+                viewModel.error = error
+            }
+        }
+    }
+    
+    private func signIn() {
+        Task {
+            do {
+                try await viewModel.signIn(email: viewModel.email, password: viewModel.password)
+            } catch {
+                viewModel.error = error
+            }
+        }
+    }
+    
+    private func signUp() {
+        Task {
+            do {
+                try await viewModel.signUp(email: viewModel.email, password: viewModel.password)
+            } catch {
+                viewModel.error = error
+            }
         }
     }
 }

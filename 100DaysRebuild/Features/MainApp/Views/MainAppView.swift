@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MainAppView: View {
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    
     var body: some View {
         TabView {
             ChallengesView()
@@ -27,30 +29,12 @@ struct MainAppView: View {
     }
 }
 
-// Preview provider
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
         MainAppView()
+            .environmentObject(SubscriptionService.shared)
     }
 }
 
-struct UserProgressView: View {
-    var body: some View {
-        Text("Progress View")
-            .navigationTitle("Progress")
-    }
-}
 
-struct SocialTabView: View {
-    var body: some View {
-        Text("Social View")
-            .navigationTitle("Social")
-    }
-}
 
-struct ReminderTabView: View {
-    var body: some View {
-        Text("Reminders View")
-            .navigationTitle("Reminders")
-    }
-} 

@@ -35,7 +35,7 @@ struct WelcomeView: View {
             
             // CTA Buttons
             VStack(spacing: 16) {
-                NavigationLink(destination: NewChallengeView()) {
+                NavigationLink(destination: ChallengesView()) {
                     Text("Start Your First Challenge")
                         .font(.headline)
                         .foregroundColor(.white)

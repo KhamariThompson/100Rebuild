@@ -1,72 +1,72 @@
 import Foundation
-import RevenueCat
-import Combine
-
-enum SubscriptionError: Error {
-    case purchaseFailed
-    case restoreFailed
-    case unknown
-}
+import StoreKit
 
 @MainActor
 class SubscriptionService: ObservableObject {
     static let shared = SubscriptionService()
     
-    @Published private(set) var isSubscribed = false
-    @Published private(set) var isLoading = false
-    @Published private(set) var error: SubscriptionError?
+    @Published private(set) var isProUser: Bool = false
+    @Published private(set) var availableProducts: [Product] = []
+    @Published private(set) var renewalDate: Date?
+    @Published var showPaywall = false
     
     private init() {
-        Purchases.logLevel = .debug
-        Purchases.configure(withAPIKey: Configuration.revenueCatAPIKey)
-    }
-    
-    func login(userId: String) async {
-        do {
-            try await Purchases.shared.logIn(userId)
-            await checkSubscriptionStatus()
-        } catch {
-            print("Error logging in to RevenueCat: \(error)")
+        Task {
+            await loadProducts()
+            await updateSubscriptionStatus()
         }
     }
     
-    func purchase() async throws {
-        isLoading = true
-        defer { isLoading = false }
+    private func loadProducts() async {
+        do {
+            let productIDs = ["com.100days.monthly"]
+            availableProducts = try await Product.products(for: productIDs)
+        } catch {
+            print("Failed to load products: \(error)")
+        }
+    }
+    
+    private func updateSubscriptionStatus() async {
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result {
+                isProUser = true
+                renewalDate = transaction.expirationDate
+                return
+            }
+        }
+        isProUser = false
+        renewalDate = nil
+    }
+    
+    func purchaseSubscription(plan: SubscriptionPlan) async throws {
+        let productID = "com.100days.monthly"
+        
+        guard let product = availableProducts.first(where: { $0.id == productID }) else {
+            throw SubscriptionError.purchaseFailed
+        }
         
         do {
-            let offerings = try await Purchases.shared.offerings()
-            guard let offering = offerings.current else {
+            let result = try await product.purchase()
+            
+            switch result {
+            case .success(let verification):
+                if case .verified(let transaction) = verification {
+                    await transaction.finish()
+                    await updateSubscriptionStatus()
+                }
+            case .userCancelled:
+                throw SubscriptionError.purchaseFailed
+            case .pending:
+                print("Purchase pending")
+            @unknown default:
                 throw SubscriptionError.unknown
             }
-            
-            let result = try await Purchases.shared.purchase(package: offering.availablePackages[0])
-            isSubscribed = result.customerInfo.entitlements["pro"]?.isActive == true
         } catch {
-            self.error = .purchaseFailed
-            throw error
+            throw SubscriptionError.purchaseFailed
         }
     }
     
-    func restorePurchases() async throws {
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            let customerInfo = try await Purchases.shared.restorePurchases()
-            isSubscribed = customerInfo.entitlements["pro"]?.isActive == true
-        } catch {
-            self.error = .restoreFailed
-            throw error
-        }
-    }
-    
-    private func checkSubscriptionStatus() async {
-        do {
-            let customerInfo = try await Purchases.shared.customerInfo()
-            isSubscribed = customerInfo.entitlements["pro"]?.isActive == true
-        } catch {
-            print("Error checking subscription status: \(error)")
-        }
+    func presentSubscriptionSheet() {
+        showPaywall = true
     }
 } 

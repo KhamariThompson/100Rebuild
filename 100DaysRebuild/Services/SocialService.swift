@@ -8,7 +8,7 @@ class SocialService: ObservableObject {
     
     // MARK: - Future Social Features
     
-    func fetchFriends() async throws -> [User] {
+    func fetchFriends() async throws -> [Friend] {
         // TODO: Implement friend fetching
         return []
     }

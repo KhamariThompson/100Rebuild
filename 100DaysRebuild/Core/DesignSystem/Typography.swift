@@ -1,41 +1,79 @@
 import SwiftUI
 
-enum AppTypography {
-    enum FontSize {
-        static let largeTitle: CGFloat = 34
-        static let title1: CGFloat = 28
-        static let title2: CGFloat = 22
-        static let title3: CGFloat = 20
-        static let headline: CGFloat = 17
-        static let body: CGFloat = 17
-        static let callout: CGFloat = 16
-        static let subheadline: CGFloat = 15
-        static let footnote: CGFloat = 13
-        static let caption: CGFloat = 12
+/// Core Design System Typography
+/// Provides consistent text styles across the application
+public enum AppTypography {
+    public enum FontSize {
+        public static let largeTitle: CGFloat = 34
+        public static let title1: CGFloat = 28
+        public static let title2: CGFloat = 22
+        public static let title3: CGFloat = 20
+        public static let headline: CGFloat = 17
+        public static let body: CGFloat = 17
+        public static let callout: CGFloat = 16
+        public static let subheadline: CGFloat = 15
+        public static let footnote: CGFloat = 13
+        public static let caption: CGFloat = 12
     }
     
-    enum FontWeight {
-        static let regular = Font.Weight.regular
-        static let medium = Font.Weight.medium
-        static let semibold = Font.Weight.semibold
-        static let bold = Font.Weight.bold
+    public enum FontWeight {
+        public static let regular = Font.Weight.regular
+        public static let medium = Font.Weight.medium
+        public static let semibold = Font.Weight.semibold
+        public static let bold = Font.Weight.bold
     }
+    
+    // Typography styles
+    public static let largeTitle = Font.custom(FontSize.largeTitle, weight: .bold)
+    public static let title1 = Font.custom(FontSize.title1, weight: .bold)
+    public static let title2 = Font.custom(FontSize.title2, weight: .semibold)
+    public static let title3 = Font.custom(FontSize.title3, weight: .semibold)
+    public static let headline = Font.custom(FontSize.headline, weight: .semibold)
+    public static let body = Font.custom(FontSize.body, weight: .regular)
+    public static let callout = Font.custom(FontSize.callout, weight: .regular)
+    public static let subheadline = Font.custom(FontSize.subheadline, weight: .regular)
+    public static let footnote = Font.custom(FontSize.footnote, weight: .regular)
+    public static let caption = Font.custom(FontSize.caption, weight: .regular)
 }
 
 // MARK: - Font Extensions
-extension Font {
+public extension Font {
     static func custom(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         return Font.system(size: size, weight: weight, design: .rounded)
     }
+}
+
+// MARK: - Font Modifiers
+public struct FontModifier: ViewModifier {
+    let font: Font
     
-    static let largeTitle = Font.custom(AppTypography.FontSize.largeTitle, weight: .bold)
-    static let title1 = Font.custom(AppTypography.FontSize.title1, weight: .bold)
-    static let title2 = Font.custom(AppTypography.FontSize.title2, weight: .semibold)
-    static let title3 = Font.custom(AppTypography.FontSize.title3, weight: .semibold)
-    static let headline = Font.custom(AppTypography.FontSize.headline, weight: .semibold)
-    static let body = Font.custom(AppTypography.FontSize.body, weight: .regular)
-    static let callout = Font.custom(AppTypography.FontSize.callout, weight: .regular)
-    static let subheadline = Font.custom(AppTypography.FontSize.subheadline, weight: .regular)
-    static let footnote = Font.custom(AppTypography.FontSize.footnote, weight: .regular)
-    static let caption = Font.custom(AppTypography.FontSize.caption, weight: .regular)
+    public init(font: Font) {
+        self.font = font
+    }
+    
+    public func body(content: Content) -> some View {
+        content
+            .font(font)
+    }
+}
+
+// MARK: - View Extensions
+public extension View {
+    func appFont(_ font: Font) -> some View {
+        self.modifier(FontModifier(font: font))
+    }
+}
+
+// MARK: - Typography Shorthand
+public extension View {
+    func largeTitle() -> some View { appFont(AppTypography.largeTitle) }
+    func title() -> some View { appFont(AppTypography.title1) }
+    func title2() -> some View { appFont(AppTypography.title2) }
+    func title3() -> some View { appFont(AppTypography.title3) }
+    func headline() -> some View { appFont(AppTypography.headline) }
+    func body() -> some View { appFont(AppTypography.body) }
+    func callout() -> some View { appFont(AppTypography.callout) }
+    func subheadline() -> some View { appFont(AppTypography.subheadline) }
+    func footnote() -> some View { appFont(AppTypography.footnote) }
+    func caption() -> some View { appFont(AppTypography.caption) }
 } 

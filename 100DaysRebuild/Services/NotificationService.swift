@@ -1,8 +1,9 @@
 import Foundation
 import UserNotifications
+import SwiftUI
 
 @MainActor
-class NotificationService: ObservableObject {
+class NotificationService: NSObject, ObservableObject {
     static let shared = NotificationService()
     
     @Published private(set) var reminderTime: Date = {
@@ -11,16 +12,36 @@ class NotificationService: ObservableObject {
     }()
     
     private let subscriptionService = SubscriptionService.shared
-    private let challengeService = ChallengeService.shared
+    private let userSession = UserSession.shared
     
-    private init() {
+    @Published var isAuthorized = false
+    @Published private(set) var pendingAuthorization = false
+    
+    override init() {
+        super.init()
         loadReminderTime()
+        checkAuthorizationStatus()
     }
     
     // MARK: - Permission Methods
-    func requestPermission() async throws {
+    func requestAuthorization() async throws {
+        pendingAuthorization = true
+        defer { pendingAuthorization = false }
+        
         let options: UNAuthorizationOptions = [.alert, .sound, .badge]
-        try await UNUserNotificationCenter.current().requestAuthorization(options: options)
+        let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: options)
+        
+        await MainActor.run {
+            isAuthorized = granted
+        }
+    }
+    
+    private func checkAuthorizationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                self.isAuthorized = settings.authorizationStatus == .authorized
+            }
+        }
     }
     
     // MARK: - Reminder Methods
@@ -54,10 +75,10 @@ class NotificationService: ObservableObject {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["streakReminder"])
         
         // Check if user has active challenges and hasn't checked in today
-        let userId = UserSessionService.shared.currentUser?.uid
+        let userId = userSession.currentUser?.uid
         guard let userId = userId else { return }
         
-        let challenges = try await challengeService.loadChallenges(for: userId)
+        let challenges = try await ChallengeService.shared.loadChallenges(for: userId)
         let hasActiveChallenges = !challenges.isEmpty
         let hasCheckedInToday = challenges.contains { $0.isCompletedToday }
         
@@ -88,7 +109,7 @@ class NotificationService: ObservableObject {
     }
     
     func updateReminderTime(_ newTime: Date) async throws {
-        guard subscriptionService.isSubscribed else {
+        guard subscriptionService.isProUser else {
             throw NotificationError.proFeature
         }
         
@@ -98,6 +119,41 @@ class NotificationService: ObservableObject {
     }
     
     func cancelAllNotifications() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+    }
+    
+    func scheduleReminder(for challenge: Challenge, at time: Date) async throws {
+        guard isAuthorized else {
+            throw NSError(domain: "NotificationService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notifications not authorized"])
+        }
+        
+        guard subscriptionService.isProUser else {
+            throw NSError(domain: "NotificationService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Pro subscription required for reminders"])
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "Daily Check-in Reminder"
+        content.body = "Don't forget to check in for your challenge: \(challenge.title)"
+        content.sound = .default
+        
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.hour, .minute], from: time)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+        
+        let request = UNNotificationRequest(
+            identifier: "challenge-\(challenge.id)",
+            content: content,
+            trigger: trigger
+        )
+        
+        try await UNUserNotificationCenter.current().add(request)
+    }
+    
+    func cancelReminder(for challenge: Challenge) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["challenge-\(challenge.id)"])
+    }
+    
+    func cancelAllReminders() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
     }
     
@@ -125,4 +181,5 @@ enum NotificationError: Error {
     case proFeature
     case schedulingFailed
     case permissionDenied
+    case notAuthorized
 } 

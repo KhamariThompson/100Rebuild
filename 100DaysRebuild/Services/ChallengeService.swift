@@ -33,7 +33,7 @@ class ChallengeService: ObservableObject {
         }
         
         let challenge = Challenge(title: title, ownerId: userId)
-        let documentId = try await firestore.createDocument(challenge, in: "users/\(userId)/\(collectionPath)")
+        _ = try await firestore.createDocument(challenge, in: "users/\(userId)/\(collectionPath)")
         return challenge
     }
     

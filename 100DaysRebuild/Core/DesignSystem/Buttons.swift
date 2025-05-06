@@ -1,7 +1,10 @@
 import SwiftUI
 
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+/// Primary button style with accent color background
+public struct PrimaryButtonStyle: ButtonStyle {
+    public init() {}
+    
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundColor(.theme.text)
@@ -17,8 +20,11 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-struct SecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+/// Secondary button style with outlined border
+public struct SecondaryButtonStyle: ButtonStyle {
+    public init() {}
+    
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundColor(.theme.text)
@@ -33,8 +39,11 @@ struct SecondaryButtonStyle: ButtonStyle {
     }
 }
 
-struct IconButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
+/// Icon button style for circular icon buttons
+public struct IconButtonStyle: ButtonStyle {
+    public init() {}
+    
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
             .foregroundColor(.theme.text)
@@ -49,15 +58,30 @@ struct IconButtonStyle: ButtonStyle {
     }
 }
 
+/// Simple scale effect button style
+public struct ScaleButtonStyle: ButtonStyle {
+    public init() {}
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
 // MARK: - Button Style Extensions
-extension ButtonStyle where Self == PrimaryButtonStyle {
+public extension ButtonStyle where Self == PrimaryButtonStyle {
     static var primary: PrimaryButtonStyle { PrimaryButtonStyle() }
 }
 
-extension ButtonStyle where Self == SecondaryButtonStyle {
+public extension ButtonStyle where Self == SecondaryButtonStyle {
     static var secondary: SecondaryButtonStyle { SecondaryButtonStyle() }
 }
 
-extension ButtonStyle where Self == IconButtonStyle {
+public extension ButtonStyle where Self == IconButtonStyle {
     static var icon: IconButtonStyle { IconButtonStyle() }
+}
+
+public extension ButtonStyle where Self == ScaleButtonStyle {
+    static var scale: ScaleButtonStyle { ScaleButtonStyle() }
 } 

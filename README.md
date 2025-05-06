@@ -213,3 +213,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - RevenueCat for subscription management
 - SwiftUI for the amazing UI framework
 - The iOS community for inspiration and support
+
+## Troubleshooting
+
+### Fixing "68 duplicate symbols" Linker Error
+
+If you encounter a linker error with "68 duplicate symbols" when building the project, the following changes have been made to address this issue:
+
+1. The root-level `Core` directory has been renamed to `Core.bak` to prevent it from being included in the build and causing duplicate symbol definitions with `100DaysRebuild/Core`.
+
+2. Added the `-Wl,-no_warn_duplicate_libraries` flag to the project's Other Linker Flags to suppress warnings about duplicate libraries.
+
+To build the project after these changes:
+
+- Clean the build folder (Shift+Command+K)
+- Build the project (Command+B)
+
+If you still encounter issues, you may need to:
+
+1. Check for duplicate module imports in your code
+2. Look for duplicate class/struct definitions across the project
+3. Verify that the same frameworks aren't being imported multiple times through different dependency paths

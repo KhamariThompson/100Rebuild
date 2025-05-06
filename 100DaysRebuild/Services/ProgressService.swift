@@ -1,15 +1,17 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
+import SwiftUI
 
 @MainActor
 class ProgressService: ObservableObject {
     static let shared = ProgressService()
-    private let firestore = FirebaseService.shared
-    private let userSession = UserSessionService.shared
     
-    @Published var metrics: ProgressMetrics?
-    @Published var isLoading = false
+    @Published private(set) var metrics: ProgressMetrics?
+    @Published private(set) var isLoading = false
+    
+    private let firestore = Firestore.firestore()
+    private let userSession = UserSession.shared
     
     private init() {}
     
@@ -20,46 +22,46 @@ class ProgressService: ObservableObject {
         defer { isLoading = false }
         
         do {
-            let challenges = try await ChallengeService.shared.loadChallenges(for: userId)
-            metrics = calculateMetrics(from: challenges)
+            let challengesSnapshot = try await firestore
+                .collection("challenges")
+                .whereField("userId", isEqualTo: userId)
+                .getDocuments()
+            
+            let challenges = challengesSnapshot.documents.compactMap { doc -> Challenge? in
+                try? doc.data(as: Challenge.self)
+            }
+            
+            let metrics = ProgressMetrics(
+                totalChallenges: challenges.count,
+                currentStreak: calculateCurrentStreak(challenges),
+                longestStreak: calculateLongestStreak(challenges),
+                completionRate: calculateCompletionRate(challenges)
+            )
+            
+            self.metrics = metrics
         } catch {
             print("Error loading progress metrics: \(error)")
         }
     }
     
-    private func calculateMetrics(from challenges: [Challenge]) -> ProgressMetrics {
-        let totalChallenges = challenges.count
-        let completedChallenges = challenges.filter { $0.isCompleted }.count
-        let totalDaysCompleted = challenges.reduce(0) { $0 + $1.daysCompleted }
-        
-        let currentStreak = challenges.map { $0.streakCount }.max() ?? 0
-        let longestStreak = challenges.map { $0.streakCount }.max() ?? 0
-        
-        let completionRate = calculateCompletionRate(challenges: challenges)
-        
-        return ProgressMetrics(
-            totalChallenges: totalChallenges,
-            completedChallenges: completedChallenges,
-            totalDaysCompleted: totalDaysCompleted,
-            currentStreak: currentStreak,
-            longestStreak: longestStreak,
-            completionRate: completionRate
-        )
+    private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {
+        // Implementation
+        return 0
     }
     
-    private func calculateCompletionRate(challenges: [Challenge]) -> Double {
-        guard !challenges.isEmpty else { return 0 }
-        
-        let totalPossibleDays = challenges.count * 100
-        let totalCompletedDays = challenges.reduce(0) { $0 + $1.daysCompleted }
-        return totalPossibleDays > 0 ? Double(totalCompletedDays) / Double(totalPossibleDays) : 0
+    private func calculateLongestStreak(_ challenges: [Challenge]) -> Int {
+        // Implementation
+        return 0
+    }
+    
+    private func calculateCompletionRate(_ challenges: [Challenge]) -> Double {
+        // Implementation
+        return 0.0
     }
 }
 
 struct ProgressMetrics {
     let totalChallenges: Int
-    let completedChallenges: Int
-    let totalDaysCompleted: Int
     let currentStreak: Int
     let longestStreak: Int
     let completionRate: Double
@@ -73,19 +75,19 @@ struct ProgressMetrics {
         case 0...2: return "🔥"
         case 3...6: return "🔥🔥"
         case 7...13: return "🔥🔥🔥"
-        case 14...20: return "🔥🔥🔥🔥"
-        default: return "🔥🔥🔥🔥🔥"
+        default: return "🔥🔥🔥🔥"
         }
     }
     
     var motivationalText: String {
-        switch currentStreak {
-        case 0: return "Start your journey today!"
-        case 1...2: return "Great start! Keep going!"
-        case 3...6: return "You're building momentum!"
-        case 7...13: return "🔥 You're on fire!"
-        case 14...20: return "🔥🔥 Amazing consistency!"
-        default: return "🔥🔥🔥 Legendary streak!"
+        if currentStreak == 0 {
+            return "Start your journey today!"
+        } else if currentStreak < 3 {
+            return "You're just getting started! Keep going!"
+        } else if currentStreak < 7 {
+            return "You're building momentum! Don't stop now!"
+        } else {
+            return "You're on fire! Keep up the amazing work!"
         }
     }
 } 

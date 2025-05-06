@@ -29,17 +29,26 @@ class RemindersViewModel: ViewModel<RemindersState, RemindersAction> {
     override func handle(_ action: RemindersAction) {
         switch action {
         case .toggleDailyReminder(let isEnabled):
-            // TODO: Implement daily reminder toggle
-            break
+            // Update the state with the new value
+            var newState = state
+            newState.isDailyReminderEnabled = isEnabled
+            state = newState
         case .updateDailyReminderTime(let time):
-            // TODO: Implement daily reminder time update
-            break
+            // Update the state with the new time
+            var newState = state
+            newState.dailyReminderTime = time
+            state = newState
         case .toggleStreakReminder(let isEnabled):
-            // TODO: Implement streak reminder toggle
-            break
+            // Update the state with the new value
+            var newState = state
+            newState.isStreakReminderEnabled = isEnabled
+            state = newState
         case .updateNotificationSettings(let sound, let vibration):
-            // TODO: Implement notification settings update
-            break
+            // Update the notification settings
+            var newState = state
+            newState.notificationSettings.soundEnabled = sound
+            newState.notificationSettings.vibrationEnabled = vibration
+            state = newState
         }
     }
 } 
