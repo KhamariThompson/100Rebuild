@@ -115,7 +115,6 @@ struct AuthView: View {
                                     .cornerRadius(12)
                                     .keyboardType(.emailAddress)
                                     .autocapitalization(.none)
-                                    .submitLabel(.done)
                                     .onSubmit {
                                         dismissKeyboard()
                                         Task {
@@ -257,7 +256,6 @@ struct AuthView: View {
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                    .submitLabel(.next)
                     .onSubmit {
                         dismissKeyboard()
                     }
@@ -275,7 +273,6 @@ struct AuthView: View {
                     .background(Color.theme.background)
                     .cornerRadius(12)
                     .textContentType(.password)
-                    .submitLabel(.go)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign in
                         dismissKeyboard()
@@ -348,7 +345,6 @@ struct AuthView: View {
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                    .submitLabel(.next)
                     .onSubmit {
                         dismissKeyboard()
                     }
@@ -366,7 +362,6 @@ struct AuthView: View {
                     .background(Color.theme.background)
                     .cornerRadius(12)
                     .textContentType(.newPassword)
-                    .submitLabel(.done)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign up
                         dismissKeyboard()
@@ -661,7 +656,6 @@ struct EmailPasswordForm: View {
                 .cornerRadius(12)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
-                .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
                     dismissKeyboard()
                 }
@@ -670,7 +664,6 @@ struct EmailPasswordForm: View {
                 .padding()
                 .background(Color.theme.background)
                 .cornerRadius(12)
-                .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
                     dismissKeyboard()
                 }
@@ -680,7 +673,6 @@ struct EmailPasswordForm: View {
                     .padding()
                     .background(Color.theme.background)
                     .cornerRadius(12)
-                    .submitLabel(.done)
                     .onSubmit {
                         dismissKeyboard()
                     }
