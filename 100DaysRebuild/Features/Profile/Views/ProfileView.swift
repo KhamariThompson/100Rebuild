@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import Firebase
+import FirebaseAuth
 
 struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
@@ -41,7 +42,7 @@ struct ProfileView: View {
                     // Sign Out Button at the bottom
                     Button(action: {
                         Task {
-                            try? await userSession.signOut()
+                            await viewModel.signOutWithoutThrowing()
                         }
                     }) {
                         Text("Sign Out")

@@ -6,57 +6,40 @@ struct MainAppView: View {
     @EnvironmentObject var notificationService: NotificationService
     
     var body: some View {
-        TabView {
-            NavigationView {
+        NavigationView {
+            TabView {
                 ChallengesView()
-            }
-            .navigationViewStyle(StackNavigationViewStyle())
-            .tabItem {
-                Label("Challenges", systemImage: "checkmark.circle")
-            }
-            .environmentObject(userSession)
-            .environmentObject(subscriptionService)
-            .environmentObject(notificationService)
-            
-            NavigationView {
+                    .tabItem {
+                        Label("Challenges", systemImage: "checkmark.circle")
+                    }
+                
                 ProgressView()
-            }
-            .navigationViewStyle(StackNavigationViewStyle())
-            .tabItem {
-                Label("Progress", systemImage: "chart.bar")
-            }
-            .environmentObject(userSession)
-            .environmentObject(subscriptionService)
-            .environmentObject(notificationService)
-            
-            NavigationView {
+                    .tabItem {
+                        Label("Progress", systemImage: "chart.bar")
+                    }
+                
                 ReminderTabView()
-            }
-            .navigationViewStyle(StackNavigationViewStyle())
-            .tabItem {
-                Label("Reminders", systemImage: "bell")
-            }
-            .environmentObject(userSession)
-            .environmentObject(subscriptionService)
-            .environmentObject(notificationService)
-            
-            NavigationView {
+                    .tabItem {
+                        Label("Reminders", systemImage: "bell")
+                    }
+                
                 ProfileView()
+                    .tabItem {
+                        Label("Profile", systemImage: "person.fill")
+                    }
             }
-            .navigationViewStyle(StackNavigationViewStyle())
-            .tabItem {
-                Label("Profile", systemImage: "person.fill")
-            }
+            .tint(.theme.accent)
             .environmentObject(userSession)
             .environmentObject(subscriptionService)
             .environmentObject(notificationService)
         }
-        .tint(.theme.accent)
+        .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
             // Fix for NavigationView layout constraint issues
             let appearance = UINavigationBarAppearance()
             appearance.configureWithOpaqueBackground()
             appearance.backgroundColor = UIColor(Color.theme.background)
+            appearance.shadowColor = nil // Remove shadow line
             
             // Use this appearance for all navigation bars
             UINavigationBar.appearance().standardAppearance = appearance

@@ -8,135 +8,216 @@ import AuthenticationServices
 
 struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel.shared
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.presentationMode) var presentationMode
     @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingSignUp = false
     @State private var email = ""
     @State private var password = ""
     @State private var showingPasswordResetAlert = false
     @State private var passwordResetSent = false
+    @State private var keyboardHeight: CGFloat = 0
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case email
+        case password
+    }
     
     var body: some View {
-        ZStack {
-            // Background
-            Color.theme.background
-                .ignoresSafeArea()
-            
-            // Background gradient
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.theme.accent.opacity(0.2),
-                    Color.theme.background
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: 32) {
-                    // Logo and Headline
-                    headerView
-                    
-                    // Auth Form
-                    VStack(spacing: 24) {
-                        // Title
-                        Text(isShowingSignUp ? "Ready to start your journey?" : "Welcome back")
-                            .font(.title2.bold())
-                            .foregroundColor(Color.theme.text)
-                            .frame(maxWidth: .infinity, alignment: .center)
+        NavigationView {
+            ZStack {
+                // Background
+                Color.theme.background.ignoresSafeArea()
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 12) {
+                        // Logo and header
+                        Spacer(minLength: 50)
                         
-                        // Form Fields
-                        VStack(spacing: 24) {
-                            if isShowingSignUp {
-                                signUpForm
-                            } else {
-                                signInForm
-                            }
-                            
-                            // Social Sign-In
-                            socialSignInButtons
-                            
-                            // Toggle between Sign Up/Sign In
-                            Button(action: { 
-                                isShowingSignUp.toggle() 
-                                // Clear fields when switching modes
-                                email = ""
-                                password = ""
-                            }) {
-                                Text(isShowingSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
-                                    .font(.subheadline)
-                                    .foregroundColor(Color.theme.accent)
+                        Text("100Days")
+                            .font(.system(size: 40, weight: .bold))
+                            .foregroundColor(.theme.text)
+                            .padding(.bottom, 10)
+                            .accessibilityAddTraits(.isHeader)
+                        
+                        Text("Track your 100-day challenges")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                            .padding(.bottom, 40)
+                        
+                        // Auth mode selector
+                        AuthModeSelector(viewModel: viewModel)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 30)
+                        
+                        // Email & Password Fields
+                        if viewModel.authMode == .emailSignIn || viewModel.authMode == .emailSignUp {
+                            VStack(spacing: 16) {
+                                EmailPasswordForm(
+                                    email: $viewModel.email,
+                                    password: $viewModel.password,
+                                    confirmPassword: $viewModel.confirmPassword,
+                                    isSignUp: viewModel.authMode == .emailSignUp,
+                                    focusedField: $focusedField
+                                )
+                                
+                                // Sign In / Sign Up button
+                                Button(action: {
+                                    // Dismiss keyboard first then submit
+                                    focusedField = nil
+                                    
+                                    if viewModel.authMode == .emailSignIn {
+                                        Task {
+                                            await viewModel.signInWithEmail()
+                                        }
+                                    } else {
+                                        Task {
+                                            await viewModel.signUpWithEmail()
+                                        }
+                                    }
+                                }) {
+                                    Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Sign Up")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.theme.accent)
+                                        )
+                                }
+                                .disabled(!viewModel.isFormValid || viewModel.isLoading)
+                                .opacity((!viewModel.isFormValid || viewModel.isLoading) ? 0.6 : 1.0)
+                                .padding(.top, 10)
+                                
+                                if viewModel.authMode == .emailSignIn {
+                                    Button("Forgot Password?") {
+                                        viewModel.authMode = .forgotPassword
+                                    }
+                                    .font(.footnote)
+                                    .foregroundColor(.theme.accent)
                                     .padding(.top, 8)
+                                }
                             }
-                            .buttonStyle(.scale)
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Forgot Password Form
+                        if viewModel.authMode == .forgotPassword {
+                            VStack(spacing: 16) {
+                                Text("Reset Password")
+                                    .font(.headline)
+                                    .foregroundColor(.theme.text)
+                                    .padding(.bottom, 8)
+                                
+                                Text("Enter your email and we'll send you a link to reset your password")
+                                    .font(.subheadline)
+                                    .foregroundColor(.theme.subtext)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.bottom, 16)
+                                
+                                TextField("Email", text: $viewModel.email)
+                                    .padding()
+                                    .background(Color.theme.background)
+                                    .cornerRadius(12)
+                                    .keyboardType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .focused($focusedField, equals: .email)
+                                    .submitLabel(.done)
+                                    .onSubmit {
+                                        focusedField = nil
+                                        Task {
+                                            await viewModel.resetPassword()
+                                        }
+                                    }
+                                
+                                Button(action: {
+                                    focusedField = nil
+                                    Task {
+                                        await viewModel.resetPassword()
+                                    }
+                                }) {
+                                    Text("Send Reset Link")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(viewModel.email.isEmpty ? Color.gray : Color.theme.accent)
+                                        )
+                                }
+                                .disabled(viewModel.email.isEmpty || viewModel.isLoading)
+                                .opacity((viewModel.email.isEmpty || viewModel.isLoading) ? 0.6 : 1.0)
+                                
+                                Button("Back to Sign In") {
+                                    viewModel.authMode = .emailSignIn
+                                }
+                                .font(.footnote)
+                                .foregroundColor(.theme.accent)
+                                .padding(.top, 8)
+                            }
+                            .padding(.horizontal, 20)
+                        }
+                        
+                        // Or continue with
+                        if viewModel.authMode != .forgotPassword {
+                            HStack {
+                                Rectangle()
+                                    .fill(Color.theme.subtext.opacity(0.3))
+                                    .frame(height: 1)
+                                
+                                Text("Or continue with")
+                                    .font(.footnote)
+                                    .foregroundColor(.theme.subtext)
+                                    .padding(.horizontal, 8)
+                                
+                                Rectangle()
+                                    .fill(Color.theme.subtext.opacity(0.3))
+                                    .frame(height: 1)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 20)
+                            
+                            // Social sign-in buttons
+                            SocialSignInButtons(viewModel: viewModel)
+                                .padding(.horizontal, 20)
+                        }
+                        
+                        Spacer(minLength: 50)
+                    }
+                    .padding(.vertical, 20)
+                    .frame(minHeight: UIScreen.main.bounds.height - 150)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            
+                            Button("Done") {
+                                focusedField = nil
+                            }
                         }
                     }
-                    .padding(24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.theme.surface)
-                            .shadow(
-                                color: colorScheme == .dark 
-                                    ? Color.black.opacity(0.3)
-                                    : Color.primary.opacity(0.1),
-                                radius: 16, 
-                                x: 0, 
-                                y: 8
-                            )
-                    )
-                    .padding(.horizontal, 20)
-                    
-                    Spacer(minLength: 30)
                 }
-                .padding(.top, 60)
-            }
-            .dismissKeyboardOnTap()
-        }
-        // Alert shown when viewModel.error is not nil
-        .alert(
-            "Error",
-            isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            ),
-            actions: { Button("OK", role: .cancel) { } },
-            message: { Text(viewModel.error?.localizedDescription ?? "") }
-        )
-        // Password reset alert
-        .alert(
-            passwordResetSent ? "Password Reset Email Sent" : "Reset Password",
-            isPresented: $showingPasswordResetAlert,
-            actions: {
-                if passwordResetSent {
-                    Button("OK", role: .cancel) {
-                        passwordResetSent = false
-                    }
-                } else {
-                    TextField("Your email address", text: $email)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                    
-                    Button("Cancel", role: .cancel) { }
-                    Button("Send Reset Link") {
-                        sendPasswordReset()
-                    }
-                    .disabled(email.isEmpty)
+                .scrollDismissesKeyboard(.immediately)
+                .dismissKeyboardOnTap()
+                .withSafeKeyboardHandling()
+                
+                // Loading overlay
+                if viewModel.isLoading {
+                    LoadingOverlay()
                 }
-            },
-            message: {
-                passwordResetSent 
-                ? Text("Password reset instructions have been sent to \(email). Please check your email.")
-                : Text("Enter your email address to receive a password reset link")
             }
-        )
-        .overlay {
-            if viewModel.isLoading {
-                loadingOverlay
+            .navigationBarTitle("", displayMode: .inline)
+            .navigationBarHidden(true)
+            .alert(isPresented: $viewModel.showError) {
+                Alert(
+                    title: Text("Error"),
+                    message: Text(viewModel.errorMessage),
+                    dismissButton: .default(Text("OK"))
+                )
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     private var headerView: some View {
@@ -188,23 +269,23 @@ struct AuthView: View {
                 
                 TextField("Your email address", text: $email)
                     .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(colorScheme == .dark 
-                                ? Color(.secondarySystemBackground)
-                                : Color(.systemBackground))
-                            .shadow(
-                                color: Color.primary.opacity(0.05),
-                                radius: 3,
-                                x: 0,
-                                y: 2
-                            )
-                    )
-                    .textContentType(.emailAddress)
+                    .background(Color.theme.background)
+                    .cornerRadius(12)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .email)
+                    .onChange(of: focusedField) { oldValue, newValue in
+                        if newValue == .email {
+                            // When focusing on email, make sure to clear any previous errors
+                            viewModel.error = nil
+                        }
+                    }
+                    .onSubmit {
+                        focusedField = .password
+                    }
+                    .frame(height: 50)
             }
             
             // Password Field
@@ -215,20 +296,17 @@ struct AuthView: View {
                 
                 SecureField("Your password", text: $password)
                     .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(colorScheme == .dark 
-                                ? Color(.secondarySystemBackground)
-                                : Color(.systemBackground))
-                            .shadow(
-                                color: Color.primary.opacity(0.05),
-                                radius: 3,
-                                x: 0,
-                                y: 2
-                            )
-                    )
+                    .background(Color.theme.background)
+                    .cornerRadius(12)
                     .textContentType(.password)
-                    .submitLabel(.done)
+                    .submitLabel(.go)
+                    .focused($focusedField, equals: .password)
+                    .onSubmit {
+                        // Dismiss keyboard and attempt sign in
+                        focusedField = nil
+                        signIn()
+                    }
+                    .frame(height: 50)
             }
             
             // Forgot Password
@@ -244,8 +322,12 @@ struct AuthView: View {
             .padding(.vertical, 4)
             .buttonStyle(.scale)
             
-            // Sign In Button
-            Button(action: signIn) {
+            // Sign In Button with explicit highlighting when tapped
+            Button(action: {
+                // Dismiss keyboard and attempt sign in
+                focusedField = nil
+                signIn()
+            }) {
                 Text("Sign In")
                     .font(.headline)
                     .foregroundColor(.white)
@@ -286,23 +368,23 @@ struct AuthView: View {
                 
                 TextField("Your email address", text: $email)
                     .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(colorScheme == .dark 
-                                ? Color(.secondarySystemBackground)
-                                : Color(.systemBackground))
-                            .shadow(
-                                color: Color.primary.opacity(0.05),
-                                radius: 3,
-                                x: 0,
-                                y: 2
-                            )
-                    )
-                    .textContentType(.emailAddress)
+                    .background(Color.theme.background)
+                    .cornerRadius(12)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .email)
+                    .onChange(of: focusedField) { oldValue, newValue in
+                        if newValue == .email {
+                            // When focusing on email, make sure to clear any previous errors
+                            viewModel.error = nil
+                        }
+                    }
+                    .onSubmit {
+                        focusedField = .password
+                    }
+                    .frame(height: 50)
             }
             
             // Password Field
@@ -313,24 +395,25 @@ struct AuthView: View {
                 
                 SecureField("Choose a password", text: $password)
                     .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(colorScheme == .dark 
-                                ? Color(.secondarySystemBackground)
-                                : Color(.systemBackground))
-                            .shadow(
-                                color: Color.primary.opacity(0.05),
-                                radius: 3,
-                                x: 0,
-                                y: 2
-                            )
-                    )
+                    .background(Color.theme.background)
+                    .cornerRadius(12)
                     .textContentType(.newPassword)
                     .submitLabel(.done)
+                    .focused($focusedField, equals: .password)
+                    .onSubmit {
+                        // Dismiss keyboard and attempt sign up
+                        focusedField = nil
+                        signUp()
+                    }
+                    .frame(height: 50)
             }
             
             // Sign Up Button
-            Button(action: signUp) {
+            Button(action: {
+                // Dismiss keyboard and attempt sign up
+                focusedField = nil
+                signUp()
+            }) {
                 Text("Create Account")
                     .font(.headline)
                     .foregroundColor(.white)
@@ -361,168 +444,253 @@ struct AuthView: View {
         }
     }
     
-    private var socialSignInButtons: some View {
-        VStack(spacing: 16) {
-            Text("or continue with")
-                .font(.subheadline)
-                .foregroundColor(Color.theme.subtext)
-            
-            HStack(spacing: 16) {
-                // Google Sign-In
-                Button(action: signInWithGoogle) {
-                    HStack {
-                        Image(systemName: "g.circle.fill")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .foregroundColor(.red)
-                        
-                        Text("Google")
-                            .font(.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.surface)
-                            .shadow(
-                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
-                                radius: 4,
-                                x: 0,
-                                y: 2
-                            )
-                    )
-                    .foregroundColor(Color.theme.text)
-                }
-                .buttonStyle(.scale)
-                
-                // Apple Sign-In
-                Button(action: signInWithApple) {
-                    HStack {
-                        Image(systemName: "apple.logo")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 20, height: 20)
-                            .foregroundColor(colorScheme == .dark ? .white : .black)
-                        
-                        Text("Apple")
-                            .font(.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.surface)
-                            .shadow(
-                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
-                                radius: 4,
-                                x: 0,
-                                y: 2
-                            )
-                    )
-                    .foregroundColor(Color.theme.text)
-                }
-                .buttonStyle(.scale)
-            }
-        }
-    }
-    
-    private var loadingOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.7)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 20) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(.white)
-                
-                Text("Loading...")
-                    .font(.headline)
-                    .foregroundColor(.white)
-            }
-            .padding(30)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.theme.surface.opacity(0.9))
-                    .shadow(
-                        color: Color.white.opacity(0.2),
-                        radius: 10,
-                        x: 0,
-                        y: 4
-                    )
-            )
-        }
-    }
-    
     private func signInWithGoogle() {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first,
-              let rootViewController = window.rootViewController else {
-            return
-        }
+        // Guard against multiple simultaneous auth operations
+        guard !viewModel.isLoading else { return }
+        
+        // Set loading state to prevent multiple auth attempts - this is redundant as it's handled in viewModel.signInWithGoogle()
+        // but keeping it here for consistency with signInWithApple
+        viewModel.isLoading = true
         
         Task {
-            do {
-                try await viewModel.signInWithGoogle(presenting: rootViewController)
-            } catch {
-                viewModel.error = error
-            }
+            await viewModel.signInWithGoogle()
         }
     }
     
     private func signInWithApple() {
-        Task {
-            do {
-                try await viewModel.signInWithApple()
-            } catch {
-                viewModel.error = error
+        // Guard against multiple simultaneous auth operations
+        guard !viewModel.isLoading else { return }
+        
+        // Set loading state to prevent multiple auth attempts
+        viewModel.isLoading = true
+        
+        // Give time for any current view transitions to complete
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            Task {
+                await viewModel.signInWithApple()
             }
         }
     }
     
     private func signIn() {
+        // Ensure we have valid credentials before attempting sign in
+        guard !email.isEmpty, !password.isEmpty else {
+            viewModel.setError(NSError(domain: "AuthError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Email and password are required"]))
+            return
+        }
+        
         Task {
-            do {
-                try await viewModel.signIn(email: email, password: password)
-            } catch {
-                viewModel.error = error
-            }
+            await viewModel.signInWithEmail(email: email, password: password)
         }
     }
     
     private func signUp() {
+        // Ensure we have valid credentials before attempting sign up
+        guard !email.isEmpty, !password.isEmpty else {
+            viewModel.setError(NSError(domain: "AuthError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Email and password are required"]))
+            return
+        }
+        
         Task {
-            do {
-                try await viewModel.signUp(email: email, password: password)
-            } catch {
-                viewModel.error = error
-            }
+            await viewModel.signUpWithEmail(email: email, password: password)
         }
     }
     
     private func forgotPassword() {
         Task {
-            do {
-                try await viewModel.resetPassword(email: email)
-            } catch {
-                viewModel.error = error
-            }
+            await viewModel.resetPassword(email: email)
         }
     }
     
     private func sendPasswordReset() {
         Task {
-            do {
-                try await viewModel.resetPassword(email: email)
-                await MainActor.run {
-                    passwordResetSent = true
+            await viewModel.resetPassword(email: email)
+            await MainActor.run {
+                passwordResetSent = true
+            }
+        }
+    }
+    
+    private struct SocialSignInButtons: View {
+        @ObservedObject var viewModel: AuthViewModel
+        @Environment(\.colorScheme) private var colorScheme
+        
+        var body: some View {
+            VStack(spacing: 12) {
+                // Apple Sign In
+                Button(action: {
+                    Task {
+                        await viewModel.signInWithApple()
+                    }
+                }) {
+                    HStack {
+                        Image(systemName: "apple.logo")
+                            .font(.title3)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                        
+                        Text("Continue with Apple")
+                            .font(.headline)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.background.opacity(0.6))
+                    )
                 }
-            } catch {
-                await MainActor.run {
-                    viewModel.error = error
-                    showingPasswordResetAlert = false
+                .disabled(viewModel.isLoading)
+                
+                // Google Sign In
+                Button(action: {
+                    Task {
+                        await viewModel.signInWithGoogle()
+                    }
+                }) {
+                    HStack {
+                        Image("google_logo")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                        
+                        Text("Continue with Google")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.1) : Color.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                            )
+                    )
                 }
+                .disabled(viewModel.isLoading)
+            }
+        }
+    }
+    
+    private struct LoadingOverlay: View {
+        var body: some View {
+            ZStack {
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    
+                    Text("Loading...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                .padding(30)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.black.opacity(0.7))
+                )
+            }
+        }
+    }
+}
+
+// MARK: - Auth Mode Selector
+struct AuthModeSelector: View {
+    @ObservedObject var viewModel: AuthViewModel
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // Sign In Button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.authMode = .emailSignIn
+                }
+            }) {
+                Text("Sign In")
+                    .font(.headline)
+                    .foregroundColor(viewModel.authMode == .emailSignIn ? .white : .theme.subtext)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(viewModel.authMode == .emailSignIn ? Color.theme.accent : Color.clear)
+                    )
+            }
+            
+            // Sign Up Button
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.authMode = .emailSignUp
+                }
+            }) {
+                Text("Sign Up")
+                    .font(.headline)
+                    .foregroundColor(viewModel.authMode == .emailSignUp ? .white : .theme.subtext)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(viewModel.authMode == .emailSignUp ? Color.theme.accent : Color.clear)
+                    )
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background.opacity(0.6))
+        )
+    }
+}
+
+// MARK: - Email & Password Form
+struct EmailPasswordForm: View {
+    @Binding var email: String
+    @Binding var password: String
+    @Binding var confirmPassword: String
+    let isSignUp: Bool
+    @Binding var focusedField: AuthView.Field?
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            TextField("Email", text: $email)
+                .padding()
+                .background(Color.theme.background)
+                .cornerRadius(12)
+                .keyboardType(.emailAddress)
+                .autocapitalization(.none)
+                .focused($focusedField, equals: .email)
+                .submitLabel(isSignUp ? .next : .done)
+                .onSubmit {
+                    if isSignUp {
+                        focusedField = .password
+                    } else {
+                        focusedField = nil
+                    }
+                }
+            
+            SecureField("Password", text: $password)
+                .padding()
+                .background(Color.theme.background)
+                .cornerRadius(12)
+                .focused($focusedField, equals: .password)
+                .submitLabel(isSignUp ? .next : .done)
+                .onSubmit {
+                    focusedField = nil
+                }
+            
+            if isSignUp {
+                SecureField("Confirm Password", text: $confirmPassword)
+                    .padding()
+                    .background(Color.theme.background)
+                    .cornerRadius(12)
+                    .focused($focusedField, equals: .password)
+                    .submitLabel(.done)
+                    .onSubmit {
+                        focusedField = nil
+                    }
             }
         }
     }

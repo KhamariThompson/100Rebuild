@@ -106,6 +106,21 @@ class UserSession: ObservableObject {
         }
     }
     
+    func signOutWithoutThrowing() async {
+        do {
+            try auth.signOut()
+            await MainActor.run {
+                currentUser = nil
+                isAuthenticated = false
+                authState = .signedOut
+                username = nil
+                photoURL = nil
+            }
+        } catch {
+            print("Error signing out: \(error.localizedDescription)")
+        }
+    }
+    
     func updateUsername(_ newUsername: String) async throws {
         guard let userId = currentUser?.uid else { return }
         

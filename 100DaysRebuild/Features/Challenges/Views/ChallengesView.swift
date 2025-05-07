@@ -10,97 +10,7 @@ struct ChallengesView: View {
     @State private var challengeToCheckIn: Challenge?
     
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                ProgressView()
-                    .overlay(
-                        Text("Loading challenges...")
-                    )
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.challenges.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "flag.fill")
-                        .font(.system(size: 70))
-                        .foregroundColor(.theme.accent.opacity(0.7))
-                        .padding(.bottom, 16)
-                    
-                    Text("No Challenges Yet")
-                        .font(.title2)
-                        .bold()
-                        .foregroundColor(.theme.text)
-                    
-                    Text("Start your first 100-day challenge and begin tracking your progress.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.theme.subtext)
-                        .padding(.horizontal)
-                    
-                    Button(action: { viewModel.isShowingNewChallenge = true }) {
-                        Text("Create Challenge")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 30)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.theme.accent)
-                            )
-                    }
-                    .padding(.top, 12)
-                }
-                .padding()
-            } else {
-                VStack(spacing: 0) {
-                    if viewModel.isOffline {
-                        OfflineBanner()
-                    }
-                    
-                    List {
-                        ForEach(viewModel.challenges) { challenge in
-                            ChallengeCardView(
-                                challenge: challenge,
-                                subscriptionService: subscriptionService,
-                                onCheckIn: {
-                                    challengeToCheckIn = challenge
-                                    isShowingCheckInSheet = true
-                                }
-                            )
-                            .listRowInsets(EdgeInsets())
-                            .listRowSeparator(.hidden)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                challengeToEdit = challenge
-                                isShowingEditChallenge = true
-                            }
-                            .contextMenu {
-                                Button(action: {
-                                    challengeToEdit = challenge
-                                    isShowingEditChallenge = true
-                                }) {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                
-                                Button(action: {
-                                    challengeToCheckIn = challenge
-                                    isShowingCheckInSheet = true
-                                }) {
-                                    Label("Check In", systemImage: "checkmark.circle")
-                                }
-                                
-                                Button(role: .destructive, action: {
-                                    Task {
-                                        await viewModel.archiveChallenge(challenge)
-                                    }
-                                }) {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                    .listStyle(.plain)
-                }
-            }
-        }
+        contentView
         .navigationTitle("Challenges")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -149,6 +59,108 @@ struct ChallengesView: View {
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+    
+    private var contentView: some View {
+        Group {
+            if viewModel.isLoading {
+                loadingView
+            } else if viewModel.challenges.isEmpty {
+                emptyStateView
+            } else {
+                challengeListView
+            }
+        }
+    }
+    
+    private var loadingView: some View {
+        ProgressView()
+            .overlay(
+                Text("Loading challenges...")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "flag.fill")
+                .font(.system(size: 70))
+                .foregroundColor(.theme.accent.opacity(0.7))
+                .padding(.bottom, 16)
+            
+            Text("No Challenges Yet")
+                .font(.title2)
+                .bold()
+                .foregroundColor(.theme.text)
+            
+            Text("Start your first 100-day challenge and begin tracking your progress.")
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.theme.subtext)
+                .padding(.horizontal)
+            
+            Button(action: { viewModel.isShowingNewChallenge = true }) {
+                Text("Create Challenge")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.accent)
+                    )
+            }
+            .padding(.top, 12)
+        }
+        .padding()
+    }
+    
+    private var challengeListView: some View {
+        VStack(spacing: 0) {
+            if viewModel.isOffline {
+                OfflineBanner()
+            }
+            
+            List {
+                ForEach(viewModel.challenges) { challenge in
+                    challengeCardView(challenge)
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+    
+    private func challengeCardView(_ challenge: Challenge) -> some View {
+        ChallengeCardView(
+            challenge: challenge,
+            subscriptionService: subscriptionService,
+            onCheckIn: {
+                // Only show the check-in sheet if not already completed today
+                if !challenge.isCompletedToday && !challenge.isCompleted {
+                    self.challengeToCheckIn = challenge
+                    self.isShowingCheckInSheet = true
+                }
+            }
+        )
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                self.challengeToEdit = challenge
+                self.isShowingEditChallenge = true
+            } label: {
+                Label("Edit Challenge", systemImage: "pencil")
+            }
+            
+            Button(role: .destructive) {
+                Task {
+                    await viewModel.archiveChallenge(challenge)
+                }
+            } label: {
+                Label("Delete Challenge", systemImage: "trash")
+            }
+        }
     }
 }
 

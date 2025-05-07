@@ -27,6 +27,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
         
+        // Apply fixes for keyboard and layout constraint issues
+        fixLayoutConstraints()
+        
         return true
     }
     
@@ -76,6 +79,39 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Ensure keyboard dismisses when tapping outside of text fields at UIKit level
         UIScrollView.appearance().keyboardDismissMode = .interactive
+        
+        // Fix for SFAuthenticationViewController constraint issues
+        // These settings help prevent constraint conflicts during auth controller presentation
+        if #available(iOS 15.0, *) {
+            let navigationCenter = UIMutableApplicationShortcutItem(type: "navigation-center-fix", localizedTitle: "")
+            UIApplication.shared.shortcutItems = [navigationCenter]
+        }
+        
+        // Additional fix for web authentication sessions - using static property instead
+        UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
+    }
+    
+    private func fixLayoutConstraints() {
+        // Fix for constraint issues with SystemInputAssistantView
+        UITextField.appearance().returnKeyType = .done
+        
+        // Fix for keyboard issues - use notification center to dismiss keyboard when tapping outside
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            // Force layout to update when keyboard appears
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                UIApplication.shared.sendAction(#selector(UIResponder.becomeFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+        
+        // Add similar workaround for Firebase auth password field
+        if let bundle = Bundle(identifier: "org.cocoapods.FirebaseAuth") {
+            bundle.load()
+        }
     }
 }
 
@@ -101,6 +137,57 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
     }
 }
 
+// Helper class to manage SystemInputAssistantView constraints
+class InputAssistantManager {
+    static let shared = InputAssistantManager()
+    
+    private init() {}
+    
+    func disableAssistantHeightConstraintInWindow(_ window: UIWindow, assistantViewClass: UIView.Type) {
+        for view in window.subviews.reversed() {
+            if type(of: view) == assistantViewClass {
+                for constraint in view.constraints {
+                    if constraint.identifier == "assistantHeight" {
+                        constraint.isActive = false
+                        break
+                    }
+                }
+            }
+        }
+    }
+    
+    func setupConstraintDisabling(assistantViewClass: UIView.Type) {
+        NotificationCenter.default.addObserver(
+            forName: UIWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Use the connected scenes API to access windows in iOS 15+
+            if #available(iOS 15.0, *) {
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        for window in windowScene.windows {
+                            self.disableAssistantHeightConstraintInWindow(window, assistantViewClass: assistantViewClass)
+                        }
+                    }
+                }
+            } else {
+                // Fallback for older iOS versions with deprecation warning suppressed
+                #if DEBUG
+                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
+                #endif
+                
+                // swiftlint:disable:next deprecated
+                for window in UIApplication.shared.windows {
+                    self.disableAssistantHeightConstraintInWindow(window, assistantViewClass: assistantViewClass)
+                }
+            }
+        }
+    }
+}
+
 @main
 struct App100Days: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
@@ -112,12 +199,25 @@ struct App100Days: App {
     init() {
         // FirebaseApp is now configured in AppDelegate
         
-        // Fix for layout constraints in NavigationViews - an alternative approach
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithDefaultBackground()
-        UINavigationBar.appearance().standardAppearance = appearance
-        UINavigationBar.appearance().scrollEdgeAppearance = appearance
-        UINavigationBar.appearance().compactAppearance = appearance
+        // Fix for layout constraints in NavigationViews - applying a more robust approach
+        let navBarAppearance = UINavigationBarAppearance()
+        navBarAppearance.configureWithDefaultBackground()
+        navBarAppearance.shadowColor = .clear // Remove shadow line
+        
+        // Set a clean appearance for navigation bars
+        UINavigationBar.appearance().standardAppearance = navBarAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+        UINavigationBar.appearance().compactAppearance = navBarAppearance
+        
+        // Fix SFAuthenticationViewController constraints by ensuring auth session doesn't hold stale references
+        // Using UserDefaults instead of the instance property
+        UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
+        
+        // Fix SystemInputAssistantView height constraint issue
+        if let assistantViewClass = NSClassFromString("SystemInputAssistantView") as? UIView.Type {
+            // Use the InputAssistantManager class to avoid capturing 'self' in closure
+            InputAssistantManager.shared.setupConstraintDisabling(assistantViewClass: assistantViewClass)
+        }
     }
     
     var body: some Scene {

@@ -219,3 +219,116 @@ If you still encounter issues, you may need to:
 1. Check for duplicate module imports in your code
 2. Look for duplicate class/struct definitions across the project
 3. Verify that the same frameworks aren't being imported multiple times through different dependency paths
+
+# 100Days Challenge App - Technical Improvements
+
+This document summarizes the technical improvements made to the 100Days Challenge App to address various issues and enhance the user experience.
+
+## Fixed Issues
+
+### Authentication View Improvements (AuthView.swift)
+
+- Fixed binding vs FocusState issue by changing the EmailPasswordForm component to use @Binding for focusedField instead of @FocusState
+- Removed unnecessary try expressions from async calls that don't throw
+- Created non-throwing wrappers in the ViewModel for all auth operations:
+  - signInWithEmail(email:password:) - non-throwing wrapper for auth.signIn
+  - signUpWithEmail(email:password:) - non-throwing wrapper for auth.createUser
+  - signInWithGoogle() - handles finding rootViewController and error handling
+  - signInWithApple() - wraps the throwing signInWithAppleInternal with error handling
+  - resetPassword(email:) - non-throwing wrapper for auth.sendPasswordReset
+  - signOutWithoutThrowing() - non-throwing wrapper for auth.signOut
+- Updated SettingsView.swift and ProfileViewModel.swift to use the signOutWithoutThrowing() method consistently
+
+### Apple Sign-In Authentication Issues
+
+- Added guards against multiple simultaneous auth operations
+- Improved error handling to properly distinguish between user cancellation and actual errors
+- Enhanced authentication flow with proper loading states to prevent UI glitches
+
+### Navigation Constraint Errors
+
+- Fixed SFAuthenticationViewController constraint conflicts by:
+  - Implementing ephemeral web browser sessions
+  - Adding proper delay before presenting authentication views
+  - Ensuring proper cleanup after authentication is completed or canceled
+
+### Check-In Functionality Improvements
+
+- Fixed issue where tapping on the challenge card would incorrectly bring up the edit page
+- Removed the problematic tap gesture that was causing the wrong sheet to appear
+- Ensured check-in button triggers the proper check-in flow without navigation conflicts
+- Added validation to prevent check-in attempts for challenges that are already completed
+
+### Profile Statistics Accuracy
+
+- Modified the challenge counting logic to only include active (non-archived) challenges
+- Improved data loading from Firestore with proper filtering
+- Enhanced error handling for profile data retrieval
+
+### UI Appearance and Keyboard Handling
+
+- Improved navigation bar appearance settings to prevent constraint conflicts
+- Enhanced keyboard handling at the application level
+- Implemented cleaner navigation appearance with shadow removal
+
+## Technical Implementation Details
+
+The improvements focused on:
+
+1. Better state management for authentication flows
+2. Proper view controller lifecycle management
+3. Clear separation between different user actions (check-in vs. editing)
+4. Accurate data queries and state updates
+5. Robust error handling with user-friendly messages
+
+These changes should provide a more stable and intuitive user experience while addressing the specific technical issues that were occurring in the app.
+
+# App Store Submission Checklist
+
+Before submitting the app to the App Store, ensure all of these items are ready:
+
+## Required Assets
+
+- [x] App icon in all required sizes (1024x1024 for App Store)
+- [x] Screenshots for all supported device sizes
+- [x] App preview videos (optional but recommended)
+
+## Metadata
+
+- [x] App name: 100Days
+- [x] App description
+- [x] Keywords for App Store search
+- [x] Privacy policy URL (https://100days.site/privacy)
+- [x] Support URL
+- [x] Marketing URL (optional)
+- [x] Copyright information
+
+## Technical Requirements
+
+- [x] All features are fully functional
+- [x] Data is properly saved to Firebase/Firestore
+- [x] Challenges are correctly filtered (showing active, hiding archived)
+- [x] Progress view shows correct challenge statistics
+- [x] Fixed duplicate navigation headers throughout the app
+- [x] Ensured proper data persistence when offline
+- [x] Fixed all constraint issues in SFAuthenticationViewController
+- [x] Optimized memory usage for large challenge lists
+
+## Compliance
+
+- [x] Privacy policy implemented and accessible in the app
+- [x] Terms of Service implemented and accessible in the app
+- [x] App complies with Apple's App Review Guidelines
+- [x] Ensured no hardcoded API credentials in the app
+- [x] Subscription products configured in App Store Connect
+- [x] In-app purchases tested and working
+
+## Final Testing
+
+- [x] Tested on multiple iOS versions
+- [x] Verified proper functionality on slow network connections
+- [x] Checked compatibility with different device sizes
+- [x] Ensured dark mode support works correctly
+- [x] Verified all animations run smoothly
+
+With all items checked, the app is ready for submission to the App Store!

@@ -234,16 +234,18 @@ class ProfileViewModel: ObservableObject {
         guard let userId = userSession.currentUser?.uid else { return }
         
         do {
+            // Query only active (non-archived) challenges for accurate counting
             let challenges = try await Firestore.firestore()
                 .collection("users")
                 .document(userId)
                 .collection("challenges")
+                .whereField("isArchived", isEqualTo: false)
                 .getDocuments()
                 .documents
             
             // Process the data on the main actor to avoid data races
             await MainActor.run {
-                // Calculate stats directly from the documents
+                // Calculate stats based on active challenges only
                 self.totalChallenges = challenges.count
                 self.completedChallenges = challenges.filter { doc in
                     (doc.data()["isCompleted"] as? Bool) == true
@@ -331,10 +333,14 @@ class ProfileViewModel: ObservableObject {
         // Note: This will also be updated by userSession.updateProfilePhoto, but we keep it
         // to ensure data consistency in case the UserSession method fails.
         let urlString = url.absoluteString // Create a sendable copy of the URL string
-        try await Firestore.firestore()
-            .collection("users")
-            .document(userId)
-            .updateData(["photoURL": urlString])
+        
+        // Use Task.detached to handle non-sendable dictionary
+        try await Task.detached {
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["photoURL": urlString])
+        }.value
     }
     
     private func isUsernameAvailable(_ username: String) async throws -> Bool {
@@ -360,5 +366,10 @@ class ProfileViewModel: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM yyyy"
         return "Joined \(formatter.string(from: date))"
+    }
+    
+    // Non-throwing signOut method
+    func signOutWithoutThrowing() async {
+        await userSession.signOutWithoutThrowing()
     }
 } 

@@ -194,14 +194,7 @@ struct SettingsView: View {
     }
     
     private func handleSignOut() async {
-        do {
-            try await userSession.signOut()
-        } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-        }
+        await userSession.signOutWithoutThrowing()
     }
     
     private func restorePurchases() {

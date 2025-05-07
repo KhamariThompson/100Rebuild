@@ -10,15 +10,12 @@ struct ProgressView: View {
     @EnvironmentObject var notificationService: NotificationService
     
     var body: some View {
-        NavigationView {
-            ProgressContentView(viewModel: viewModel)
-                .background(Color.theme.background.ignoresSafeArea())
-                .navigationTitle("Progress")
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
-        .task {
-            await viewModel.loadData()
-        }
+        ProgressContentView(viewModel: viewModel)
+            .background(Color.theme.background.ignoresSafeArea())
+            .navigationTitle("Progress")
+            .task {
+                await viewModel.loadData()
+            }
     }
 }
 
@@ -707,7 +704,7 @@ class UserProgressViewModel: ObservableObject {
         }
         
         do {
-            // Fetch user challenges from Firestore
+            // Fetch user challenges from Firestore - only get active (non-archived) challenges
             let challenges = try await loadChallenges(for: userId)
             
             if challenges.isEmpty {
@@ -729,23 +726,37 @@ class UserProgressViewModel: ObservableObject {
             
             isLoading = false
             hasData = true
+            
+            // Force the UI to update by explicitly setting hasData
+            // This fixes the "No Progress Data Yet" issue when hasData wasn't being set properly
+            if !challenges.isEmpty {
+                hasData = true
+            }
         } catch {
             print("Error loading progress data: \(error.localizedDescription)")
             isLoading = false
-            hasData = false
         }
     }
     
     private func loadChallenges(for userId: String) async throws -> [Challenge] {
+        // Modified the query to only include active challenges (not archived)
         let snapshot = try await firestore
             .collection("users")
             .document(userId)
             .collection("challenges")
+            .whereField("isArchived", isEqualTo: false)
             .getDocuments()
         
-        return try snapshot.documents.compactMap { document in
+        let challenges = try snapshot.documents.compactMap { document in
             try document.data(as: Challenge.self)
         }
+        
+        // Make sure we have at least one challenge
+        if !challenges.isEmpty {
+            hasData = true
+        }
+        
+        return challenges
     }
     
     private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {
