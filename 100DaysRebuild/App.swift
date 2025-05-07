@@ -144,6 +144,14 @@ class InputAssistantManager {
     private init() {}
     
     func disableAssistantHeightConstraintInWindow(_ window: UIWindow, assistantViewClass: UIView.Type) {
+        // Ensure we're on the main thread
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.disableAssistantHeightConstraintInWindow(window, assistantViewClass: assistantViewClass)
+            }
+            return
+        }
+        
         for view in window.subviews.reversed() {
             if type(of: view) == assistantViewClass {
                 for constraint in view.constraints {
@@ -157,6 +165,14 @@ class InputAssistantManager {
     }
     
     func setupConstraintDisabling(assistantViewClass: UIView.Type) {
+        // Ensure we're on the main thread
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.setupConstraintDisabling(assistantViewClass: assistantViewClass)
+            }
+            return
+        }
+        
         NotificationCenter.default.addObserver(
             forName: UIWindow.didBecomeKeyNotification,
             object: nil,

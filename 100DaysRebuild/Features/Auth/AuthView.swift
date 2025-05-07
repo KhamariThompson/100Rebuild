@@ -57,7 +57,7 @@ struct AuthView: View {
                                 // Sign In / Sign Up button
                                 Button(action: {
                                     // Dismiss keyboard first then submit
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                    dismissKeyboard()
                                     
                                     if viewModel.authMode == .emailSignIn {
                                         Task {
@@ -117,14 +117,14 @@ struct AuthView: View {
                                     .autocapitalization(.none)
                                     .submitLabel(.done)
                                     .onSubmit {
-                                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                        dismissKeyboard()
                                         Task {
                                             await viewModel.resetPassword()
                                         }
                                     }
                                 
                                 Button(action: {
-                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                                    dismissKeyboard()
                                     Task {
                                         await viewModel.resetPassword()
                                     }
@@ -259,7 +259,7 @@ struct AuthView: View {
                     .disableAutocorrection(true)
                     .submitLabel(.next)
                     .onSubmit {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        dismissKeyboard()
                     }
                     .frame(height: 50)
             }
@@ -278,7 +278,7 @@ struct AuthView: View {
                     .submitLabel(.go)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign in
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        dismissKeyboard()
                         signIn()
                     }
                     .frame(height: 50)
@@ -300,7 +300,7 @@ struct AuthView: View {
             // Sign In Button with explicit highlighting when tapped
             Button(action: {
                 // Dismiss keyboard and attempt sign in
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                dismissKeyboard()
                 signIn()
             }) {
                 Text("Sign In")
@@ -350,7 +350,7 @@ struct AuthView: View {
                     .disableAutocorrection(true)
                     .submitLabel(.next)
                     .onSubmit {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        dismissKeyboard()
                     }
                     .frame(height: 50)
             }
@@ -369,7 +369,7 @@ struct AuthView: View {
                     .submitLabel(.done)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign up
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        dismissKeyboard()
                         signUp()
                     }
                     .frame(height: 50)
@@ -378,7 +378,7 @@ struct AuthView: View {
             // Sign Up Button
             Button(action: {
                 // Dismiss keyboard and attempt sign up
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                dismissKeyboard()
                 signUp()
             }) {
                 Text("Create Account")
@@ -447,7 +447,7 @@ struct AuthView: View {
         }
         
         // Dismiss keyboard
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        dismissKeyboard()
         
         Task {
             await viewModel.signInWithEmail(email: email, password: password)
@@ -462,7 +462,7 @@ struct AuthView: View {
         }
         
         // Dismiss keyboard
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        dismissKeyboard()
         
         Task {
             await viewModel.signUpWithEmail(email: email, password: password)
@@ -471,7 +471,7 @@ struct AuthView: View {
     
     private func forgotPassword() {
         // Dismiss keyboard
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        dismissKeyboard()
         
         Task {
             await viewModel.resetPassword(email: email)
@@ -480,7 +480,7 @@ struct AuthView: View {
     
     private func sendPasswordReset() {
         // Dismiss keyboard
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        dismissKeyboard()
         
         Task {
             await viewModel.resetPassword(email: email)
@@ -575,6 +575,17 @@ struct AuthView: View {
             }
         }
     }
+    
+    // Helper method to safely dismiss keyboard from any thread
+    private func dismissKeyboard() {
+        if Thread.isMainThread {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+    }
 }
 
 // MARK: - Auth Mode Selector
@@ -642,7 +653,7 @@ struct EmailPasswordForm: View {
                 .disableAutocorrection(true)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    dismissKeyboard()
                 }
             
             SecureField("Password", text: $password)
@@ -651,7 +662,7 @@ struct EmailPasswordForm: View {
                 .cornerRadius(12)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
-                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    dismissKeyboard()
                 }
             
             if isSignUp {
@@ -661,7 +672,7 @@ struct EmailPasswordForm: View {
                     .cornerRadius(12)
                     .submitLabel(.done)
                     .onSubmit {
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        dismissKeyboard()
                     }
             }
         }
