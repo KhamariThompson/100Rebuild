@@ -211,12 +211,18 @@ class ChallengesViewModel: ObservableObject {
         
         // If offline, store changes locally and inform user
         if isOffline {
-            // Using a truly async operation to avoid the warning
-            try? await Task.sleep(nanoseconds: 1)
-            isLoading = false
-            showError = true
-            errorMessage = "Changes saved locally. They will sync when you're back online."
-            return
+            // Using Task.sleep to create a real async operation
+            do {
+                try await Task.sleep(for: .milliseconds(1))
+                isLoading = false
+                showError = true
+                errorMessage = "Changes saved locally. They will sync when you're back online."
+                return
+            } catch {
+                // Handle potential task cancellation
+                isLoading = false
+                return
+            }
         }
         
         do {
@@ -263,38 +269,19 @@ class ChallengesViewModel: ObservableObject {
                 .collection("users").document(userId)
                 .collection("challenges").document(challenge.id.uuidString)
             
-            // Create check-in data with timestamp and optional note - make it sendable
+            // Create sendable copies of the required data
             let date = Date()
             let dayNumber = challenge.daysCompleted + 1
-            
-            // Only add note if it's not empty
-            let checkInData: [String: Any]
-            if !note.isEmpty {
-                checkInData = [
-                    "date": date,
-                    "dayNumber": dayNumber,
-                    "note": note
-                ]
-            } else {
-                checkInData = [
-                    "date": date,
-                    "dayNumber": dayNumber
-                ]
-            }
+            let noteCopy = note
             
             // Add to check-ins subcollection
             let checkInRef = challengeRef.collection("checkIns").document()
             
-            // Create a sendable copy of the data
-            let dateCopy = date
-            let dayNumberCopy = dayNumber
-            let noteCopy = note
-            
-            // Use Task.detached with sendable data
+            // Use Task.detached with sendable data to avoid main actor isolation issues
             try await Task.detached {
                 var sendableData: [String: Any] = [
-                    "date": dateCopy,
-                    "dayNumber": dayNumberCopy
+                    "date": date,
+                    "dayNumber": dayNumber
                 ]
                 
                 if !noteCopy.isEmpty {
@@ -304,7 +291,7 @@ class ChallengesViewModel: ObservableObject {
                 try await checkInRef.setData(sendableData)
             }.value
             
-            // Update challenge metadata with sendable values
+            // Update challenge metadata
             try await challengeRef.updateData([
                 "daysCompleted": challenge.daysCompleted + 1,
                 "streakCount": challenge.streakCount + 1,
@@ -343,11 +330,16 @@ class ChallengesViewModel: ObservableObject {
         
         // If offline, store changes locally and inform user
         if isOffline {
-            // Using a truly async operation to avoid the warning
-            try? await Task.sleep(nanoseconds: 1)
-            showError = true
-            errorMessage = "Challenge deleted locally. Changes will sync when you're back online."
-            return
+            // Using Task.sleep to create a real async operation
+            do {
+                try await Task.sleep(for: .milliseconds(1))
+                showError = true
+                errorMessage = "Challenge deleted locally. Changes will sync when you're back online."
+                return
+            } catch {
+                // Handle potential task cancellation
+                return
+            }
         }
         
         do {
@@ -374,8 +366,12 @@ class ChallengesViewModel: ObservableObject {
     
     // Function to sync cached changes when back online
     func syncLocalChanges() async {
-        // Using a truly async operation to avoid the warning
-        try? await Task.sleep(nanoseconds: 1)
-        await loadChallenges() // Mark the call with await since loadChallenges is async
+        do {
+            // Using Task.sleep for a real async operation
+            try await Task.sleep(for: .milliseconds(1))
+            await loadChallenges()
+        } catch {
+            // Handle potential task cancellation
+        }
     }
 } 

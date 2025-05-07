@@ -16,12 +16,6 @@ struct AuthView: View {
     @State private var showingPasswordResetAlert = false
     @State private var passwordResetSent = false
     @State private var keyboardHeight: CGFloat = 0
-    @FocusState private var focusedField: Field?
-    
-    enum Field {
-        case email
-        case password
-    }
     
     var body: some View {
         NavigationView {
@@ -57,14 +51,13 @@ struct AuthView: View {
                                     email: $viewModel.email,
                                     password: $viewModel.password,
                                     confirmPassword: $viewModel.confirmPassword,
-                                    isSignUp: viewModel.authMode == .emailSignUp,
-                                    focusedField: self.$focusedField
+                                    isSignUp: viewModel.authMode == .emailSignUp
                                 )
                                 
                                 // Sign In / Sign Up button
                                 Button(action: {
                                     // Dismiss keyboard first then submit
-                                    focusedField = nil
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     
                                     if viewModel.authMode == .emailSignIn {
                                         Task {
@@ -122,17 +115,16 @@ struct AuthView: View {
                                     .cornerRadius(12)
                                     .keyboardType(.emailAddress)
                                     .autocapitalization(.none)
-                                    .focused($focusedField, equals: .email)
                                     .submitLabel(.done)
                                     .onSubmit {
-                                        focusedField = nil
+                                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                         Task {
                                             await viewModel.resetPassword()
                                         }
                                     }
                                 
                                 Button(action: {
-                                    focusedField = nil
+                                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                                     Task {
                                         await viewModel.resetPassword()
                                     }
@@ -188,15 +180,6 @@ struct AuthView: View {
                     }
                     .padding(.vertical, 20)
                     .frame(minHeight: UIScreen.main.bounds.height - 150)
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Spacer()
-                            
-                            Button("Done") {
-                                focusedField = nil
-                            }
-                        }
-                    }
                 }
                 .scrollDismissesKeyboard(.immediately)
                 .dismissKeyboardOnTap()
@@ -275,15 +258,8 @@ struct AuthView: View {
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .submitLabel(.next)
-                    .focused($focusedField, equals: .email)
-                    .onChange(of: focusedField) { oldValue, newValue in
-                        if newValue == .email {
-                            // When focusing on email, make sure to clear any previous errors
-                            viewModel.error = nil
-                        }
-                    }
                     .onSubmit {
-                        focusedField = .password
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
                     .frame(height: 50)
             }
@@ -300,10 +276,9 @@ struct AuthView: View {
                     .cornerRadius(12)
                     .textContentType(.password)
                     .submitLabel(.go)
-                    .focused($focusedField, equals: .password)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign in
-                        focusedField = nil
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         signIn()
                     }
                     .frame(height: 50)
@@ -325,7 +300,7 @@ struct AuthView: View {
             // Sign In Button with explicit highlighting when tapped
             Button(action: {
                 // Dismiss keyboard and attempt sign in
-                focusedField = nil
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 signIn()
             }) {
                 Text("Sign In")
@@ -374,15 +349,8 @@ struct AuthView: View {
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .submitLabel(.next)
-                    .focused($focusedField, equals: .email)
-                    .onChange(of: focusedField) { oldValue, newValue in
-                        if newValue == .email {
-                            // When focusing on email, make sure to clear any previous errors
-                            viewModel.error = nil
-                        }
-                    }
                     .onSubmit {
-                        focusedField = .password
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
                     .frame(height: 50)
             }
@@ -399,10 +367,9 @@ struct AuthView: View {
                     .cornerRadius(12)
                     .textContentType(.newPassword)
                     .submitLabel(.done)
-                    .focused($focusedField, equals: .password)
                     .onSubmit {
                         // Dismiss keyboard and attempt sign up
-                        focusedField = nil
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         signUp()
                     }
                     .frame(height: 50)
@@ -411,7 +378,7 @@ struct AuthView: View {
             // Sign Up Button
             Button(action: {
                 // Dismiss keyboard and attempt sign up
-                focusedField = nil
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 signUp()
             }) {
                 Text("Create Account")
@@ -479,6 +446,9 @@ struct AuthView: View {
             return
         }
         
+        // Dismiss keyboard
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        
         Task {
             await viewModel.signInWithEmail(email: email, password: password)
         }
@@ -491,18 +461,27 @@ struct AuthView: View {
             return
         }
         
+        // Dismiss keyboard
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        
         Task {
             await viewModel.signUpWithEmail(email: email, password: password)
         }
     }
     
     private func forgotPassword() {
+        // Dismiss keyboard
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        
         Task {
             await viewModel.resetPassword(email: email)
         }
     }
     
     private func sendPasswordReset() {
+        // Dismiss keyboard
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        
         Task {
             await viewModel.resetPassword(email: email)
             await MainActor.run {
@@ -651,7 +630,6 @@ struct EmailPasswordForm: View {
     @Binding var password: String
     @Binding var confirmPassword: String
     let isSignUp: Bool
-    @Binding var focusedField: AuthView.Field?
     
     var body: some View {
         VStack(spacing: 16) {
@@ -661,24 +639,19 @@ struct EmailPasswordForm: View {
                 .cornerRadius(12)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
-                .focused($focusedField, equals: .email)
+                .disableAutocorrection(true)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
-                    if isSignUp {
-                        focusedField = .password
-                    } else {
-                        focusedField = nil
-                    }
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             
             SecureField("Password", text: $password)
                 .padding()
                 .background(Color.theme.background)
                 .cornerRadius(12)
-                .focused($focusedField, equals: .password)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
-                    focusedField = nil
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             
             if isSignUp {
@@ -686,10 +659,9 @@ struct EmailPasswordForm: View {
                     .padding()
                     .background(Color.theme.background)
                     .cornerRadius(12)
-                    .focused($focusedField, equals: .password)
                     .submitLabel(.done)
                     .onSubmit {
-                        focusedField = nil
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
             }
         }
