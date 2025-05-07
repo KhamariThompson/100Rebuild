@@ -244,7 +244,7 @@ struct ProfileView: View {
                 // Member Since Card
                 IdentityStatCard(
                     title: "Member Since", 
-                    value: viewModel.formattedMemberSinceDate(), 
+                    value: getMemberSinceDate(), 
                     icon: "calendar"
                 )
                 
@@ -257,6 +257,26 @@ struct ProfileView: View {
             }
             .padding(.horizontal)
         }
+    }
+    
+    // New function to get formatted member since date directly from Auth
+    private func getMemberSinceDate() -> String {
+        // First try to get date from ViewModel (Firestore data)
+        if let memberSinceDate = viewModel.memberSinceDate {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMMM yyyy"
+            return formatter.string(from: memberSinceDate)
+        }
+        
+        // If not available in ViewModel, try to get directly from Firebase Auth
+        if let creationDate = Auth.auth().currentUser?.metadata.creationDate {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "MMMM yyyy"
+            return formatter.string(from: creationDate)
+        }
+        
+        // If all else fails, show "Unavailable"
+        return "Unavailable"
     }
     
     private var socialSection: some View {
