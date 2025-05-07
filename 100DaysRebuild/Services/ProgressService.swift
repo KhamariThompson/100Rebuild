@@ -45,18 +45,42 @@ class ProgressService: ObservableObject {
     }
     
     private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {
-        // Implementation
-        return 0
+        // Get the maximum current streak across all active challenges
+        let activeChallenges = challenges.filter { !$0.isArchived && !$0.isCompleted }
+        if activeChallenges.isEmpty {
+            return 0
+        }
+        
+        // Find challenges with active streaks (checked in yesterday or today)
+        let challengesWithActiveStreaks = activeChallenges.filter { challenge in
+            guard let lastCheckIn = challenge.lastCheckInDate else { return false }
+            let daysSinceLastCheckIn = Calendar.current.dateComponents([.day], from: lastCheckIn, to: Date()).day ?? 0
+            return daysSinceLastCheckIn <= 1 // Streak is active if checked in today or yesterday
+        }
+        
+        // Return the maximum streak count from active challenges
+        return challengesWithActiveStreaks.map { $0.streakCount }.max() ?? 0
     }
     
     private func calculateLongestStreak(_ challenges: [Challenge]) -> Int {
-        // Implementation
-        return 0
+        // Consider both active and completed challenges to find the longest streak ever
+        let allStreaks = challenges.map { $0.streakCount }
+        return allStreaks.max() ?? 0
     }
     
     private func calculateCompletionRate(_ challenges: [Challenge]) -> Double {
-        // Implementation
-        return 0.0
+        if challenges.isEmpty {
+            return 0.0
+        }
+        
+        // Calculate total days completed across all challenges
+        let totalDaysCompleted = challenges.reduce(0) { $0 + $1.daysCompleted }
+        
+        // Calculate total possible days (100 days per challenge)
+        let totalPossibleDays = challenges.count * 100
+        
+        // Return completion percentage as a decimal (0.0-1.0)
+        return Double(totalDaysCompleted) / Double(totalPossibleDays)
     }
 }
 

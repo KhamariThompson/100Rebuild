@@ -286,63 +286,32 @@ struct ProfileView: View {
                 .bold()
                 .padding(.horizontal)
                 
-            ProfileProLockedView {
-                VStack(spacing: 16) {
-                    HStack(spacing: 40) {
-                        VStack {
-                            Text("\(viewModel.friendsCount)")
-                                .font(.title)
-                                .bold()
-                                .foregroundColor(.theme.accent)
-                            Text("Friends")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                        
-                        VStack {
-                            Text("3")
-                                .font(.title)
-                                .bold()
-                                .foregroundColor(.theme.accent)
-                            Text("Invites")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                        
-                        VStack {
-                            Text("12")
-                                .font(.title)
-                                .bold()
-                                .foregroundColor(.theme.accent)
-                            Text("Shared")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                    }
+            // Replace the hardcoded social stats with a simple "Coming Soon" message
+            VStack(spacing: 12) {
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.gray.opacity(0.7))
                     .padding(.top, 8)
-                    
-                    Button(action: {
-                        // Placeholder for friend actions
-                    }) {
-                        Text("Invite Friends")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.theme.accent)
-                            )
-                    }
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-                )
-                .padding(.horizontal)
+                
+                Text("Social features coming in future update")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Text("Connect with friends, share progress, and join community challenges")
+                    .font(.caption)
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
             }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.theme.surface)
+            )
+            .padding(.horizontal)
         }
     }
     

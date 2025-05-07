@@ -1,4 +1,4 @@
-// RevenueCat Configuration
-REVENUECAT_API_KEY = appl_BmXAuCdWBmPoVBAOgxODhJddUvc
+// Configuration values
+// Note: Sensitive keys should not be stored here - use secure key management
 
 // Other configuration values can be added here 

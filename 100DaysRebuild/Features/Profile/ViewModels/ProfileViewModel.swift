@@ -3,6 +3,7 @@ import SwiftUI
 import FirebaseStorage
 import PhotosUI
 import FirebaseFirestore
+import FirebaseAuth
 
 @MainActor
 class ProfileViewModel: ObservableObject {
@@ -276,14 +277,14 @@ class ProfileViewModel: ObservableObject {
                     if let timestamp = createdAtTimestamp {
                         self.memberSinceDate = timestamp.dateValue()
                     } else {
-                        // Fallback to Firebase auth creation date if available
-                        self.memberSinceDate = userSession.currentUser?.metadata.creationDate
+                        // Fallback to Firebase auth creation date
+                        self.memberSinceDate = Auth.auth().currentUser?.metadata.creationDate
                     }
-                    
-                    // In real implementation, we would fetch friends count from a friends collection
-                    // For now, this is just a placeholder for the coming soon feature
-                    self.friendsCount = 0
-                    self.isSocialFeatureEnabled = false // Set to true when social features launch
+                }
+            } else {
+                // If no user document exists, use Firebase Auth creation date
+                await MainActor.run {
+                    self.memberSinceDate = Auth.auth().currentUser?.metadata.creationDate
                 }
             }
             
