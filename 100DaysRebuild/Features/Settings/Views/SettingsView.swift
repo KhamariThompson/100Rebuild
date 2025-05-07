@@ -160,11 +160,11 @@ struct SettingsView: View {
     private var aboutContent: some View {
         Group {
             Section {
-                Link(destination: URL(string: "https://example.com/privacy")!) {
+                Link(destination: URL(string: "https://100days.site/privacy")!) {
                     Label("Privacy Policy", systemImage: "hand.raised")
                 }
                 
-                Link(destination: URL(string: "https://example.com/terms")!) {
+                Link(destination: URL(string: "https://100days.site/terms")!) {
                     Label("Terms of Service", systemImage: "doc.text")
                 }
                 
