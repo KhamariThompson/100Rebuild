@@ -349,7 +349,7 @@
 					"CoreAudioTypes",
 					"-Wl,-no_implicit_dylibs"
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.khamarithompson.-00DaysRebuild";
+				PRODUCT_BUNDLE_IDENTIFIER = com.KhamariThompson.100Days;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_INSTALL_OBJC_HEADER = NO;

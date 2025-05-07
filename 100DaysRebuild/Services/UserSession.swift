@@ -16,6 +16,10 @@ class UserSession: ObservableObject {
     @Published private(set) var hasCompletedOnboarding = false
     @Published private(set) var currentUser: FirebaseAuth.User?
     @Published private(set) var username: String?
+    @Published private(set) var photoURL: URL?
+    
+    // Add a handler that other components can set to be notified of auth changes
+    var authStateDidChangeHandler: (() -> Void)?
     
     private let auth = Auth.auth()
     private let firestore = Firestore.firestore()
@@ -40,7 +44,11 @@ class UserSession: ObservableObject {
                     self?.currentUser = nil
                     self?.isAuthenticated = false
                     self?.username = nil
+                    self?.photoURL = nil
                 }
+                
+                // Notify listeners about auth state change
+                self?.authStateDidChangeHandler?()
             }
         }
     }
@@ -64,6 +72,12 @@ class UserSession: ObservableObject {
                 await MainActor.run {
                     self.username = data["username"] as? String
                     self.hasCompletedOnboarding = self.username != nil
+                    
+                    // Load the photoURL if available
+                    if let photoURLString = data["photoURL"] as? String, 
+                       let url = URL(string: photoURLString) {
+                        self.photoURL = url
+                    }
                 }
             }
         } catch {
@@ -87,6 +101,7 @@ class UserSession: ObservableObject {
             isAuthenticated = false
             authState = .signedOut
             username = nil
+            photoURL = nil
         }
     }
     
@@ -101,6 +116,19 @@ class UserSession: ObservableObject {
         await MainActor.run {
             self.username = newUsername
             self.hasCompletedOnboarding = true
+        }
+    }
+    
+    func updateProfilePhoto(_ url: URL) async throws {
+        guard let userId = currentUser?.uid else { return }
+        
+        try await firestore
+            .collection("users")
+            .document(userId)
+            .setData(["photoURL": url.absoluteString], merge: true)
+        
+        await MainActor.run {
+            self.photoURL = url
         }
     }
     

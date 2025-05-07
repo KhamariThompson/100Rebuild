@@ -3,10 +3,16 @@ import SwiftUI
 struct ChallengeCardView: View {
     let challenge: Challenge
     let onCheckIn: () -> Void
+    let subscriptionService: SubscriptionService
     
     @State private var isAnimating = false
     @State private var scale: CGFloat = 1.0
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    
+    init(challenge: Challenge, subscriptionService: SubscriptionService, onCheckIn: @escaping () -> Void) {
+        self.challenge = challenge
+        self.subscriptionService = subscriptionService
+        self.onCheckIn = onCheckIn
+    }
     
     private func handleCheckIn() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
@@ -135,8 +141,8 @@ struct ChallengeCardView_Previews: PreviewProvider {
     static var previews: some View {
         ChallengeCardView(
             challenge: Challenge(title: "Test Challenge", ownerId: "test"),
+            subscriptionService: SubscriptionService.shared,
             onCheckIn: {}
         )
-        .environmentObject(SubscriptionService.shared)
     }
 } 

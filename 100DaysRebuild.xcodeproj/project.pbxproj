@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		54080C142DCA546A000747B5 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 54080C132DCA5469000747B5 /* StoreKit.framework */; };
 		545D21A02DC278EB00FC7169 /* ReceiptParser in Frameworks */ = {isa = PBXBuildFile; productRef = 545D219F2DC278EB00FC7169 /* ReceiptParser */; };
 		545D21A22DC278EB00FC7169 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 545D21A12DC278EB00FC7169 /* RevenueCat */; };
 		5482AB1E2DC2645200AF37F0 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 5482AB1D2DC2645200AF37F0 /* FirebaseAnalytics */; };
@@ -20,15 +21,25 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		54080C132DCA5469000747B5 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		5482AADA2DC25D9600AF37F0 /* 100DaysRebuild.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = 100DaysRebuild.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		54ED09332DC6B52C00D6DBDC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		54080C102DCA4512000747B5 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5482AAD92DC25D9600AF37F0 /* 100DaysRebuild */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5482AADC2DC25D9600AF37F0 /* 100DaysRebuild */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			children = (
-				54ED09332DC6B52C00D6DBDC /* Info.plist */,
+			exceptions = (
+				54080C102DCA4512000747B5 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */,
 			);
 			path = 100DaysRebuild;
 			sourceTree = "<group>";
@@ -50,16 +61,26 @@
 				54AB7FC02DC2862700DF9196 /* FirebaseAuthCombine-Community in Frameworks */,
 				545D21A02DC278EB00FC7169 /* ReceiptParser in Frameworks */,
 				5482AB292DC2648E00AF37F0 /* GoogleSignIn in Frameworks */,
+				54080C142DCA546A000747B5 /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		54080C122DCA5469000747B5 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				54080C132DCA5469000747B5 /* StoreKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		5482AAD12DC25D9600AF37F0 = {
 			isa = PBXGroup;
 			children = (
 				5482AADC2DC25D9600AF37F0 /* 100DaysRebuild */,
+				54080C122DCA5469000747B5 /* Frameworks */,
 				5482AADB2DC25D9600AF37F0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -291,9 +312,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = 100DaysRebuild/100DaysRebuild.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
+				DEVELOPMENT_TEAM = 5392LZDF92;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
@@ -307,7 +330,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.khamarithompson.-00DaysRebuild";
+				PRODUCT_BUNDLE_IDENTIFIER = com.KhamariThompson.100Days;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -320,9 +343,11 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = 100DaysRebuild/100DaysRebuild.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
+				DEVELOPMENT_TEAM = 5392LZDF92;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
@@ -336,7 +361,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.khamarithompson.-00DaysRebuild";
+				PRODUCT_BUNDLE_IDENTIFIER = com.KhamariThompson.100Days;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

@@ -260,9 +260,12 @@ struct ChangeEmailView: View {
                     TextField("New Email", text: $newEmail)
                         .textContentType(.emailAddress)
                         .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .submitLabel(.next)
                     
                     SecureField("Current Password", text: $password)
                         .textContentType(.password)
+                        .submitLabel(.done)
                 }
                 
                 Section {
@@ -331,12 +334,15 @@ struct ChangePasswordView: View {
                 Section {
                     SecureField("Current Password", text: $currentPassword)
                         .textContentType(.password)
+                        .submitLabel(.next)
                     
                     SecureField("New Password", text: $newPassword)
                         .textContentType(.newPassword)
+                        .submitLabel(.next)
                     
                     SecureField("Confirm New Password", text: $confirmPassword)
                         .textContentType(.newPassword)
+                        .submitLabel(.done)
                 }
                 
                 Section {

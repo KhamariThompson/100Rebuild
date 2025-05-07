@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UserProgressView: View {
-    @StateObject private var viewModel = ProgressViewModel()
+    @StateObject private var viewModel = UserProgressViewModel()
     @EnvironmentObject var subscriptionService: SubscriptionService
     
     var body: some View {
@@ -10,12 +10,13 @@ struct UserProgressView: View {
                 .background(Color.theme.background.ignoresSafeArea())
                 .navigationTitle("Progress")
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 
 // Separate content view to simplify structure
 struct UserProgressContent: View {
-    let viewModel: ProgressViewModel
+    let viewModel: UserProgressViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     
     var body: some View {

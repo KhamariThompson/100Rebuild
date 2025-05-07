@@ -9,7 +9,7 @@ enum SubscriptionError: Error {
 }
 
 enum SubscriptionPlan: String {
-    case monthly = "pro_monthly"
+    case monthly = "com.KhamariThompson.100Days.monthly"
 }
 
 @MainActor

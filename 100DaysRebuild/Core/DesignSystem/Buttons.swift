@@ -7,7 +7,7 @@ public struct PrimaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundColor(.theme.text)
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
             .background(
@@ -27,7 +27,7 @@ public struct SecondaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundColor(.theme.text)
+            .foregroundColor(Color.theme.accent)
             .frame(maxWidth: .infinity)
             .padding()
             .background(
@@ -51,7 +51,10 @@ public struct IconButtonStyle: ButtonStyle {
             .background(
                 Circle()
                     .fill(Color.theme.surface)
-                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    .shadow(
+                        color: Color.primary.opacity(0.1),
+                        radius: 4, x: 0, y: 2
+                    )
             )
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)

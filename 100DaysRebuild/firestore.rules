@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Security helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    function isValidChallenge(data) {
+      return data.title is string &&
+             data.title.size() > 0 &&
+             data.ownerId is string &&
+             data.ownerId == request.auth.uid &&
+             data.id is string;
+    }
+    
+    function onlyChangesAllowedFields(oldData, newData) {
+      let allowedChanges = [
+        'title', 'lastCheckInDate', 'streakCount', 
+        'daysCompleted', 'isCompletedToday', 'isArchived',
+        'lastModified'
+      ];
+      
+      return oldData.diff(newData).affectedKeys().hasOnly(allowedChanges) &&
+             oldData.ownerId == newData.ownerId &&
+             oldData.id == newData.id &&
+             oldData.startDate == newData.startDate;
+    }
+    
+    // User data - users can only access their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      
+      // Challenges subcollection
+      match /challenges/{challengeId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidChallenge(request.resource.data);
+        allow update: if isOwner(userId) && 
+                         onlyChangesAllowedFields(resource.data, request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+      
+      // User settings
+      match /settings/{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    // Public user profiles (if needed later)
+    match /publicProfiles/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+    
+    // Prevent all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 

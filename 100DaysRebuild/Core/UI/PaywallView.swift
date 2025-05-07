@@ -3,156 +3,228 @@ import SwiftUI
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var subscriptionService: SubscriptionService
-    @State private var selectedPlan: SubscriptionPlan = .monthly
     @State private var isPurchasing = false
-    
-    enum SubscriptionPlan: String, CaseIterable {
-        case monthly = "Monthly"
-        
-        var price: String {
-            return "$5.99"
-        }
-        
-        var savings: String {
-            return ""
-        }
-    }
+    @State private var showError = false
+    @State private var errorMessage = ""
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
+                    // Header & Price
                     headerView
-                    featuresView
-                    plansView
+                    
+                    // Feature Sections
+                    unlockPotentialSection
+                    levelUpSection
+                    stayMotivatedSection
+                    
+                    // Subscribe Button
                     subscribeButton
-                    termsText
+                    
+                    // Restore Purchases
+                    restorePurchasesButton
                 }
-                .padding(.bottom)
+                .padding(.bottom, 30)
+                .padding(.horizontal)
             }
-            .background(Color.theme.background.ignoresSafeArea())
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.theme.background, Color.theme.background.opacity(0.95)]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            )
             .navigationBarItems(trailing: Button("Close") {
                 dismiss()
             })
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
+            }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     private var headerView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "crown.fill")
-                .font(.system(size: 48))
+        VStack(spacing: 12) {
+            Text("100Days Pro")
+                .font(.system(size: 32, weight: .bold))
                 .foregroundColor(.theme.accent)
+                .padding(.top, 24)
             
-            Text("Upgrade to Pro")
-                .font(.title)
-                .bold()
+            Text("$5.99/month")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.theme.text)
+                .padding(.bottom, 4)
             
-            Text("Unlock all premium features")
+            Text("Cancel anytime")
                 .font(.subheadline)
                 .foregroundColor(.theme.subtext)
+                .padding(.bottom, 16)
         }
-        .padding(.top, 32)
     }
     
-    private var featuresView: some View {
+    private var unlockPotentialSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            FeatureRow(icon: "chart.bar.fill", title: "Advanced Analytics")
-            FeatureRow(icon: "bell.fill", title: "Custom Reminders")
-            FeatureRow(icon: "calendar", title: "Streak Calendar")
-            FeatureRow(icon: "person.2.fill", title: "Social Features")
+            Text("🔓 Unlock Your Potential")
+                .font(.headline)
+                .foregroundColor(.theme.text)
+                .padding(.horizontal, 8)
+            
+            PaywallFeatureCard(
+                title: "Unlimited Challenges",
+                description: "Track all your habits without limits.",
+                checkmark: true
+            )
+            
+            PaywallFeatureCard(
+                title: "Advanced Analytics",
+                description: "See detailed stats and performance trends.",
+                checkmark: true
+            )
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-        )
+        .padding(.vertical, 10)
     }
     
-    private var plansView: some View {
-        VStack(spacing: 16) {
-            ForEach(SubscriptionPlan.allCases, id: \.self) { plan in
-                PlanButton(
-                    plan: plan,
-                    isSelected: selectedPlan == plan,
-                    action: { selectedPlan = plan }
-                )
-            }
+    private var levelUpSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("🤝 Level Up Together")
+                .font(.headline)
+                .foregroundColor(.theme.text)
+                .padding(.horizontal, 8)
+            
+            PaywallFeatureCard(
+                title: "Group Challenges",
+                description: "Stay accountable by joining challenges with friends.",
+                checkmark: true
+            )
+            
+            PaywallFeatureCard(
+                title: "Add More Than 5 Friends",
+                description: "Expand your network for better support.",
+                checkmark: true
+            )
         }
-        .padding(.horizontal)
+        .padding(.vertical, 10)
+    }
+    
+    private var stayMotivatedSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("🎯 Stay Motivated")
+                .font(.headline)
+                .foregroundColor(.theme.text)
+                .padding(.horizontal, 8)
+            
+            PaywallFeatureCard(
+                title: "Shareable Milestones",
+                description: "Celebrate progress with visual cards.",
+                checkmark: true
+            )
+            
+            PaywallFeatureCard(
+                title: "No Ads",
+                description: "Enjoy a clean and focused experience.",
+                checkmark: true
+            )
+        }
+        .padding(.vertical, 10)
     }
     
     private var subscribeButton: some View {
         Button(action: {
             isPurchasing = true
             Task {
-                try? await subscriptionService.purchaseSubscription(plan: .monthly)
+                do {
+                    try await subscriptionService.purchaseSubscription(plan: .monthly)
+                    dismiss()
+                } catch {
+                    errorMessage = "Failed to purchase: \(error.localizedDescription)"
+                    showError = true
+                }
                 isPurchasing = false
             }
         }) {
             if isPurchasing {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
             } else {
                 Text("Subscribe Now")
                     .font(.headline)
                     .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(Color.theme.accent)
+                .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
         )
-        .buttonStyle(.primary)
-        .padding(.horizontal)
         .disabled(isPurchasing)
+        .padding(.top, 16)
     }
     
-    private var termsText: some View {
-        Text("By subscribing, you agree to our Terms of Service and Privacy Policy")
-            .font(.caption)
-            .foregroundColor(.theme.subtext)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal)
+    private var restorePurchasesButton: some View {
+        Button("Restore Purchases") {
+            isPurchasing = true
+            Task {
+                do {
+                    try await subscriptionService.purchaseSubscription(plan: .monthly)
+                    isPurchasing = false
+                    dismiss()
+                } catch {
+                    errorMessage = "Failed to restore: \(error.localizedDescription)"
+                    showError = true
+                    isPurchasing = false
+                }
+            }
+        }
+        .font(.subheadline)
+        .foregroundColor(.theme.accent)
+        .padding(.top, 12)
     }
 }
 
-struct PlanButton: View {
-    let plan: PaywallView.SubscriptionPlan
-    let isSelected: Bool
-    let action: () -> Void
+struct PaywallFeatureCard: View {
+    let title: String
+    let description: String
+    let checkmark: Bool
     
     var body: some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(plan.rawValue)
-                        .font(.headline)
-                    
-                    if !plan.savings.isEmpty {
-                        Text(plan.savings)
-                            .font(.caption)
-                            .foregroundColor(.theme.accent)
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    if checkmark {
+                        Text("✅")
+                            .font(.subheadline)
                     }
+                    
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.theme.text)
                 }
                 
-                Spacer()
-                
-                Text(plan.price)
-                    .font(.headline)
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.theme.subtext)
+                    .lineLimit(2)
             }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? Color.theme.accent.opacity(0.1) : Color.theme.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isSelected ? Color.theme.accent : Color.clear, lineWidth: 2)
-                    )
-            )
+            
+            Spacer()
         }
-        .buttonStyle(.scale)
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+        )
     }
 }
 

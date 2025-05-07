@@ -52,18 +52,19 @@ class FirebaseService {
     }
     
     func configure() {
-        guard FirebaseApp.app() != nil else {
-            fatalError("FirebaseApp must be configured before initializing services")
-        }
+        // Configure Firebase services
+        FirebaseApp.configure()
         
+        // Configure Firestore
+        let db = Firestore.firestore()
+        let settings = db.settings
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
+        db.settings = settings
+        
+        // Configure Firebase Auth
         auth = Auth.auth()
         firestore = Firestore.firestore()
         storage = Storage.storage()
-        
-        // Configure Firestore settings
-        let settings = FirestoreSettings()
-        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
-        firestore?.settings = settings
     }
     
     // MARK: - Auth Methods
@@ -374,5 +375,21 @@ class FirebaseService {
         let storageRef = storage.reference().child(path)
         _ = try await storageRef.putDataAsync(data)
         return try await storageRef.downloadURL().absoluteString
+    }
+    
+    // MARK: - Auth State
+    func checkAuthState() {
+        guard let auth = auth else { return }
+        
+        // Listen for auth state changes
+        let _ = auth.addStateDidChangeListener { _, user in
+            if let user = user {
+                print("User is signed in with UID: \(user.uid)")
+                // Handle signed in state if needed
+            } else {
+                print("User is signed out")
+                // Handle signed out state if needed
+            }
+        }
     }
 } 

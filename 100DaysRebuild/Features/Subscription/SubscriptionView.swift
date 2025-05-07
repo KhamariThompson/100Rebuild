@@ -30,6 +30,7 @@ struct SubscriptionView: View {
                 Text(viewModel.errorMessage)
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     private var headerView: some View {

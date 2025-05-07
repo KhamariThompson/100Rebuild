@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RemindersView: View {
     @StateObject private var viewModel = RemindersViewModel()
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         NavigationView {
@@ -25,7 +26,10 @@ struct RemindersView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .shadow(
+                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                                radius: 8, x: 0, y: 4
+                            )
                     )
                     .padding(.horizontal)
                     
@@ -47,7 +51,10 @@ struct RemindersView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .shadow(
+                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                                radius: 8, x: 0, y: 4
+                            )
                     )
                     .padding(.horizontal)
                     
@@ -68,7 +75,10 @@ struct RemindersView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .shadow(
+                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                                radius: 8, x: 0, y: 4
+                            )
                     )
                     .padding(.horizontal)
                 }
@@ -77,6 +87,7 @@ struct RemindersView: View {
             .background(Color.theme.background.ignoresSafeArea())
             .navigationTitle("Reminders")
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 

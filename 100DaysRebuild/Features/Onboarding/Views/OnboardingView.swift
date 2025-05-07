@@ -1,6 +1,7 @@
 import SwiftUI
-import AuthenticationServices
+import FirebaseAuth
 import GoogleSignIn
+import AuthenticationServices
 import UIKit
 
 // Main Onboarding View broken into smaller components
@@ -17,6 +18,7 @@ struct OnboardingView: View {
                 isShowingUsernameSelection: $isShowingUsernameSelection
             )
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 
@@ -25,40 +27,66 @@ struct OnboardingContent: View {
     @ObservedObject var viewModel: AuthViewModel
     @Binding var isShowingSignUp: Bool
     @Binding var isShowingUsernameSelection: Bool
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Logo and Title
-            LogoView()
+        ZStack {
+            // Background
+            Color.theme.background.ignoresSafeArea()
             
-            // Auth Options
-            VStack(spacing: 16) {
-                if isShowingSignUp {
-                    SignUpForm(viewModel: viewModel)
-                } else {
-                    SignInForm(viewModel: viewModel)
+            VStack(spacing: 32) {
+                // Logo and Title
+                LogoView()
+                
+                // Auth Form Card
+                VStack(spacing: 24) {
+                    // Form Title
+                    Text(isShowingSignUp ? "Ready to start your journey?" : "Welcome back")
+                        .font(.title2.bold())
+                        .foregroundColor(.theme.text)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    
+                    // Auth Options
+                    VStack(spacing: 24) {
+                        if isShowingSignUp {
+                            SignUpForm(viewModel: viewModel)
+                        } else {
+                            SignInForm(viewModel: viewModel)
+                        }
+                        
+                        // Social Sign-In
+                        SocialSignInButtons(viewModel: viewModel)
+                        
+                        // Toggle Sign Up/Sign In
+                        ToggleAuthButton(isShowingSignUp: $isShowingSignUp)
+                    }
                 }
+                .padding(24)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(
+                            color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                            radius: 12, x: 0, y: 8
+                        )
+                )
+                .padding(.horizontal, 20)
                 
-                // Social Sign-In
-                SocialSignInButtons(viewModel: viewModel)
-                
-                // Toggle Sign Up/Sign In
-                ToggleAuthButton(isShowingSignUp: $isShowingSignUp)
+                Spacer()
             }
-            
-            Spacer()
+            .padding(.top, 40)
         }
-        .background(Color.theme.background.ignoresSafeArea())
         .navigationBarHidden(true)
-        .alert(item: .constant(viewModel.error.map { AuthAlert(message: $0.localizedDescription) })) { alert in
-            Alert(
-                title: Text("Error"),
-                message: Text(alert.message),
-                dismissButton: .default(Text("OK")) {
-                    viewModel.error = nil
-                }
-            )
-        }
+        // Alert shown when viewModel.error is not nil
+        .alert(
+            "Error",
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            ),
+            actions: { Button("OK", role: .cancel) { } },
+            message: { Text(viewModel.error?.localizedDescription ?? "") }
+        )
         .overlay {
             if viewModel.isLoading {
                 LoadingOverlay()
@@ -75,31 +103,61 @@ struct OnboardingContent: View {
 // Separate components
 struct LogoView: View {
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 24) {
+            // Logo
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
+                .font(.system(size: 70))
                 .foregroundColor(.theme.accent)
             
+            // Title and tagline
+            VStack(spacing: 16) {
             Text("100Days")
-                .font(.largeTitle)
+                    .font(.system(size: 48, weight: .bold))
+                    .foregroundColor(.theme.text)
+                
+                VStack(spacing: 8) {
+                    Text("Build consistency and transform your life")
+                        .font(.headline)
+                        .foregroundColor(.theme.text)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("— one day at a time.")
+                        .font(.headline)
                 .foregroundColor(.theme.text)
+                        .multilineTextAlignment(.center)
+                }
+            }
         }
         .padding(.top, 60)
+        .padding(.bottom, 30)
     }
 }
 
 struct LoadingOverlay: View {
+    @Environment(\.colorScheme) private var colorScheme
+    
     var body: some View {
+        ZStack {
+            Color.primary.opacity(colorScheme == .dark ? 0.7 : 0.3)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 20) {
         ProgressView()
             .scaleEffect(1.5)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.theme.background.opacity(0.5))
+                    .tint(colorScheme == .dark ? .white : .primary)
+                
+                Text("Loading...")
+                    .font(.headline)
+                    .foregroundColor(colorScheme == .dark ? .white : .primary)
+            }
+            .padding(30)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.theme.surface.opacity(0.8))
+                    .shadow(color: Color.primary.opacity(0.2), radius: 8, x: 0, y: 4)
+            )
+        }
     }
-}
-
-struct AuthAlert: Identifiable {
-    let id = UUID()
-    let message: String
 }
 
 struct ToggleAuthButton: View {
@@ -110,15 +168,18 @@ struct ToggleAuthButton: View {
             Text(isShowingSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
                 .font(.subheadline)
                 .foregroundColor(.theme.accent)
+                .padding(.top, 8)
         }
+        .buttonStyle(.scale)
     }
 }
 
 struct SocialSignInButtons: View {
     @ObservedObject var viewModel: AuthViewModel
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             Text("or continue with")
                 .font(.subheadline)
                 .foregroundColor(.theme.subtext)
@@ -127,17 +188,36 @@ struct SocialSignInButtons: View {
                 // Google Sign-In
                 Button(action: signInWithGoogle) {
                     HStack {
+                        Group {
+                            if UIImage(named: "google_logo") != nil {
                         Image("google_logo")
                             .resizable()
-                            .frame(width: 24, height: 24)
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                            } else {
+                                // Fallback to system icon
+                                Image(systemName: "globe")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 20, height: 20)
+                                    .foregroundColor(.theme.accent)
+                            }
+                        }
+                        
                         Text("Google")
                             .font(.headline)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.white)
-                    .foregroundColor(.black)
-                    .cornerRadius(12)
+                    .padding(.vertical, 14)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark ? Color(.systemGray6) : .white)
+                            .shadow(
+                                color: Color.primary.opacity(0.1),
+                                radius: 4, x: 0, y: 2
+                            )
+                    )
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
                 }
                 
                 // Apple Sign-In
@@ -145,12 +225,15 @@ struct SocialSignInButtons: View {
                     onRequest: configureAppleRequest,
                     onCompletion: handleAppleSignIn
                 )
-                .signInWithAppleButtonStyle(.white)
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 50)
-                .cornerRadius(12)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(
+                    color: Color.primary.opacity(0.1),
+                    radius: 4, x: 0, y: 2
+                )
             }
         }
-        .padding(.horizontal)
     }
     
     private func signInWithGoogle() {
@@ -200,15 +283,21 @@ struct SignInForm: View {
     @State private var password = ""
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             // Email Field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
-                    .font(.subheadline)
+                    .font(.subheadline.bold())
                     .foregroundColor(.theme.text)
                 
-                TextField("Enter your email", text: $email)
-                    .textFieldStyle(.roundedBorder)
+                TextField("Your email address", text: $email)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 1)
+                    )
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -217,11 +306,17 @@ struct SignInForm: View {
             // Password Field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.subheadline)
+                    .font(.subheadline.bold())
                     .foregroundColor(.theme.text)
                 
-                SecureField("Enter your password", text: $password)
-                    .textFieldStyle(.roundedBorder)
+                SecureField("Your password", text: $password)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 1)
+                    )
                     .textContentType(.password)
             }
             
@@ -232,14 +327,22 @@ struct SignInForm: View {
                     .foregroundColor(.theme.accent)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.vertical, 4)
             
             // Sign In Button
             Button(action: signIn) {
                 Text("Sign In")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.accent)
+                    )
             }
-            .buttonStyle(.primary)
+            .padding(.top, 8)
         }
-        .padding(.horizontal)
     }
     
     private func forgotPassword() {
@@ -274,15 +377,21 @@ struct SignUpForm: View {
     @State private var confirmPasswordError: String?
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             // Email Field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
-                    .font(.subheadline)
+                    .font(.subheadline.bold())
                     .foregroundColor(.theme.text)
                 
-                TextField("Enter your email", text: $email)
-                    .textFieldStyle(.roundedBorder)
+                TextField("Your email address", text: $email)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 1)
+                    )
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -294,17 +403,24 @@ struct SignUpForm: View {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.theme.error)
+                        .padding(.top, 4)
                 }
             }
             
             // Password Field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.subheadline)
+                    .font(.subheadline.bold())
                     .foregroundColor(.theme.text)
                 
-                SecureField("Enter your password", text: $password)
-                    .textFieldStyle(.roundedBorder)
+                SecureField("Your password", text: $password)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 1)
+                    )
                     .textContentType(.newPassword)
                     .onChange(of: password) { _, newValue in
                         passwordError = validatePassword(newValue)
@@ -314,17 +430,24 @@ struct SignUpForm: View {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.theme.error)
+                        .padding(.top, 4)
                 }
             }
             
             // Confirm Password Field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Confirm Password")
-                    .font(.subheadline)
+                    .font(.subheadline.bold())
                     .foregroundColor(.theme.text)
                 
                 SecureField("Confirm your password", text: $confirmPassword)
-                    .textFieldStyle(.roundedBorder)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color(.separator), lineWidth: 1)
+                    )
                     .textContentType(.newPassword)
                     .onChange(of: confirmPassword) { _, newValue in
                         confirmPasswordError = validateConfirmPassword(password, newValue)
@@ -334,17 +457,25 @@ struct SignUpForm: View {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.theme.error)
+                        .padding(.top, 4)
                 }
             }
             
             // Sign Up Button
             Button(action: signUp) {
                 Text("Sign Up")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isValid ? Color.theme.accent : Color(.systemGray4))
+                    )
             }
-            .buttonStyle(.primary)
             .disabled(!isValid)
+            .padding(.top, 8)
         }
-        .padding(.horizontal)
     }
     
     private var isValid: Bool {
@@ -386,37 +517,81 @@ struct UsernameSelectionView: View {
     @ObservedObject var viewModel: AuthViewModel
     @State private var username = ""
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        VStack(spacing: 24) {
-            // Title
-            Text("Choose a Username")
-                .font(.title2)
-                .foregroundColor(.theme.text)
+        ZStack {
+            // Background
+            Color.theme.background.ignoresSafeArea()
             
-            // Username Field
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Username")
-                    .font(.subheadline)
-                    .foregroundColor(.theme.text)
+            VStack(spacing: 32) {
+                // Logo
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 70))
+                    .foregroundColor(.theme.accent)
+                    .padding(.top, 60)
                 
-                TextField("Enter your username", text: $username)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.username)
-                    .autocapitalization(.none)
+                // Form Card
+                VStack(spacing: 24) {
+                    // Title
+                    Text("Choose a Username")
+                        .font(.title2.bold())
+                        .foregroundColor(.theme.text)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    
+                    Text("This will be displayed to other users")
+                        .font(.subheadline)
+                        .foregroundColor(.theme.subtext)
+                        .multilineTextAlignment(.center)
+                        .padding(.bottom, 8)
+                    
+                    // Username Field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Username")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.theme.text)
+                        
+                        TextField("Enter your username", text: $username)
+                            .padding()
+                            .background(Color.theme.surface)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color(.separator), lineWidth: 1)
+                            )
+                            .textContentType(.username)
+                            .autocapitalization(.none)
+                    }
+                    
+                    // Continue Button
+                    Button(action: setUsername) {
+                        Text("Continue")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(username.isEmpty ? Color(.systemGray4) : Color.theme.accent)
+                            )
+                    }
+                    .disabled(username.isEmpty)
+                    .padding(.top, 16)
+                }
+                .padding(24)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(
+                            color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                            radius: 12, x: 0, y: 8
+                        )
+                )
+                .padding(.horizontal, 20)
+                
+                Spacer()
             }
-            .padding(.horizontal)
-            
-            // Continue Button
-            Button(action: setUsername) {
-                Text("Continue")
-            }
-            .buttonStyle(.primary)
-            .padding(.horizontal)
-            
-            Spacer()
         }
-        .background(Color.theme.background.ignoresSafeArea())
         .navigationBarHidden(true)
     }
     

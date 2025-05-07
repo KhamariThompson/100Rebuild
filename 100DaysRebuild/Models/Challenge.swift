@@ -2,7 +2,7 @@ import Foundation
 
 struct Challenge: Identifiable, Codable {
     let id: UUID
-    let title: String
+    var title: String
     let startDate: Date
     var lastCheckInDate: Date?
     var streakCount: Int
@@ -10,6 +10,7 @@ struct Challenge: Identifiable, Codable {
     var isCompletedToday: Bool
     var isArchived: Bool
     let ownerId: String
+    var lastModified: Date // Added for syncing and sorting by recent edits
     
     // Computed properties
     var hasStreakExpired: Bool {
@@ -51,7 +52,8 @@ struct Challenge: Identifiable, Codable {
          daysCompleted: Int = 0,
          isCompletedToday: Bool = false, 
          isArchived: Bool = false, 
-         ownerId: String) {
+         ownerId: String,
+         lastModified: Date = Date()) {
         self.id = id
         self.title = title
         self.startDate = startDate
@@ -61,5 +63,6 @@ struct Challenge: Identifiable, Codable {
         self.isCompletedToday = isCompletedToday
         self.isArchived = isArchived
         self.ownerId = ownerId
+        self.lastModified = lastModified
     }
 } 
