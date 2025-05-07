@@ -267,10 +267,13 @@ class ProfileViewModel: ObservableObject {
                 .getDocument()
             
             if let userData = userDoc.data() {
+                // Copy needed values to local sendable variables
+                let createdAtTimestamp = userData["createdAt"] as? Timestamp
+                
                 // Process the data on the main actor to avoid data races
                 await MainActor.run {
                     // Get account creation date
-                    if let timestamp = userData["createdAt"] as? Timestamp {
+                    if let timestamp = createdAtTimestamp {
                         self.memberSinceDate = timestamp.dateValue()
                     } else {
                         // Fallback to Firebase auth creation date if available

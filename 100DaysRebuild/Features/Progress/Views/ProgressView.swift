@@ -663,6 +663,7 @@ struct EmptyStateView: View {
 }
 
 // MARK: - Data Models
+@MainActor
 class UserProgressViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var hasData = false
