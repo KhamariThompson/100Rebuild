@@ -642,6 +642,17 @@ struct EmailPasswordForm: View {
     @Binding var confirmPassword: String
     let isSignUp: Bool
     
+    // Add a helper method to safely dismiss keyboard from any thread
+    private func dismissKeyboard() {
+        if Thread.isMainThread {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } else {
+            DispatchQueue.main.async {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 16) {
             TextField("Email", text: $email)
@@ -650,7 +661,6 @@ struct EmailPasswordForm: View {
                 .cornerRadius(12)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
-                .disableAutocorrection(true)
                 .submitLabel(isSignUp ? .next : .done)
                 .onSubmit {
                     dismissKeyboard()
