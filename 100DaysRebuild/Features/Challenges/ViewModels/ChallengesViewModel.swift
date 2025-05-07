@@ -234,65 +234,56 @@ class ChallengesViewModel: ObservableObject {
         isLoading = false
     }
     
-    func checkIn(to challenge: Challenge) async {
-        guard let userId = userSession.currentUser?.uid else { 
-            showError = true
-            errorMessage = "You must be signed in to check in"
-            return 
-        }
+    @MainActor
+    func checkIn(to challenge: Challenge, note: String = "") async {
+        guard !isLoading, let userId = userSession.currentUser?.uid else { return }
         
-        guard let index = challenges.firstIndex(where: { $0.id == challenge.id }) else { 
-            showError = true
-            errorMessage = "Challenge not found"
-            return 
-        }
-        
-        // Prevent check-in if already completed today
-        if challenge.isCompletedToday {
-            showError = true
-            errorMessage = "You've already checked in for today."
-            return
-        }
-        
-        // Check if the last check-in was today
-        if let lastCheckIn = challenge.lastCheckInDate, 
-           Calendar.current.isDateInToday(lastCheckIn) {
-            showError = true
-            errorMessage = "You've already checked in for today."
-            return
-        }
-        
-        // Update challenge locally first
-        var updatedChallenge = challenge
-        updatedChallenge.daysCompleted += 1
-        updatedChallenge.streakCount += 1
-        updatedChallenge.lastCheckInDate = Date()
-        updatedChallenge.isCompletedToday = true
-        updatedChallenge.lastModified = Date() // Update the modification timestamp
-        
-        // Always update local state immediately for better UX
-        challenges[index] = updatedChallenge
-        saveChallengesLocally()
-        
-        // If offline, store changes locally and inform user
-        if isOffline {
-            try? await Task.sleep(for: .milliseconds(1)) // Add proper async operation
-            showError = true
-            errorMessage = "Check-in saved locally. It will sync when you're back online."
-            return
-        }
+        showLoading()
         
         do {
-            let docRef = firestore
-                .collection("users")
-                .document(userId)
-                .collection("challenges")
-                .document(challenge.id.uuidString)
+            // Get a reference to the challenge document
+            let challengeRef = firestore
+                .collection("users").document(userId)
+                .collection("challenges").document(challenge.id)
             
-            try await docRef.setData(from: updatedChallenge)
+            // Create check-in data with timestamp and optional note
+            var checkInData: [String: Any] = [
+                "date": Date(),
+                "dayNumber": challenge.daysCompleted + 1
+            ]
+            
+            // Only add note if it's not empty
+            if !note.isEmpty {
+                checkInData["note"] = note
+            }
+            
+            // Add to check-ins subcollection
+            let checkInRef = challengeRef.collection("checkIns").document()
+            try await checkInRef.setData(checkInData)
+            
+            // Update challenge metadata
+            try await challengeRef.updateData([
+                "daysCompleted": challenge.daysCompleted + 1,
+                "streakCount": challenge.streakCount + 1,
+                "lastCheckIn": Date(),
+                "lastModified": Date()
+            ])
+            
+            // Update local challenge data
+            if let index = challenges.firstIndex(where: { $0.id == challenge.id }) {
+                challenges[index].daysCompleted += 1
+                challenges[index].streakCount += 1
+                challenges[index].lastCheckIn = Date()
+                challenges[index].lastModified = Date()
+            }
+            
+            // Trigger haptic feedback for successful check-in
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+            
+            hideLoading()
         } catch {
-            showError = true
-            errorMessage = "Failed to save check-in: \(error.localizedDescription)"
+            handleError(error)
         }
     }
     

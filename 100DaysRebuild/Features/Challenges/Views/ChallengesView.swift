@@ -6,132 +6,146 @@ struct ChallengesView: View {
     @EnvironmentObject private var notificationService: NotificationService
     @State private var isShowingEditChallenge = false
     @State private var challengeToEdit: Challenge?
+    @State private var isShowingCheckInSheet = false
+    @State private var challengeToCheckIn: Challenge?
     
     var body: some View {
-        NavigationView {
-            Group {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .overlay(
-                            Text("Loading challenges...")
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.challenges.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "flag.fill")
-                            .font(.system(size: 70))
-                            .foregroundColor(.theme.accent.opacity(0.7))
-                            .padding(.bottom, 16)
-                        
-                        Text("No Challenges Yet")
-                            .font(.title2)
-                            .bold()
-                            .foregroundColor(.theme.text)
-                        
-                        Text("Start your first 100-day challenge and begin tracking your progress.")
-                            .font(.body)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.theme.subtext)
-                            .padding(.horizontal)
-                        
-                        Button(action: { viewModel.isShowingNewChallenge = true }) {
-                            Text("Create Challenge")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 30)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.theme.accent)
-                                )
-                        }
-                        .padding(.top, 12)
+        Group {
+            if viewModel.isLoading {
+                ProgressView()
+                    .overlay(
+                        Text("Loading challenges...")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewModel.challenges.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "flag.fill")
+                        .font(.system(size: 70))
+                        .foregroundColor(.theme.accent.opacity(0.7))
+                        .padding(.bottom, 16)
+                    
+                    Text("No Challenges Yet")
+                        .font(.title2)
+                        .bold()
+                        .foregroundColor(.theme.text)
+                    
+                    Text("Start your first 100-day challenge and begin tracking your progress.")
+                        .font(.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.theme.subtext)
+                        .padding(.horizontal)
+                    
+                    Button(action: { viewModel.isShowingNewChallenge = true }) {
+                        Text("Create Challenge")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, 30)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.theme.accent)
+                            )
                     }
-                    .padding()
-                } else {
-                    VStack(spacing: 0) {
-                        if viewModel.isOffline {
-                            OfflineBanner()
-                        }
-                        
-                        List {
-                            ForEach(viewModel.challenges) { challenge in
-                                ChallengeCardView(
-                                    challenge: challenge,
-                                    subscriptionService: subscriptionService,
-                                    onCheckIn: {
-                                        Task {
-                                            await viewModel.checkIn(to: challenge)
-                                        }
-                                    }
-                                )
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
+                    .padding(.top, 12)
+                }
+                .padding()
+            } else {
+                VStack(spacing: 0) {
+                    if viewModel.isOffline {
+                        OfflineBanner()
+                    }
+                    
+                    List {
+                        ForEach(viewModel.challenges) { challenge in
+                            ChallengeCardView(
+                                challenge: challenge,
+                                subscriptionService: subscriptionService,
+                                onCheckIn: {
+                                    challengeToCheckIn = challenge
+                                    isShowingCheckInSheet = true
+                                }
+                            )
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                challengeToEdit = challenge
+                                isShowingEditChallenge = true
+                            }
+                            .contextMenu {
+                                Button(action: {
                                     challengeToEdit = challenge
                                     isShowingEditChallenge = true
+                                }) {
+                                    Label("Edit", systemImage: "pencil")
                                 }
-                                .contextMenu {
-                                    Button(action: {
-                                        challengeToEdit = challenge
-                                        isShowingEditChallenge = true
-                                    }) {
-                                        Label("Edit", systemImage: "pencil")
+                                
+                                Button(action: {
+                                    challengeToCheckIn = challenge
+                                    isShowingCheckInSheet = true
+                                }) {
+                                    Label("Check In", systemImage: "checkmark.circle")
+                                }
+                                
+                                Button(role: .destructive, action: {
+                                    Task {
+                                        await viewModel.archiveChallenge(challenge)
                                     }
-                                    
-                                    Button(role: .destructive, action: {
-                                        Task {
-                                            await viewModel.archiveChallenge(challenge)
-                                        }
-                                    }) {
-                                        Label("Delete", systemImage: "trash")
-                                    }
+                                }) {
+                                    Label("Delete", systemImage: "trash")
                                 }
                             }
                         }
-                        .listStyle(.plain)
                     }
+                    .listStyle(.plain)
                 }
             }
-            .navigationTitle("Challenges")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { viewModel.isShowingNewChallenge = true }) {
-                        Image(systemName: "plus")
-                    }
-                }
-                
-                if viewModel.isOffline {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Image(systemName: "wifi.slash")
-                            .foregroundColor(.yellow)
-                    }
+        }
+        .navigationTitle("Challenges")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { viewModel.isShowingNewChallenge = true }) {
+                    Image(systemName: "plus")
                 }
             }
-            .sheet(isPresented: $viewModel.isShowingNewChallenge) {
-                NewChallengeSheet(viewModel: viewModel)
+            
+            if viewModel.isOffline {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Image(systemName: "wifi.slash")
+                        .foregroundColor(.yellow)
+                }
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingNewChallenge) {
+            NewChallengeSheet(viewModel: viewModel)
+                .environmentObject(subscriptionService)
+                .environmentObject(notificationService)
+        }
+        .sheet(isPresented: $isShowingEditChallenge, onDismiss: {
+            challengeToEdit = nil
+        }) {
+            if let challenge = challengeToEdit {
+                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
                     .environmentObject(subscriptionService)
                     .environmentObject(notificationService)
             }
-            .sheet(isPresented: $isShowingEditChallenge, onDismiss: {
-                challengeToEdit = nil
-            }) {
-                if let challenge = challengeToEdit {
-                    EditChallengeSheet(viewModel: viewModel, challenge: challenge)
-                        .environmentObject(subscriptionService)
-                        .environmentObject(notificationService)
-                }
+        }
+        .sheet(isPresented: $isShowingCheckInSheet, onDismiss: {
+            challengeToCheckIn = nil
+        }) {
+            if let challenge = challengeToCheckIn {
+                CheckInSheet(viewModel: viewModel, challenge: challenge)
+                    .environmentObject(subscriptionService)
             }
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.errorMessage)
-            }
-            .onAppear {
-                Task {
-                    await viewModel.loadChallenges()
-                }
+        }
+        .alert("Error", isPresented: $viewModel.showError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.errorMessage)
+        }
+        .onAppear {
+            Task {
+                await viewModel.loadChallenges()
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
@@ -162,6 +176,16 @@ struct NewChallengeSheet: View {
     @EnvironmentObject var notificationService: NotificationService
     @FocusState private var isTitleFocused: Bool
     
+    // Popular challenge suggestions
+    private let challengeSuggestions = [
+        "Go to the gym",
+        "Read 10 pages",
+        "No sugar",
+        "Code every day",
+        "Meditate",
+        "Drink a gallon of water"
+    ]
+    
     var body: some View {
         NavigationView {
             Form {
@@ -182,6 +206,31 @@ struct NewChallengeSheet: View {
                         .focused($isTitleFocused)
                 }
                 
+                Section(header: Text("Popular Challenge Ideas")) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(challengeSuggestions, id: \.self) { suggestion in
+                                Button(action: {
+                                    viewModel.challengeTitle = suggestion
+                                }) {
+                                    Text(suggestion)
+                                        .font(.footnote)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .fill(Color.theme.surface)
+                                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                                        )
+                                        .foregroundColor(.theme.text)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal, -16)
+                }
+                
                 Section {
                     Button("Create Challenge") {
                         Task {
@@ -200,6 +249,104 @@ struct NewChallengeSheet: View {
                     isTitleFocused = true
                 }
             }
+            .alert("Error", isPresented: $viewModel.showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(viewModel.errorMessage)
+            }
+        }
+    }
+}
+
+struct CheckInSheet: View {
+    @ObservedObject var viewModel: ChallengesViewModel
+    let challenge: Challenge
+    @Environment(\.dismiss) private var dismiss
+    @State private var note: String = ""
+    @State private var showSuccessAnimation = false
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section(header: Text("Daily Check-In")) {
+                    Text(challenge.title)
+                        .font(.headline)
+                        .foregroundColor(.theme.text)
+                        .padding(.vertical, 4)
+                    
+                    HStack {
+                        Text("Day \(challenge.daysCompleted + 1) of 100")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                        
+                        Spacer()
+                        
+                        Text("Current streak: \(challenge.streakCount) days")
+                            .font(.caption)
+                            .foregroundColor(.theme.subtext)
+                    }
+                }
+                
+                Section(header: Text("Notes (Optional)")) {
+                    TextEditor(text: $note)
+                        .frame(minHeight: 100)
+                        .padding(4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.theme.subtext.opacity(0.3), lineWidth: 1)
+                        )
+                        .overlay(
+                            Group {
+                                if note.isEmpty {
+                                    Text("Add a note about today's progress...")
+                                        .foregroundColor(.theme.subtext.opacity(0.6))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 12)
+                                        .allowsHitTesting(false)
+                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                }
+                            }
+                        )
+                }
+                
+                Section {
+                    Button(action: {
+                        // Perform check-in
+                        Task {
+                            await viewModel.checkIn(to: challenge, note: note)
+                            showSuccessAnimation = true
+                            
+                            // Dismiss after a brief delay to show success animation
+                            try? await Task.sleep(for: .seconds(1.5))
+                            dismiss()
+                        }
+                    }) {
+                        HStack {
+                            Spacer()
+                            if showSuccessAnimation {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.white)
+                                Text("Success!")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            } else {
+                                Text("Complete Check-In")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(showSuccessAnimation ? Color.green : Color.theme.accent)
+                        )
+                        .animation(.spring, value: showSuccessAnimation)
+                    }
+                }
+            }
+            .navigationTitle("Check In")
+            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
             .alert("Error", isPresented: $viewModel.showError) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -310,8 +457,10 @@ struct EditChallengeSheet: View {
 
 struct ChallengesView_Previews: PreviewProvider {
     static var previews: some View {
-        ChallengesView()
-            .environmentObject(SubscriptionService.shared)
-            .environmentObject(NotificationService.shared)
+        NavigationView {
+            ChallengesView()
+                .environmentObject(SubscriptionService.shared)
+                .environmentObject(NotificationService.shared)
+        }
     }
 } 
