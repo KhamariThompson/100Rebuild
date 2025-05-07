@@ -41,14 +41,16 @@ class ChallengesViewModel: ObservableObject {
     
     private func setupNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 let wasOffline = self.isOffline
                 self.isOffline = path.status != .satisfied
                 
                 // If connection was restored, try to sync data
                 if wasOffline && !self.isOffline {
-                    await self.loadChallenges()
+                    Task {
+                        await self.loadChallenges()
+                    }
                 }
             }
         }

@@ -8,6 +8,7 @@ enum AuthState {
     case signedOut
 }
 
+@MainActor
 class UserSession: ObservableObject {
     static let shared = UserSession()
     

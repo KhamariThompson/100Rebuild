@@ -24,6 +24,15 @@
         { "fieldPath": "ownerId", "order": "ASCENDING" },
         { "fieldPath": "streakCount", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "challenges",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "isArchived", "order": "ASCENDING" },
+        { "fieldPath": "lastModified", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
