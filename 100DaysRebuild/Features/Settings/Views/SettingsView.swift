@@ -224,16 +224,14 @@ struct SettingsView: View {
     
     private func handleDeleteAccount() async {
         do {
-            guard let user = Auth.auth().currentUser else {
-                throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
-            }
-            
-            try await user.delete()
-            try await userSession.signOut()
+            // Use the UserSession method that handles both Auth and Firestore data deletion
+            try await userSession.deleteAccount()
             
             await MainActor.run {
                 errorMessage = ""
                 showingError = false
+                // Close the settings view after successful deletion
+                dismiss()
             }
         } catch {
             await MainActor.run {

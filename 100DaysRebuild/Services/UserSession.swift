@@ -133,6 +133,28 @@ class UserSession: ObservableObject {
         }
     }
     
+    // Add a proper account deletion method that handles Firestore cleanup
+    func deleteAccount() async throws {
+        guard let user = Auth.auth().currentUser, let userId = currentUser?.uid else {
+            throw NSError(domain: "UserSession", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
+        }
+        
+        // 1. Delete all user data from Firestore first
+        try await FirebaseService.shared.deleteUserData(userId: userId)
+        
+        // 2. Delete the actual Firebase Auth account
+        try await user.delete()
+        
+        // 3. Clean up local state
+        await MainActor.run {
+            self.currentUser = nil
+            self.isAuthenticated = false
+            self.authState = .signedOut
+            self.username = nil
+            self.photoURL = nil
+        }
+    }
+    
     // MARK: - Routing Helpers
     
     var shouldShowAuth: Bool {
