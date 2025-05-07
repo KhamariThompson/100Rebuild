@@ -9,6 +9,7 @@ import AuthenticationServices
 struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingSignUp = false
     @State private var email = ""
     @State private var password = ""
@@ -16,7 +17,19 @@ struct AuthView: View {
     var body: some View {
         ZStack {
             // Background
-            Color.black.ignoresSafeArea()
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // Background gradient
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.theme.accent.opacity(0.2),
+                    Color.theme.background
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
             
             ScrollView {
                 VStack(spacing: 32) {
@@ -28,7 +41,7 @@ struct AuthView: View {
                         // Title
                         Text(isShowingSignUp ? "Ready to start your journey?" : "Welcome back")
                             .font(.title2.bold())
-                            .foregroundColor(.white)
+                            .foregroundColor(Color.theme.text)
                             .frame(maxWidth: .infinity, alignment: .center)
                         
                         // Form Fields
@@ -46,16 +59,24 @@ struct AuthView: View {
                             Button(action: { isShowingSignUp.toggle() }) {
                                 Text(isShowingSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
                                     .font(.subheadline)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.theme.accent)
                                     .padding(.top, 8)
                             }
+                            .buttonStyle(.scale)
                         }
                     }
                     .padding(24)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(UIColor.systemGray6))
-                            .shadow(color: Color.white.opacity(0.1), radius: 12, x: 0, y: 8)
+                            .fill(Color.theme.surface)
+                            .shadow(
+                                color: colorScheme == .dark 
+                                    ? Color.black.opacity(0.3)
+                                    : Color.primary.opacity(0.1),
+                                radius: 16, 
+                                x: 0, 
+                                y: 8
+                            )
                     )
                     .padding(.horizontal, 20)
                     
@@ -86,23 +107,34 @@ struct AuthView: View {
             // Logo
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 70))
-                .foregroundColor(.white)
+                .foregroundColor(Color.theme.accent)
+                .background(
+                    Circle()
+                        .fill(Color.theme.surface.opacity(0.7))
+                        .frame(width: 100, height: 100)
+                        .shadow(
+                            color: Color.theme.accent.opacity(0.3),
+                            radius: 10,
+                            x: 0,
+                            y: 5
+                        )
+                )
             
             // Title and tagline
             VStack(spacing: 16) {
                 Text("100Days")
                     .font(.system(size: 48, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(Color.theme.text)
                 
                 VStack(spacing: 8) {
                     Text("Build consistency and transform your life")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.theme.subtext)
                         .multilineTextAlignment(.center)
                     
                     Text("— one day at a time.")
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.theme.accent)
                         .multilineTextAlignment(.center)
                 }
             }
@@ -115,12 +147,22 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
                     .font(.subheadline.bold())
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 
                 TextField("Your email address", text: $email)
                     .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark 
+                                ? Color(.secondarySystemBackground)
+                                : Color(.systemBackground))
+                            .shadow(
+                                color: Color.primary.opacity(0.05),
+                                radius: 3,
+                                x: 0,
+                                y: 2
+                            )
+                    )
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -132,12 +174,22 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
                     .font(.subheadline.bold())
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 
                 SecureField("Your password", text: $password)
                     .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark 
+                                ? Color(.secondarySystemBackground)
+                                : Color(.systemBackground))
+                            .shadow(
+                                color: Color.primary.opacity(0.05),
+                                radius: 3,
+                                x: 0,
+                                y: 2
+                            )
+                    )
                     .textContentType(.password)
                     .submitLabel(.done)
             }
@@ -146,10 +198,11 @@ struct AuthView: View {
             Button(action: forgotPassword) {
                 Text("Forgot Password?")
                     .font(.subheadline)
-                    .foregroundColor(.blue)
+                    .foregroundColor(Color.theme.accent)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 4)
+            .buttonStyle(.scale)
             
             // Sign In Button
             Button(action: signIn) {
@@ -160,9 +213,25 @@ struct AuthView: View {
                     .padding(.vertical, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.blue)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.theme.accent,
+                                        Color.theme.accent.opacity(0.8)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .shadow(
+                                color: Color.theme.accent.opacity(0.3),
+                                radius: 8,
+                                x: 0,
+                                y: 4
+                            )
                     )
             }
+            .buttonStyle(.scale)
             .padding(.top, 8)
         }
     }
@@ -173,12 +242,22 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
                     .font(.subheadline.bold())
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 
                 TextField("Your email address", text: $email)
                     .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark 
+                                ? Color(.secondarySystemBackground)
+                                : Color(.systemBackground))
+                            .shadow(
+                                color: Color.primary.opacity(0.05),
+                                radius: 3,
+                                x: 0,
+                                y: 2
+                            )
+                    )
                     .textContentType(.emailAddress)
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
@@ -190,12 +269,22 @@ struct AuthView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
                     .font(.subheadline.bold())
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 
                 SecureField("Choose a password", text: $password)
                     .padding()
-                    .background(Color(UIColor.secondarySystemBackground))
-                    .cornerRadius(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark 
+                                ? Color(.secondarySystemBackground)
+                                : Color(.systemBackground))
+                            .shadow(
+                                color: Color.primary.opacity(0.05),
+                                radius: 3,
+                                x: 0,
+                                y: 2
+                            )
+                    )
                     .textContentType(.newPassword)
                     .submitLabel(.done)
             }
@@ -209,9 +298,25 @@ struct AuthView: View {
                     .padding(.vertical, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.blue)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.theme.accent,
+                                        Color.theme.accent.opacity(0.8)
+                                    ]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .shadow(
+                                color: Color.theme.accent.opacity(0.3),
+                                radius: 8,
+                                x: 0,
+                                y: 4
+                            )
                     )
             }
+            .buttonStyle(.scale)
             .padding(.top, 8)
         }
     }
@@ -220,7 +325,7 @@ struct AuthView: View {
         VStack(spacing: 16) {
             Text("or continue with")
                 .font(.subheadline)
-                .foregroundColor(Color(UIColor.secondaryLabel))
+                .foregroundColor(Color.theme.subtext)
             
             HStack(spacing: 16) {
                 // Google Sign-In
@@ -239,10 +344,17 @@ struct AuthView: View {
                     .padding(.vertical, 14)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(UIColor.tertiarySystemBackground))
+                            .fill(Color.theme.surface)
+                            .shadow(
+                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                                radius: 4,
+                                x: 0,
+                                y: 2
+                            )
                     )
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 }
+                .buttonStyle(.scale)
                 
                 // Apple Sign-In
                 Button(action: signInWithApple) {
@@ -251,6 +363,7 @@ struct AuthView: View {
                             .resizable()
                             .scaledToFit()
                             .frame(width: 20, height: 20)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                         
                         Text("Apple")
                             .font(.headline)
@@ -259,10 +372,17 @@ struct AuthView: View {
                     .padding(.vertical, 14)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(UIColor.tertiarySystemBackground))
+                            .fill(Color.theme.surface)
+                            .shadow(
+                                color: Color.primary.opacity(colorScheme == .dark ? 0.2 : 0.1),
+                                radius: 4,
+                                x: 0,
+                                y: 2
+                            )
                     )
-                    .foregroundColor(Color(UIColor.label))
+                    .foregroundColor(Color.theme.text)
                 }
+                .buttonStyle(.scale)
             }
         }
     }
@@ -284,8 +404,13 @@ struct AuthView: View {
             .padding(30)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(UIColor.systemGray6).opacity(0.8))
-                    .shadow(color: Color.white.opacity(0.2), radius: 8, x: 0, y: 4)
+                    .fill(Color.theme.surface.opacity(0.9))
+                    .shadow(
+                        color: Color.white.opacity(0.2),
+                        radius: 10,
+                        x: 0,
+                        y: 4
+                    )
             )
         }
     }
@@ -350,6 +475,14 @@ struct AuthView: View {
 // MARK: - Preview
 struct AuthView_Previews: PreviewProvider {
     static var previews: some View {
-        AuthView()
+        Group {
+            AuthView()
+                .preferredColorScheme(.light)
+                .previewDisplayName("Light Mode")
+            
+            AuthView()
+                .preferredColorScheme(.dark)
+                .previewDisplayName("Dark Mode")
+        }
     }
 } 
