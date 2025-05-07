@@ -75,6 +75,7 @@ struct OnboardingContent: View {
                 Spacer()
             }
             .padding(.top, 40)
+            .dismissKeyboardOnTap()
         }
         .navigationBarHidden(true)
         // Alert shown when viewModel.error is not nil
@@ -281,6 +282,8 @@ struct SignInForm: View {
     @ObservedObject var viewModel: AuthViewModel
     @State private var email = ""
     @State private var password = ""
+    @State private var showingPasswordResetAlert = false
+    @State private var passwordResetSent = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -321,13 +324,44 @@ struct SignInForm: View {
             }
             
             // Forgot Password
-            Button(action: forgotPassword) {
+            Button(action: {
+                passwordResetSent = false
+                showingPasswordResetAlert = true
+            }) {
                 Text("Forgot Password?")
                     .font(.subheadline)
                     .foregroundColor(.theme.accent)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.vertical, 4)
+            .alert(
+                passwordResetSent ? "Password Reset Email Sent" : "Reset Password",
+                isPresented: $showingPasswordResetAlert,
+                actions: {
+                    if passwordResetSent {
+                        Button("OK", role: .cancel) {
+                            passwordResetSent = false
+                        }
+                    } else {
+                        TextField("Your email address", text: $email)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                        
+                        Button("Cancel", role: .cancel) { }
+                        Button("Send Reset Link") {
+                            sendPasswordReset()
+                        }
+                        .disabled(email.isEmpty)
+                    }
+                },
+                message: {
+                    passwordResetSent 
+                    ? Text("Password reset instructions have been sent to \(email). Please check your email.")
+                    : Text("Enter your email address to receive a password reset link")
+                }
+            )
             
             // Sign In Button
             Button(action: signIn) {
@@ -351,6 +385,22 @@ struct SignInForm: View {
                 try await viewModel.resetPassword(email: email)
             } catch {
                 viewModel.error = error
+            }
+        }
+    }
+    
+    private func sendPasswordReset() {
+        Task {
+            do {
+                try await viewModel.resetPassword(email: email)
+                await MainActor.run {
+                    passwordResetSent = true
+                }
+            } catch {
+                await MainActor.run {
+                    viewModel.error = error
+                    showingPasswordResetAlert = false
+                }
             }
         }
     }

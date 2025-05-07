@@ -13,6 +13,8 @@ struct AuthView: View {
     @State private var isShowingSignUp = false
     @State private var email = ""
     @State private var password = ""
+    @State private var showingPasswordResetAlert = false
+    @State private var passwordResetSent = false
     
     var body: some View {
         ZStack {
@@ -56,7 +58,12 @@ struct AuthView: View {
                             socialSignInButtons
                             
                             // Toggle between Sign Up/Sign In
-                            Button(action: { isShowingSignUp.toggle() }) {
+                            Button(action: { 
+                                isShowingSignUp.toggle() 
+                                // Clear fields when switching modes
+                                email = ""
+                                password = ""
+                            }) {
                                 Text(isShowingSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
                                     .font(.subheadline)
                                     .foregroundColor(Color.theme.accent)
@@ -84,6 +91,7 @@ struct AuthView: View {
                 }
                 .padding(.top, 60)
             }
+            .dismissKeyboardOnTap()
         }
         // Alert shown when viewModel.error is not nil
         .alert(
@@ -94,6 +102,35 @@ struct AuthView: View {
             ),
             actions: { Button("OK", role: .cancel) { } },
             message: { Text(viewModel.error?.localizedDescription ?? "") }
+        )
+        // Password reset alert
+        .alert(
+            passwordResetSent ? "Password Reset Email Sent" : "Reset Password",
+            isPresented: $showingPasswordResetAlert,
+            actions: {
+                if passwordResetSent {
+                    Button("OK", role: .cancel) {
+                        passwordResetSent = false
+                    }
+                } else {
+                    TextField("Your email address", text: $email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    
+                    Button("Cancel", role: .cancel) { }
+                    Button("Send Reset Link") {
+                        sendPasswordReset()
+                    }
+                    .disabled(email.isEmpty)
+                }
+            },
+            message: {
+                passwordResetSent 
+                ? Text("Password reset instructions have been sent to \(email). Please check your email.")
+                : Text("Enter your email address to receive a password reset link")
+            }
         )
         .overlay {
             if viewModel.isLoading {
@@ -195,7 +232,10 @@ struct AuthView: View {
             }
             
             // Forgot Password
-            Button(action: forgotPassword) {
+            Button(action: {
+                passwordResetSent = false
+                showingPasswordResetAlert = true
+            }) {
                 Text("Forgot Password?")
                     .font(.subheadline)
                     .foregroundColor(Color.theme.accent)
@@ -467,6 +507,22 @@ struct AuthView: View {
                 try await viewModel.resetPassword(email: email)
             } catch {
                 viewModel.error = error
+            }
+        }
+    }
+    
+    private func sendPasswordReset() {
+        Task {
+            do {
+                try await viewModel.resetPassword(email: email)
+                await MainActor.run {
+                    passwordResetSent = true
+                }
+            } catch {
+                await MainActor.run {
+                    viewModel.error = error
+                    showingPasswordResetAlert = false
+                }
             }
         }
     }

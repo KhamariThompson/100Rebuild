@@ -59,12 +59,23 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
     
     private func setupNavigationBarAppearance() {
-        // Fix for layout constraints in NavigationViews - an alternative approach
+        // Fix for layout constraints in NavigationViews
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
         UINavigationBar.appearance().compactAppearance = appearance
+        
+        // Fix for SystemInputAssistantView constraint conflicts
+        // By setting the appearance directly, we prevent some layout conflicts
+        let toolbarAppearance = UIToolbarAppearance()
+        toolbarAppearance.configureWithDefaultBackground()
+        UIToolbar.appearance().standardAppearance = toolbarAppearance
+        UIToolbar.appearance().compactAppearance = toolbarAppearance
+        UIToolbar.appearance().scrollEdgeAppearance = toolbarAppearance
+        
+        // Ensure keyboard dismisses when tapping outside of text fields at UIKit level
+        UIScrollView.appearance().keyboardDismissMode = .interactive
     }
 }
 

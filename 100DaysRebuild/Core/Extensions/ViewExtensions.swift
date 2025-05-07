@@ -33,4 +33,19 @@ extension View {
         }
         .animation(.spring(response: 0.3), value: isShowing)
     }
+    
+    /// Dismisses the keyboard when tapping outside of text input fields
+    func dismissKeyboardOnTap() -> some View {
+        return self.modifier(DismissKeyboardOnTap())
+    }
+}
+
+// MARK: - Dismiss Keyboard Modifier
+struct DismissKeyboardOnTap: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
+    }
 } 
