@@ -1,5 +1,7 @@
 import SwiftUI
 import Charts
+import FirebaseFirestore
+import FirebaseAuth
 
 // MARK: - Main View
 struct ProgressView: View {
@@ -683,6 +685,9 @@ class UserProgressViewModel: ObservableObject {
     @Published var currentPace = "0 days/week"
     @Published var earnedBadges: [Badge] = []
     
+    // Firestore reference
+    private let firestore = Firestore.firestore()
+    
     var lastCheckInDateFormatted: String {
         guard let date = lastCheckInDate else { return "No check-ins yet" }
         
@@ -693,73 +698,210 @@ class UserProgressViewModel: ObservableObject {
     
     func loadData() async {
         isLoading = true
+        hasData = false
         
-        // Simulate network delay
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        // Check for authenticated user
+        guard let userId = Auth.auth().currentUser?.uid else {
+            isLoading = false
+            return
+        }
         
-        // In a real implementation, this would fetch data from ProgressService
-        await MainActor.run {
-            // Load free tier metrics (this would come from your ProgressService)
-            totalChallenges = 3
-            currentStreak = 12
-            longestStreak = 18
-            completionPercentage = 0.65
-            lastCheckInDate = Date()
+        do {
+            // Fetch user challenges from Firestore
+            let challenges = try await loadChallenges(for: userId)
             
-            // Load pro tier data
-            setupMockProData()
+            if challenges.isEmpty {
+                // No data yet
+                isLoading = false
+                hasData = false
+                return
+            }
+            
+            // Calculate metrics
+            totalChallenges = challenges.count
+            currentStreak = calculateCurrentStreak(challenges)
+            longestStreak = calculateLongestStreak(challenges)
+            completionPercentage = calculateCompletionRate(challenges)
+            lastCheckInDate = findLastCheckInDate(challenges)
+            
+            // Pro features data
+            await loadProFeaturesData(from: challenges)
             
             isLoading = false
             hasData = true
+        } catch {
+            print("Error loading progress data: \(error.localizedDescription)")
+            isLoading = false
+            hasData = false
         }
     }
     
-    private func setupMockProData() {
-        // Mock activity data (last 90 days with random check-ins)
+    private func loadChallenges(for userId: String) async throws -> [Challenge] {
+        let snapshot = try await firestore
+            .collection("users")
+            .document(userId)
+            .collection("challenges")
+            .getDocuments()
+        
+        return try snapshot.documents.compactMap { document in
+            try document.data(as: Challenge.self)
+        }
+    }
+    
+    private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {
+        // Find the highest active streak
+        return challenges
+            .filter { !$0.hasStreakExpired }
+            .map { $0.streakCount }
+            .max() ?? 0
+    }
+    
+    private func calculateLongestStreak(_ challenges: [Challenge]) -> Int {
+        // Get the highest streak count across all challenges
+        return challenges.map { $0.streakCount }.max() ?? 0
+    }
+    
+    private func calculateCompletionRate(_ challenges: [Challenge]) -> Double {
+        guard !challenges.isEmpty else { return 0.0 }
+        
+        let totalDaysCompleted = challenges.reduce(0) { $0 + $1.daysCompleted }
+        let totalPossibleDays = challenges.count * 100 // Each challenge is 100 days
+        
+        return Double(totalDaysCompleted) / Double(totalPossibleDays)
+    }
+    
+    private func findLastCheckInDate(_ challenges: [Challenge]) -> Date? {
+        // Find the most recent check-in date
+        return challenges.compactMap { $0.lastCheckInDate }.max()
+    }
+    
+    private func loadProFeaturesData(from challenges: [Challenge]) async {
+        // Activity data - collect all dates where any check-ins occurred
+        let allCheckInDates = challenges.compactMap { challenge in
+            // For each challenge, reconstruct all check-in dates
+            // In a real app, we'd store this as a subcollection in Firestore
+            var dates: [Date] = []
+            if let lastDate = challenge.lastCheckInDate {
+                dates.append(lastDate)
+            }
+            return dates
+        }.flatMap { $0 }
+        
+        activityData = allCheckInDates
+        
+        // Challenge progress data
+        challengeProgressData = challenges.map { challenge in
+            ChallengeProgress(
+                title: challenge.title,
+                completionPercentage: Int(challenge.progressPercentage * 100)
+            )
+        }
+        
+        // Daily check-ins (last 30 days)
         let calendar = Calendar.current
         let today = Date()
         
-        activityData = (0..<90).compactMap { day in
-            let date = calendar.date(byAdding: .day, value: -day, to: today)!
-            // Randomly include some dates (more likely for recent dates)
-            return Double.random(in: 0...1) < (1.0 - Double(day) / 180) ? date : nil
+        // Create a dictionary to count check-ins by date
+        var checkInsByDate: [Date: Int] = [:]
+        
+        for date in allCheckInDates {
+            // Only include last 30 days
+            if let daysAgo = calendar.dateComponents([.day], from: date, to: today).day, daysAgo <= 30 {
+                // Normalize date to remove time component
+                let normalizedDate = calendar.startOfDay(for: date)
+                checkInsByDate[normalizedDate, default: 0] += 1
+            }
         }
         
-        // Mock challenge progress data
-        challengeProgressData = [
-            ChallengeProgress(title: "Reading", completionPercentage: 82),
-            ChallengeProgress(title: "Meditation", completionPercentage: 65),
-            ChallengeProgress(title: "Running", completionPercentage: 43)
-        ]
+        // Convert to array sorted by date
+        dailyCheckInsData = checkInsByDate.map { 
+            DailyCheckIn(date: $0.key, count: $0.value) 
+        }.sorted { $0.date < $1.date }
         
-        // Mock daily check-ins (last 30 days)
-        dailyCheckInsData = (0..<30).map { day in
-            let date = calendar.date(byAdding: .day, value: -29 + day, to: today)!
-            // Create a somewhat realistic pattern
-            var count = 0
-            if day % 7 < 5 { // More likely on weekdays
-                count = Int.random(in: 0...1)
-            }
-            if day > 20 { // Increasing trend recently
-                count = Int.random(in: 0...2)
-            }
-            return DailyCheckIn(date: date, count: count)
+        // Projected completion date calculation
+        calculateProjectedCompletionDate(challenges)
+        
+        // Badges calculation
+        calculateEarnedBadges(challenges)
+    }
+    
+    private func calculateProjectedCompletionDate(_ challenges: [Challenge]) {
+        guard !challenges.isEmpty else {
+            projectedCompletionDate = nil
+            currentPace = "0 days/week"
+            return
         }
         
-        // Project completion date (approximately 120 days from now)
-        projectedCompletionDate = calendar.date(byAdding: .day, value: 35, to: today)
+        // Get incomplete challenges
+        let incompleteChallenges = challenges.filter { !$0.isCompleted }
+        if incompleteChallenges.isEmpty {
+            projectedCompletionDate = nil
+            currentPace = "All completed"
+            return
+        }
         
-        // Current pace
-        currentPace = "4.5 days/week"
+        // Calculate average check-ins per week over the last month
+        let checkInsLast30Days = dailyCheckInsData.reduce(0) { $0 + $1.count }
+        let weeklyRate = Double(checkInsLast30Days) / 4.0 // 30 days ≈ 4 weeks
         
-        // Earned badges
-        earnedBadges = [
-            Badge(id: 1, title: "Perfect Week", iconName: "calendar.badge.checkmark"),
-            Badge(id: 2, title: "10-Day Streak", iconName: "flame.fill"),
-            Badge(id: 3, title: "Early Bird", iconName: "sunrise.fill"),
-            Badge(id: 4, title: "Consistency King", iconName: "chart.bar.fill"),
-            Badge(id: 5, title: "25% Complete", iconName: "rosette")
-        ]
+        if weeklyRate <= 0 {
+            projectedCompletionDate = nil
+            currentPace = "0 days/week"
+            return
+        }
+        
+        // Calculate days remaining
+        let totalDaysRemaining = incompleteChallenges.reduce(0) { $0 + $1.daysRemaining }
+        
+        // Estimate days to completion
+        let weeksToCompletion = Double(totalDaysRemaining) / weeklyRate
+        let daysToCompletion = weeksToCompletion * 7
+        
+        // Calculate projected date
+        projectedCompletionDate = Calendar.current.date(byAdding: .day, value: Int(daysToCompletion), to: Date())
+        
+        // Format current pace
+        let formattedPace = String(format: "%.1f", weeklyRate)
+        currentPace = "\(formattedPace) days/week"
+    }
+    
+    private func calculateEarnedBadges(_ challenges: [Challenge]) {
+        var badges: [Badge] = []
+        
+        // Streak badges
+        if longestStreak >= 7 {
+            badges.append(Badge(id: 1, title: "7-Day Streak", iconName: "flame.fill"))
+        }
+        if longestStreak >= 30 {
+            badges.append(Badge(id: 2, title: "30-Day Streak", iconName: "flame.fill"))
+        }
+        
+        // Completion badges
+        let completedChallenges = challenges.filter { $0.isCompleted }.count
+        if completedChallenges > 0 {
+            badges.append(Badge(id: 3, title: "First Completion", iconName: "checkmark.circle.fill"))
+        }
+        if completedChallenges >= 3 {
+            badges.append(Badge(id: 4, title: "Triple Completion", iconName: "checkmark.circle.fill"))
+        }
+        
+        // Progress badges
+        if completionPercentage >= 0.25 {
+            badges.append(Badge(id: 5, title: "25% Complete", iconName: "chart.bar.fill"))
+        }
+        if completionPercentage >= 0.50 {
+            badges.append(Badge(id: 6, title: "50% Complete", iconName: "chart.bar.fill"))
+        }
+        if completionPercentage >= 0.75 {
+            badges.append(Badge(id: 7, title: "75% Complete", iconName: "chart.bar.fill"))
+        }
+        
+        // Consistency badge
+        if totalChallenges > 0 && !challenges.contains(where: { $0.hasStreakExpired }) {
+            badges.append(Badge(id: 8, title: "Perfect Consistency", iconName: "star.fill"))
+        }
+        
+        earnedBadges = badges
     }
 }
 
