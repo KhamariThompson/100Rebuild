@@ -787,10 +787,8 @@ class UserProgressViewModel: ObservableObject {
             return dates
         }.flatMap { $0 }
         
-        activityData = allCheckInDates
-        
-        // Challenge progress data
-        challengeProgressData = challenges.map { challenge in
+        // Prepare data for main thread updates
+        let processedChallengeData = challenges.map { challenge in
             ChallengeProgress(
                 title: challenge.title,
                 completionPercentage: Int(challenge.progressPercentage * 100)
@@ -814,15 +812,21 @@ class UserProgressViewModel: ObservableObject {
         }
         
         // Convert to array sorted by date
-        dailyCheckInsData = checkInsByDate.map { 
+        let processedDailyCheckIns = checkInsByDate.map { 
             DailyCheckIn(date: $0.key, count: $0.value) 
         }.sorted { $0.date < $1.date }
         
-        // Projected completion date calculation
-        calculateProjectedCompletionDate(challenges)
-        
-        // Badges calculation
-        calculateEarnedBadges(challenges)
+        // Now update all published properties on the main thread
+        await MainActor.run {
+            // Update all properties on the main thread
+            self.activityData = allCheckInDates
+            self.challengeProgressData = processedChallengeData
+            self.dailyCheckInsData = processedDailyCheckIns
+            
+            // Call other calculation methods that will update published properties
+            calculateProjectedCompletionDate(challenges)
+            calculateEarnedBadges(challenges)
+        }
     }
     
     private func calculateProjectedCompletionDate(_ challenges: [Challenge]) {
