@@ -12,44 +12,16 @@ Before you begin, ensure you have the following installed:
 - CocoaPods (for Firebase dependencies)
 - A Firebase account (for backend services)
 
-## 📱 Features
+## 🚀 Features
 
-### Core Features
-
-- **Authentication**
-
-  - Email/password login
-  - Secure password reset
-  - Session management
-  - Profile customization
-
-- **Challenges**
-
-  - Create and manage 100-day challenges
-  - Daily check-in system
-  - Streak tracking and protection
-  - Challenge archiving and completion tracking
-
-- **Progress Tracking**
-
-  - Visual progress indicators
-  - Streak statistics
-  - Completion percentage
-  - Historical data visualization
-
-- **Smart Reminders**
-  - Customizable reminder times
-  - Streak protection notifications
-  - Pro-only reminder customization
-  - Local notification support
-
-### Pro Features
-
-- Advanced analytics and charts
-- Custom reminder times
-- Detailed challenge breakdowns
-- Historical data visualization
-- Streak calendar view
+- **Challenge Tracking**: Create and monitor your 100-day challenges
+- **Daily Check-ins**: Record your progress with optional notes
+- **Streak Counter**: Track your current and longest streaks
+- **Progress Stats**: View detailed progress metrics and completion rates
+- **Smart Reminders**: Get notified when it's time to check in
+- **Multiple Challenges**: Manage different challenges simultaneously
+- **Dark Mode**: Beautiful dark-themed UI that's easy on the eyes
+- **Pro Features**: Analytics, unlimited challenges, and more with a subscription
 
 ## 🏗️ Project Structure
 
@@ -170,30 +142,43 @@ The app uses a modern, dark-themed design system:
 
 ### Environment Variables
 
-Create a `Configuration/Environment.xcconfig` file with:
+Create a `Configuration/Config.xcconfig` file with your development or production configuration:
 
 ```xcconfig
-// Firebase
-FIREBASE_API_KEY = your_api_key
-FIREBASE_PROJECT_ID = your_project_id
+// For development
+#include "Development.xcconfig"
 
-// RevenueCat
-REVENUECAT_API_KEY = your_api_key
+// For production
+// #include "Production.xcconfig"
 ```
+
+### API Security
+
+**Important**: Do not store API keys in configuration files for production builds. Instead:
+
+1. For RevenueCat: Use the secure runtime wrapper in SubscriptionService.swift
+2. For Firebase: Use GoogleService-Info.plist (which is gitignored)
+
+### Authentication
+
+The app supports:
+
+- Email/Password authentication
+- Apple Sign-In
+- Google Sign-In
 
 ### Build Settings
 
 - Deployment Target: iOS 17.0
 - Swift Version: 5.9
 - Enable Dark Mode
-- Enable Localization
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+2. Create your feature branch (`git checkout -b feature/YourFeature`)
+3. Commit your changes (`git commit -m 'Add YourFeature'`)
+4. Push to the branch (`git push origin feature/YourFeature`)
 5. Open a Pull Request
 
 ### Code Style
