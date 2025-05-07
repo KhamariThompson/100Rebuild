@@ -58,7 +58,7 @@ struct AuthView: View {
                                     password: $viewModel.password,
                                     confirmPassword: $viewModel.confirmPassword,
                                     isSignUp: viewModel.authMode == .emailSignUp,
-                                    focusedField: $focusedField
+                                    focusedField: self.$focusedField
                                 )
                                 
                                 // Sign In / Sign Up button
