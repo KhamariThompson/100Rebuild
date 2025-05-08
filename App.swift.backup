@@ -93,7 +93,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     private func fixLayoutConstraints() {
         // Fix for constraint issues with SystemInputAssistantView
-        // We've removed the global UIKit appearance configurations that were causing threading issues
+        // Make sure all UIKit appearance configurations happen on main thread
+        DispatchQueue.main.async {
+            UITextField.appearance().returnKeyType = .done
+        }
         
         // Fix for keyboard issues - use notification center to dismiss keyboard when tapping outside
         NotificationCenter.default.addObserver(

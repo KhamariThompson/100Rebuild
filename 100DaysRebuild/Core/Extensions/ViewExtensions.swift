@@ -34,29 +34,41 @@ extension UIApplication {
         // Check if current view is a SystemInputAssistant
         let viewClassName = NSStringFromClass(type(of: view))
         if viewClassName.contains("SystemInputAssistant") {
-            // Instead of hiding or removing, disable its fixed height constraint
+            // Instead of just disabling, remove ALL height constraints
+            var heightConstraintsToRemove: [NSLayoutConstraint] = []
+            
             for constraint in view.constraints {
-                if constraint.identifier == "assistantHeight" {
-                    constraint.isActive = false
-                    #if DEBUG
-                    print("Disabled SystemInputAssistantView height constraint")
-                    #endif
-                    // Add a flexible height constraint instead
-                    let flexibleHeight = NSLayoutConstraint(
-                        item: view,
-                        attribute: .height,
-                        relatedBy: .greaterThanOrEqual,
-                        toItem: nil,
-                        attribute: .notAnAttribute,
-                        multiplier: 1.0,
-                        constant: 20.0
-                    )
-                    flexibleHeight.identifier = "flexibleAssistantHeight"
-                    flexibleHeight.priority = .defaultHigh
-                    view.addConstraint(flexibleHeight)
-                    break
+                if constraint.identifier == "assistantHeight" || 
+                   (constraint.firstAttribute == .height && constraint.firstItem === view) {
+                    heightConstraintsToRemove.append(constraint)
                 }
             }
+            
+            // Remove all height constraints
+            for constraint in heightConstraintsToRemove {
+                view.removeConstraint(constraint)
+                #if DEBUG
+                print("Removed height constraint from SystemInputAssistantView")
+                #endif
+            }
+            
+            // Add a very minimal flexible height constraint instead
+            let flexibleHeight = NSLayoutConstraint(
+                item: view,
+                attribute: .height,
+                relatedBy: .lessThanOrEqual,
+                toItem: nil,
+                attribute: .notAnAttribute,
+                multiplier: 1.0,
+                constant: 1.0  // Minimum possible height
+            )
+            flexibleHeight.identifier = "minimalAssistantHeight"
+            flexibleHeight.priority = .defaultHigh
+            view.addConstraint(flexibleHeight)
+            
+            // Make the view transparent and non-interactive
+            view.isUserInteractionEnabled = false
+            view.alpha = 0.0
         }
         
         // Recursively search and disable input assistants in subviews

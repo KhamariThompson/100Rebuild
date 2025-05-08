@@ -115,12 +115,6 @@ struct AuthView: View {
                                     .cornerRadius(12)
                                     .keyboardType(.emailAddress)
                                     .autocapitalization(.none)
-                                    .onSubmit {
-                                        dismissKeyboard()
-                                        Task {
-                                            await viewModel.resetPassword()
-                                        }
-                                    }
                                 
                                 Button(action: {
                                     dismissKeyboard()
@@ -181,8 +175,9 @@ struct AuthView: View {
                     .frame(minHeight: UIScreen.main.bounds.height - 150)
                 }
                 .scrollDismissesKeyboard(.immediately)
-                .dismissKeyboardOnTap()
-                .withSafeKeyboardHandling()
+                .onTapGesture {
+                    dismissKeyboard()
+                }
                 
                 // Loading overlay
                 if viewModel.isLoading {
@@ -633,23 +628,18 @@ struct EmailPasswordForm: View {
     @Binding var confirmPassword: String
     let isSignUp: Bool
     
-    // Add a helper method to safely dismiss keyboard from any thread
-    private func dismissKeyboard() {
-        DispatchQueue.main.async {
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        }
-    }
-    
     var body: some View {
         VStack(spacing: 16) {
+            // Simple TextField without extra modifiers
             TextField("Email", text: $email)
                 .padding()
                 .background(Color.theme.background)
                 .cornerRadius(12)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
-                .autocorrectionDisabled(true)
+                .disableAutocorrection(true)
             
+            // Simple SecureField without extra modifiers
             SecureField("Password", text: $password)
                 .padding()
                 .background(Color.theme.background)
