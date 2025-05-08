@@ -95,7 +95,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Fix for constraint issues with SystemInputAssistantView
         // Make sure all UIKit appearance configurations happen on main thread
         DispatchQueue.main.async {
-            UITextField.appearance().returnKeyType = .done
+            // Removed UITextField appearance setting that was causing threading issues
         }
         
         // Fix for keyboard issues - use notification center to dismiss keyboard when tapping outside
@@ -168,7 +168,7 @@ class InputAssistantManager {
     }
     
     func setupConstraintDisabling(assistantViewClass: UIView.Type) {
-        // Always execute on main thread
+        // Ensure we're on the main thread
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
                 self?.setupConstraintDisabling(assistantViewClass: assistantViewClass)
