@@ -96,9 +96,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Make sure all UIKit appearance configurations happen on main thread
         DispatchQueue.main.async {
             UITextField.appearance().returnKeyType = .done
-            
-            // Ensure global settings are done on main thread
-            SwiftUI.TextField.Appearance.defaultReturnKeyType = .done
         }
         
         // Fix for keyboard issues - use notification center to dismiss keyboard when tapping outside
@@ -150,7 +147,7 @@ class InputAssistantManager {
     private init() {}
     
     func disableAssistantHeightConstraintInWindow(_ window: UIWindow, assistantViewClass: UIView.Type) {
-        // Ensure we're on the main thread
+        // Always execute on main thread
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
                 self?.disableAssistantHeightConstraintInWindow(window, assistantViewClass: assistantViewClass)
@@ -171,7 +168,7 @@ class InputAssistantManager {
     }
     
     func setupConstraintDisabling(assistantViewClass: UIView.Type) {
-        // Ensure we're on the main thread
+        // Always execute on main thread
         if !Thread.isMainThread {
             DispatchQueue.main.async { [weak self] in
                 self?.setupConstraintDisabling(assistantViewClass: assistantViewClass)

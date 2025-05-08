@@ -573,12 +573,8 @@ struct AuthView: View {
     
     // Helper method to safely dismiss keyboard from any thread
     private func dismissKeyboard() {
-        if Thread.isMainThread {
+        DispatchQueue.main.async {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        } else {
-            DispatchQueue.main.async {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
         }
     }
 }
@@ -639,12 +635,8 @@ struct EmailPasswordForm: View {
     
     // Add a helper method to safely dismiss keyboard from any thread
     private func dismissKeyboard() {
-        if Thread.isMainThread {
+        DispatchQueue.main.async {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        } else {
-            DispatchQueue.main.async {
-                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            }
         }
     }
     
@@ -656,26 +648,18 @@ struct EmailPasswordForm: View {
                 .cornerRadius(12)
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
-                .onSubmit {
-                    dismissKeyboard()
-                }
+                .autocorrectionDisabled(true)
             
             SecureField("Password", text: $password)
                 .padding()
                 .background(Color.theme.background)
                 .cornerRadius(12)
-                .onSubmit {
-                    dismissKeyboard()
-                }
             
             if isSignUp {
                 SecureField("Confirm Password", text: $confirmPassword)
                     .padding()
                     .background(Color.theme.background)
                     .cornerRadius(12)
-                    .onSubmit {
-                        dismissKeyboard()
-                    }
             }
         }
     }
