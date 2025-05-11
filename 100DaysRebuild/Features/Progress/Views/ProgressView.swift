@@ -46,11 +46,39 @@ struct ProgressContentView: View {
                         ProgressProLockedView()
                     }
                 } else {
-                    EmptyStateView()
+                    // Improved empty state with more helpful messaging
+                    VStack(spacing: 24) {
+                        Image(systemName: "chart.line.uptrend.xyaxis.circle")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                            .padding(.bottom, 8)
+                        
+                        Text("No Progress Data Yet")
+                            .font(.headline)
+                        
+                        Text("Start a challenge to begin tracking your progress. Your stats and streaks will appear here.")
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal)
+                            
+                        Spacer().frame(height: 20)
+                        
+                        NavigationLink(destination: ChallengesTabView()) {
+                            Text("Create Your First Challenge")
+                                .fontWeight(.semibold)
+                                .padding()
+                                .background(Color.accentColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                    }
+                    .padding(32)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .padding(.vertical, 16)
         }
+        .withSafeNavigation() // Add navigation safety
     }
 }
 
@@ -620,47 +648,6 @@ struct ProgressProLockedView: View {
     }
 }
 
-struct EmptyStateView: View {
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "chart.xyaxis.line")
-                .font(.system(size: 64))
-                .foregroundColor(.theme.accent.opacity(0.7))
-                .padding(.bottom, 8)
-            
-            Text("No Progress Data Yet")
-                .font(.title3.bold())
-                .foregroundColor(.theme.text)
-            
-            Text("Start a challenge and check in regularly to see your progress analytics here.")
-                .font(.body)
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-            
-            NavigationLink(destination: ChallengesView()) {
-                Text("Start a Challenge")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.accent)
-                    )
-                    .padding(.horizontal, 32)
-            }
-        }
-        .padding(32)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
 // MARK: - Data Models
 @MainActor
 class UserProgressViewModel: ObservableObject {
@@ -739,24 +726,37 @@ class UserProgressViewModel: ObservableObject {
     }
     
     private func loadChallenges(for userId: String) async throws -> [Challenge] {
-        // Modified the query to only include active challenges (not archived)
-        let snapshot = try await firestore
-            .collection("users")
-            .document(userId)
-            .collection("challenges")
-            .whereField("isArchived", isEqualTo: false)
-            .getDocuments()
-        
-        let challenges = try snapshot.documents.compactMap { document in
-            try document.data(as: Challenge.self)
+        // Modified the query to use the correct path structure and handle errors gracefully
+        do {
+            let snapshot = try await firestore
+                .collection("users")
+                .document(userId)
+                .collection("challenges")
+                .whereField("isArchived", isEqualTo: false)
+                .getDocuments()
+            
+            let challenges = snapshot.documents.compactMap { document in
+                do {
+                    return try document.data(as: Challenge.self)
+                } catch {
+                    print("Error decoding challenge document \(document.documentID): \(error.localizedDescription)")
+                    return nil
+                }
+            }
+            
+            return challenges
+        } catch let error as NSError {
+            // Handle "missing" error differently to avoid showing error message for new users
+            if error.domain == FirestoreErrorDomain && 
+               (error.code == 4 || error.code == 5 || error.localizedDescription.contains("missing")) {
+                print("No progress data exists yet - not an error for new users")
+                return []
+            }
+            
+            print("Firestore error loading challenges: \(error.localizedDescription)")
+            // For any other error, return empty array instead of failing completely
+            return []
         }
-        
-        // Make sure we have at least one challenge
-        if !challenges.isEmpty {
-            hasData = true
-        }
-        
-        return challenges
     }
     
     private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {

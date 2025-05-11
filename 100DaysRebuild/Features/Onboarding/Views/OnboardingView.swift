@@ -7,6 +7,7 @@ import UIKit
 // Main Onboarding View broken into smaller components
 struct OnboardingView: View {
     @StateObject private var viewModel = AuthViewModel.shared
+    @EnvironmentObject var userSession: UserSession
     @State private var isShowingSignUp = false
     @State private var isShowingUsernameSelection = false
     
@@ -14,6 +15,7 @@ struct OnboardingView: View {
         NavigationView {
             OnboardingContent(
                 viewModel: viewModel,
+                userSession: userSession,
                 isShowingSignUp: $isShowingSignUp,
                 isShowingUsernameSelection: $isShowingUsernameSelection
             )
@@ -25,6 +27,7 @@ struct OnboardingView: View {
 // Content View to break up complex rendering
 struct OnboardingContent: View {
     @ObservedObject var viewModel: AuthViewModel
+    @ObservedObject var userSession: UserSession
     @Binding var isShowingSignUp: Bool
     @Binding var isShowingUsernameSelection: Bool
     @Environment(\.colorScheme) private var colorScheme
@@ -57,7 +60,7 @@ struct OnboardingContent: View {
                             }
                             
                             // Social Sign-In
-                            SocialSignInButtons(viewModel: viewModel)
+                            SocialSignInButtons(viewModel: viewModel, userSession: userSession)
                             
                             // Toggle Sign Up/Sign In
                             ToggleAuthButton(isShowingSignUp: $isShowingSignUp)
@@ -80,25 +83,29 @@ struct OnboardingContent: View {
                 .frame(minHeight: UIScreen.main.bounds.height)
             }
             .scrollDismissesKeyboard(.interactively)
-            // Alert shown when viewModel.error is not nil
+            // Alert shown when there's an error
             .alert(
                 "Error",
                 isPresented: Binding(
-                    get: { viewModel.error != nil },
-                    set: { if !$0 { viewModel.error = nil } }
+                    get: { userSession.errorMessage != nil },
+                    set: { if !$0 { userSession.errorMessage = nil } }
                 ),
                 actions: { Button("OK", role: .cancel) { } },
-                message: { Text(viewModel.error?.localizedDescription ?? "") }
+                message: { Text(userSession.errorMessage ?? "") }
             )
             .overlay {
                 if viewModel.isLoading {
                     LoadingOverlay()
                 }
             }
-            .onChange(of: viewModel.isAuthenticated) { _, isAuthenticated in
-                if isAuthenticated {
+            .onChange(of: userSession.isAuthenticated) { _, isAuthenticated in
+                if isAuthenticated && userSession.username == nil {
                     isShowingUsernameSelection = true
                 }
+            }
+            .sheet(isPresented: $isShowingUsernameSelection) {
+                UsernameSelectionView()
+                    .environmentObject(userSession)
             }
         }
         .navigationBarHidden(true)
@@ -182,6 +189,7 @@ struct ToggleAuthButton: View {
 
 struct SocialSignInButtons: View {
     @ObservedObject var viewModel: AuthViewModel
+    @ObservedObject var userSession: UserSession
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
@@ -252,22 +260,30 @@ struct SocialSignInButtons: View {
         request.requestedScopes = [.fullName, .email]
         // Create and store a new nonce for this sign-in session
         let nonce = viewModel.randomNonceString()
-        viewModel.currentNonce = nonce
+        viewModel.appleNonce = nonce
         request.nonce = viewModel.sha256(nonce)
     }
     
     private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
         switch result {
-        case .success:
-            // The credential is handled directly in the viewModel
-            Task {
-                // Delay to ensure proper view controller cleanup
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-                await viewModel.signInWithApple()
+        case .success(let authorization):
+            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                guard viewModel.appleNonce != nil else {
+                    userSession.errorMessage = "Invalid state: A login callback was received, but no login request was sent."
+                    return
+                }
+                
+                // Set the credentials on the view model
+                viewModel.appleIDCredential = appleIDCredential
+                
+                // Call sign in method
+                Task {
+                    await viewModel.signInWithApple()
+                }
             }
         case .failure(let error):
             if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
-                viewModel.error = error
+                userSession.errorMessage = error.localizedDescription
             }
         }
     }
@@ -276,6 +292,7 @@ struct SocialSignInButtons: View {
 // MARK: - Sign In Form
 struct SignInForm: View {
     @ObservedObject var viewModel: AuthViewModel
+    @EnvironmentObject var userSession: UserSession
     @State private var email = ""
     @State private var password = ""
     @State private var showingPasswordResetAlert = false
@@ -399,8 +416,12 @@ struct SignInForm: View {
     }
     
     private func signIn() {
+        // Update viewModel's email and password before signing in
+        viewModel.email = email
+        viewModel.password = password
+        
         Task {
-            await viewModel.signInWithEmail(email: email, password: password)
+            await viewModel.signInWithEmail()
         }
     }
 }
@@ -408,6 +429,7 @@ struct SignInForm: View {
 // MARK: - Sign Up Form
 struct SignUpForm: View {
     @ObservedObject var viewModel: AuthViewModel
+    @EnvironmentObject var userSession: UserSession
     @State private var email = ""
     @State private var password = ""
     @State private var confirmPassword = ""
@@ -552,15 +574,21 @@ struct SignUpForm: View {
     }
     
     private func signUp() {
+        // Update viewModel's email and password before signing up
+        viewModel.email = email
+        viewModel.password = password
+        viewModel.confirmPassword = confirmPassword
+        
         Task {
-            await viewModel.signUpWithEmail(email: email, password: password)
+            await viewModel.signUpWithEmail()
         }
     }
 }
 
 // MARK: - Username Selection
 struct UsernameSelectionView: View {
-    @ObservedObject var viewModel: AuthViewModel
+    @StateObject private var viewModel = AuthViewModel.shared
+    @EnvironmentObject var userSession: UserSession
     @State private var username = ""
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -650,11 +678,11 @@ struct UsernameSelectionView: View {
         .alert(
             "Error",
             isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
+                get: { userSession.errorMessage != nil },
+                set: { if !$0 { userSession.errorMessage = nil } }
             ),
             actions: { Button("OK", role: .cancel) { } },
-            message: { Text(viewModel.error?.localizedDescription ?? "") }
+            message: { Text(userSession.errorMessage ?? "") }
         )
         .withSafeKeyboardHandling()
     }

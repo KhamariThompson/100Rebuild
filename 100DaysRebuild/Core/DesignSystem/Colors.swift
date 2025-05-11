@@ -35,4 +35,8 @@ public enum AppColors {
 // MARK: - Color Assets
 public extension Color {
     static let theme = AppColors.self
-} 
+} // Border color missing in AppColors - add it now
+extension AppColors {
+    /// Border color for fields and containers
+    public static let border = Color.gray.opacity(0.3)
+}

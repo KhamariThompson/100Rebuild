@@ -4,48 +4,114 @@ struct MainAppView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @State private var selectedTab = 0
     
     var body: some View {
-        NavigationView {
-            TabView {
-                ChallengesView()
+        ZStack {
+            // Main TabView 
+            TabView(selection: $selectedTab) {
+                // Each tab now contains a NavigationStack/View within the content
+                ChallengesTabView()
                     .tabItem {
                         Label("Challenges", systemImage: "checkmark.circle")
                     }
+                    .tag(0)
                 
-                ProgressView()
+                ProgressTabView()
                     .tabItem {
                         Label("Progress", systemImage: "chart.bar")
                     }
+                    .tag(1)
                 
-                ReminderTabView()
+                RemindersTabView()
                     .tabItem {
                         Label("Reminders", systemImage: "bell")
                     }
+                    .tag(2)
                 
-                ProfileView()
+                ProfileTabView()
                     .tabItem {
                         Label("Profile", systemImage: "person.fill")
                     }
+                    .tag(3)
             }
-            .tint(.theme.accent)
-            .environmentObject(userSession)
-            .environmentObject(subscriptionService)
-            .environmentObject(notificationService)
+            .accentColor(.theme.accent)
+            .onAppear {
+                setupTabBarAppearance()
+            }
+        }
+        .environmentObject(userSession)
+        .environmentObject(subscriptionService)
+        .environmentObject(notificationService)
+    }
+    
+    private func setupTabBarAppearance() {
+        // Configure tab bar appearance
+        let tabBarAppearance = UITabBarAppearance()
+        tabBarAppearance.configureWithDefaultBackground()
+        
+        // Fix tab bar appearance for iOS 15 and later
+        if #available(iOS 15.0, *) {
+            UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+        }
+        
+        // Apply to standard appearance
+        UITabBar.appearance().standardAppearance = tabBarAppearance
+        
+        // Set tint color for tab bar items
+        UITabBar.appearance().tintColor = UIColor(Color.theme.accent)
+        
+        // Fix for NavigationView layout constraint issues
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithOpaqueBackground()
+        appearance.backgroundColor = UIColor(Color.theme.background)
+        appearance.shadowColor = nil // Remove shadow line
+        
+        // Use this appearance for all navigation bars
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
+        UINavigationBar.appearance().compactAppearance = appearance
+    }
+}
+
+// These wrapper views ensure each tab has its own navigation context
+struct ChallengesTabView: View {
+    var body: some View {
+        NavigationView {
+            ChallengesView()
+                .navigationTitle("Challenges")
         }
         .navigationViewStyle(StackNavigationViewStyle())
-        .onAppear {
-            // Fix for NavigationView layout constraint issues
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = UIColor(Color.theme.background)
-            appearance.shadowColor = nil // Remove shadow line
-            
-            // Use this appearance for all navigation bars
-            UINavigationBar.appearance().standardAppearance = appearance
-            UINavigationBar.appearance().scrollEdgeAppearance = appearance
-            UINavigationBar.appearance().compactAppearance = appearance
+    }
+}
+
+struct ProgressTabView: View {
+    var body: some View {
+        NavigationView {
+            ProgressView()
+                .navigationTitle("Progress")
         }
+        .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+struct RemindersTabView: View {
+    var body: some View {
+        NavigationView {
+            ReminderTabView()
+                .navigationTitle("Reminders")
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+struct ProfileTabView: View {
+    var body: some View {
+        NavigationView {
+            ProfileView()
+                .navigationTitle("Profile")
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 

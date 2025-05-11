@@ -28,6 +28,7 @@ import AuthenticationServices
 import CryptoKit
 import UIKit
 import SwiftUI
+import Network
 
 // Authentication modes for the AuthView
 enum AuthMode {
@@ -40,9 +41,7 @@ enum AuthMode {
 class AuthViewModel: ObservableObject {
     static let shared = AuthViewModel()
     
-    @Published private(set) var isAuthenticated = false
-    @Published private(set) var needsUsername = false
-    @Published var error: Error?
+    // UI State properties
     @Published var email = ""
     @Published var password = ""
     @Published var confirmPassword = ""
@@ -50,39 +49,130 @@ class AuthViewModel: ObservableObject {
     @Published var showError = false
     @Published var errorMessage: String = ""
     @Published var authMode: AuthMode = .emailSignIn
+    @Published var networkConnected: Bool = true
+    @Published var showingReconnectedMessage: Bool = false
     
-    private let auth = Auth.auth()
-    private let firestore = Firestore.firestore()
-    var currentNonce: String?
-    private var authStateListener: AuthStateDidChangeListenerHandle?
+    // Form validation errors
+    @Published var emailError: String? = nil
+    @Published var passwordError: String? = nil
+    @Published var confirmPasswordError: String? = nil
     
-    private init() {
-        setupAuthStateListener()
-    }
+    // Apple sign in properties
+    var appleIDCredential: ASAuthorizationAppleIDCredential?
+    var appleNonce: String?
     
-    private func setupAuthStateListener() {
-        authStateListener = auth.addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in
-                if let user = user {
-                    self?.isAuthenticated = true
-                    await self?.checkUsernameSetup(for: user.uid)
-                } else {
-                    self?.isAuthenticated = false
-                    self?.needsUsername = false
+    // Network monitoring
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "AuthViewModel.NetworkMonitor")
+    
+    // Reference to services
+    private let userSession = UserSession.shared
+    private let authService = AuthService.shared
+    
+    // Track last auth attempt for retry
+    private var lastAuthAttemptMode: AuthMode?
+    
+    // MARK: - Fix for Swift 6 capture in closure that outlives deinit
+    // This is the method that fixes the error:
+    // "Capture of 'self' in a closure that outlives deinit; this is an error in the Swift 6 language mode"
+    private func setupAuthStateChangeHandler() {
+        // Create a weak reference to self
+        weak var weakSelf = self
+        
+        // Create a MainActor Task that doesn't capture self strongly
+        Task { @MainActor in
+            // Use the local userSession reference that doesn't capture self
+            let session = userSession
+            session.authStateDidChangeHandler = {
+                Task { @MainActor in
+                    // Use the weak reference inside the handler
+                    weakSelf?.isLoading = false
+                    if weakSelf?.userSession.errorMessage == nil {
+                        weakSelf?.showError = false
+                    }
                 }
             }
         }
     }
     
+    private init() {
+        print("AuthViewModel initialized")
+        setupNetworkMonitoring()
+        setupAuthStateChangeHandler() // Use the new method instead of directly setting up the handler here
+    }
+    
     deinit {
-        if let handle = authStateListener {
-            auth.removeStateDidChangeListener(handle)
+        networkMonitor.cancel()
+        
+        // Remove the handler to avoid retain cycles - don't capture self
+        Task { 
+            await MainActor.run {
+                // We're in deinit, so it's safe to directly access userSession
+                // Using a local reference to avoid capturing self
+                let session = userSession
+                session.authStateDidChangeHandler = nil
+            }
+        }
+    }
+    
+    private func setupNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let isConnected = path.status == .satisfied
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                // Avoid multiple UI updates for same state
+                guard self.networkConnected != isConnected else { return }
+                
+                let wasDisconnected = !self.networkConnected
+                self.networkConnected = isConnected
+                
+                // If network reconnected, show the reconnection message
+                if isConnected && wasDisconnected {
+                    self.showingReconnectedMessage = true
+                    
+                    // Re-attempt authentication if we were previously disconnected
+                    if self.isLoading {
+                        self.retryLastAuthAttempt()
+                    }
+                } else if !isConnected && self.isLoading {
+                    // Cancel any in-progress auth and show network error
+                    self.isLoading = false
+                    self.setError(NSError(domain: "NetworkError", code: 100,
+                        userInfo: [NSLocalizedDescriptionKey: "Internet connection lost. Please try again when connected."]))
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
+    }
+    
+    private func retryLastAuthAttempt() {
+        guard let lastMode = lastAuthAttemptMode else { return }
+        
+        switch lastMode {
+        case .emailSignIn:
+            Task { await signInWithEmail() }
+        case .emailSignUp:
+            Task { await signUpWithEmail() }
+        case .forgotPassword:
+            // No need to retry password reset
+            break
         }
     }
     
     // MARK: - Computed Properties
     
+    var needsUsername: Bool {
+        if case .signedIn = userSession.authState, userSession.username == nil {
+            return true
+        }
+        return false
+    }
+    
     var isFormValid: Bool {
+        // Ensure network connectivity first
+        guard networkConnected else { return false }
+        
         switch authMode {
         case .emailSignIn:
             return !email.isEmpty && !password.isEmpty
@@ -93,275 +183,248 @@ class AuthViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Authentication Methods
+    // MARK: - Form Validation Methods
     
-    // Email Sign In
-    func signInWithEmail() async {
-        guard isFormValid else {
-            setError(NSError(domain: "AuthError", code: 1, 
-                             userInfo: [NSLocalizedDescriptionKey: "Please enter valid email and password"]))
-            return
-        }
+    func validateForm() -> Bool {
+        // Only calculate validation state without updating published properties
+        let emailErrorResult = validateEmail(email)
         
-        isLoading = true
-        
-        do {
-            try await auth.signIn(withEmail: email, password: password)
-            // Success is handled by auth state listener
-            clearCredentials()
-        } catch {
-            setError(error)
-        }
-        
-        isLoading = false
-    }
-    
-    // Email Sign Up
-    func signUpWithEmail() async {
-        guard isFormValid else {
-            if password != confirmPassword {
-                setError(NSError(domain: "AuthError", code: 2, 
-                                 userInfo: [NSLocalizedDescriptionKey: "Passwords do not match"]))
-            } else if password.count < 6 {
-                setError(NSError(domain: "AuthError", code: 3, 
-                                 userInfo: [NSLocalizedDescriptionKey: "Password must be at least 6 characters"]))
-            } else {
-                setError(NSError(domain: "AuthError", code: 1, 
-                                 userInfo: [NSLocalizedDescriptionKey: "Please enter valid email and password"]))
-            }
-            return
-        }
-        
-        isLoading = true
-        
-        do {
-            try await auth.createUser(withEmail: email, password: password)
-            // Success is handled by auth state listener
-            clearCredentials()
-        } catch {
-            setError(error)
-        }
-        
-        isLoading = false
-    }
-    
-    // Google Sign In - Updated for new UI
-    func signInWithGoogle() async {
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = windowScene.windows.first,
-              let rootViewController = window.rootViewController else {
-            setError(NSError(domain: "AuthError", code: 4, 
-                             userInfo: [NSLocalizedDescriptionKey: "Could not find root view controller"]))
-            return
-        }
-        
-        isLoading = true
-        
-        do {
-            try await signInWithGoogle(presenting: rootViewController)
-            // Success is handled by auth state listener
-        } catch {
-            setError(error)
-        }
-        
-        isLoading = false
-    }
-    
-    // Apple Sign In - non-throwing wrapper
-    func signInWithApple() async {
-        isLoading = true
-        
-        do {
-            try await signInWithAppleInternal()
-            // Success is handled by auth state listener
-        } catch {
-            // Only show errors that aren't cancellation errors
-            let nsError = error as NSError
-            if nsError.domain != "authenticationServices" || nsError.code != ASAuthorizationError.canceled.rawValue {
-                setError(error)
-            }
-        }
-        
-        isLoading = false
-    }
-    
-    // Password Reset
-    func resetPassword() async {
-        guard !email.isEmpty else {
-            setError(NSError(domain: "AuthError", code: 5, 
-                             userInfo: [NSLocalizedDescriptionKey: "Please enter your email address"]))
-            return
-        }
-        
-        isLoading = true
-        
-        do {
-            try await auth.sendPasswordReset(withEmail: email)
+        switch authMode {
+        case .emailSignIn:
+            let passwordErrorResult = validateSignInPassword(password)
+            return emailErrorResult == nil && passwordErrorResult == nil && !email.isEmpty && !password.isEmpty
             
-            // Show success message
-            errorMessage = "Password reset email sent to \(email)"
-            showError = true
+        case .emailSignUp:
+            let passwordErrorResult = validatePassword(password)
+            let confirmPasswordErrorResult = validateConfirmPassword(password, confirmPassword)
+            return emailErrorResult == nil && passwordErrorResult == nil && confirmPasswordErrorResult == nil && 
+                  !email.isEmpty && !password.isEmpty && !confirmPassword.isEmpty
             
-            // Reset and go back to sign in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.authMode = .emailSignIn
-            }
-        } catch {
-            setError(error)
+        case .forgotPassword:
+            return emailErrorResult == nil && !email.isEmpty
         }
-        
-        isLoading = false
     }
     
-    // Non-throwing wrapper for resetPassword(email:)
-    func resetPassword(email: String) async {
-        isLoading = true
+    // Update validation state properties separately (not during view rendering)
+    func updateValidationState() {
+        emailError = validateEmail(email)
         
-        do {
-            try await auth.sendPasswordReset(withEmail: email)
-            
-            // Show success message
-            errorMessage = "Password reset email sent to \(email)"
-            showError = true
-        } catch {
-            setError(error)
+        switch authMode {
+        case .emailSignIn:
+            passwordError = validateSignInPassword(password)
+        case .emailSignUp:
+            passwordError = validatePassword(password)
+            confirmPasswordError = validateConfirmPassword(password, confirmPassword)
+        case .forgotPassword:
+            // No additional validation needed
+            break
         }
-        
-        isLoading = false
     }
     
-    private func clearCredentials() {
+    // Validation helper methods
+    func validateEmail(_ email: String) -> String? {
+        guard !email.isEmpty else { return nil }
+        
+        let emailRegex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email) ? nil : "Please enter a valid email address"
+    }
+    
+    func validateSignInPassword(_ password: String) -> String? {
+        guard !password.isEmpty else { return nil }
+        return password.count < 6 ? "Password must be at least 6 characters" : nil
+    }
+    
+    func validatePassword(_ password: String) -> String? {
+        guard !password.isEmpty else { return nil }
+        return password.count < 6 ? "Password must be at least 6 characters" : nil
+    }
+    
+    func validateConfirmPassword(_ password: String, _ confirmPassword: String) -> String? {
+        guard !confirmPassword.isEmpty else { return nil }
+        return password != confirmPassword ? "Passwords do not match" : nil
+    }
+    
+    // MARK: - Error Handling
+    
+    func setError(_ error: Error) {
+        let nsError = error as NSError
+        print("AuthViewModel ERROR - Domain: \(nsError.domain), Code: \(nsError.code), Description: \(nsError.localizedDescription)")
+        
+        // Update UI state
+        errorMessage = nsError.localizedDescription
+        showError = true
+    }
+    
+    func clearCredentials() {
         email = ""
         password = ""
         confirmPassword = ""
     }
     
-    private func checkUsernameSetup(for userId: String) async {
-        do {
-            let document = try await firestore
-                .collection("users")
-                .document(userId)
-                .getDocument()
-            
-            needsUsername = !document.exists || document.data()?["username"] == nil
-        } catch {
-            self.error = error
-        }
-    }
+    // MARK: - Authentication Methods
     
-    func signInWithGoogle(presenting viewController: UIViewController) async throws {
-        guard let clientID = FirebaseApp.app()?.options.clientID else {
-            throw AuthError.missingClientID
+    /// Email sign in
+    func signInWithEmail() async {
+        guard validateForm() else {
+            updateValidationState()
+            return
         }
         
-        let config = GIDConfiguration(clientID: clientID)
-        GIDSignIn.sharedInstance.configuration = config
-        
-        do {
-            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
-            guard let idToken = result.user.idToken?.tokenString else {
-                throw AuthError.missingIDToken
-            }
-            
-            let credential = GoogleAuthProvider.credential(
-                withIDToken: idToken,
-                accessToken: result.user.accessToken.tokenString
-            )
-            
-            try await auth.signIn(with: credential)
-        } catch {
-            throw AuthError.googleSignInFailed(error)
-        }
-    }
-    
-    func signInWithAppleInternal() async throws {
-        let nonce = randomNonceString()
-        currentNonce = nonce
-        let hashedNonce = sha256(nonce)
-        
-        let appleIDProvider = ASAuthorizationAppleIDProvider()
-        let request = appleIDProvider.createRequest()
-        request.requestedScopes = [.fullName, .email]
-        request.nonce = hashedNonce
-        
-        let authorizationController = ASAuthorizationController(authorizationRequests: [request])
-        let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ASAuthorization, Error>) in
-            let delegate = AppleSignInDelegate(continuation: continuation)
-            // Keep the delegate around until completion
-            authorizationController.delegate = delegate
-            // Store delegate as associated object on controller to extend its lifetime
-            objc_setAssociatedObject(authorizationController, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
-            authorizationController.performRequests()
+        guard networkConnected else {
+            setError(NSError(domain: "AuthError", code: 6, 
+                           userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."]))
+            return
         }
         
-        if let appleIDCredential = result.credential as? ASAuthorizationAppleIDCredential,
-           let appleIDToken = appleIDCredential.identityToken,
-           let idTokenString = String(data: appleIDToken, encoding: .utf8) {
-            
-            // Create a Firebase credential using the standard approach for Apple
-            let credential = OAuthProvider.appleCredential(
-                withIDToken: idTokenString,
-                rawNonce: nonce,
-                fullName: appleIDCredential.fullName
-            )
-            
-            try await auth.signIn(with: credential)
+        isLoading = true
+        lastAuthAttemptMode = .emailSignIn
+        
+        let success = await authService.signInWithEmail(email: email, password: password)
+        
+        // Check for error message from UserSession
+        if let errorMsg = userSession.errorMessage {
+            errorMessage = errorMsg
+            showError = true
+        }
+        
+        if success {
+            // Clear credentials only on success
+            clearCredentials()
         } else {
-            throw AuthError.appleSignInFailed
+            isLoading = false
         }
     }
     
-    // Non-throwing signIn wrapper
-    func signInWithEmail(email: String, password: String) async {
+    /// Email sign up
+    func signUpWithEmail() async {
+        guard validateForm() else {
+            updateValidationState()
+            return
+        }
+        
+        guard networkConnected else {
+            setError(NSError(domain: "AuthError", code: 6, 
+                           userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."]))
+            return
+        }
+        
+        isLoading = true
+        lastAuthAttemptMode = .emailSignUp
+        
+        let success = await authService.signUpWithEmail(email: email, password: password)
+        
+        // Check for error message from UserSession
+        if let errorMsg = userSession.errorMessage {
+            errorMessage = errorMsg
+            showError = true
+        }
+        
+        if success {
+            // Clear credentials only on success
+            clearCredentials()
+        } else {
+            isLoading = false
+        }
+    }
+    
+    /// Google sign in
+    func signInWithGoogle() async {
+        // Find root view controller for Google sign-in
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            setError(NSError(domain: "GoogleSignIn", code: 1001, 
+                          userInfo: [NSLocalizedDescriptionKey: "Unable to present Google sign-in UI"]))
+            return
+        }
+        
+        isLoading = true
+        let success = await authService.signInWithGoogle(viewController: rootViewController)
+        
+        // Check for error message from UserSession
+        if let errorMsg = userSession.errorMessage {
+            errorMessage = errorMsg
+            showError = true
+        }
+        
+        if !success {
+            isLoading = false
+        }
+    }
+    
+    /// Apple sign in
+    func signInWithApple() async {
+        guard let credential = appleIDCredential, 
+              let nonce = appleNonce else {
+            setError(NSError(domain: "AppleSignIn", code: 1001, 
+                           userInfo: [NSLocalizedDescriptionKey: "Missing Apple sign-in credentials"]))
+            return
+        }
+        
+        isLoading = true
+        let success = await authService.signInWithApple(credential: credential, nonce: nonce)
+        
+        // Check for error message from UserSession
+        if let errorMsg = userSession.errorMessage {
+            errorMessage = errorMsg
+            showError = true
+        }
+        
+        if !success {
+            isLoading = false
+        }
+        
+        // Reset Apple credential data
+        appleIDCredential = nil
+        appleNonce = nil
+    }
+    
+    /// Password reset
+    func resetPassword(email: String) async {
         isLoading = true
         
-        do {
-            try await auth.signIn(withEmail: email, password: password)
-            // Success is handled by auth state listener
-        } catch {
-            setError(error)
+        let success = await authService.resetPassword(email: email)
+        
+        // Check for error message from UserSession
+        if let errorMsg = userSession.errorMessage {
+            errorMessage = errorMsg
+            showError = true
         }
         
         isLoading = false
+        
+        if success {
+            // Return to sign in mode after successful password reset
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.authMode = .emailSignIn
+            }
+        }
     }
     
-    // Non-throwing signUp wrapper
-    func signUpWithEmail(email: String, password: String) async {
+    /// Sign out
+    func signOut() async {
         isLoading = true
         
-        do {
-            try await auth.createUser(withEmail: email, password: password)
-            // Success is handled by auth state listener
-        } catch {
-            setError(error)
-        }
+        let success = await authService.signOut()
         
-        isLoading = false
-    }
-    
-    func signOut() async throws {
-        try auth.signOut()
-    }
-    
-    // Non-throwing signOut wrapper
-    func signOutWithoutThrowing() async {
-        do {
-            try auth.signOut()
-        } catch {
-            setError(error)
+        if !success {
+            isLoading = false
+            
+            // Check for error message from UserSession
+            if let errorMsg = userSession.errorMessage {
+                errorMessage = errorMsg
+                showError = true
+            }
         }
     }
     
-    // Non-throwing setUsername wrapper
+    /// Set username for user profile
     func setUsernameWithHandling(username: String) async {
         isLoading = true
         
         do {
-            guard let userId = auth.currentUser?.uid else {
-                throw AuthError.unauthorized
-            }
-            
-            try await FirebaseService.shared.createUserProfile(username: username, userId: userId)
+            try await userSession.updateUsername(username)
+            print("Username set successfully: \(username)")
         } catch {
             setError(error)
         }
@@ -369,54 +432,15 @@ class AuthViewModel: ObservableObject {
         isLoading = false
     }
     
-    // Helper method to update error properties
-    func setError(_ error: Error) {
-        self.error = error
-        self.errorMessage = error.localizedDescription
-        self.showError = true
-    }
+    // MARK: - Helper Methods for Apple Sign In
     
-    // MARK: - Helper Methods
-    
+    // Delegate to AuthService
     func randomNonceString(length: Int = 32) -> String {
-        precondition(length > 0)
-        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        var result = ""
-        var remainingLength = length
-        
-        while remainingLength > 0 {
-            let randoms: [UInt8] = (0 ..< 16).map { _ in
-                var random: UInt8 = 0
-                let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
-                if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
-                }
-                return random
-            }
-            
-            randoms.forEach { random in
-                if remainingLength == 0 {
-                    return
-                }
-                
-                if random < charset.count {
-                    result.append(charset[Int(random)])
-                    remainingLength -= 1
-                }
-            }
-        }
-        
-        return result
+        return authService.randomNonceString(length: length)
     }
     
     func sha256(_ input: String) -> String {
-        let inputData = Data(input.utf8)
-        let hashedData = SHA256.hash(data: inputData)
-        let hashString = hashedData.compactMap {
-            String(format: "%02x", $0)
-        }.joined()
-        
-        return hashString
+        return authService.sha256(input)
     }
 }
 
@@ -432,22 +456,4 @@ enum AuthProviders: String {
     case apple = "apple.com"
     case google = "google.com"
     case facebook = "facebook.com"
-}
-
-// MARK: - Apple Sign In Delegate
-private class AppleSignInDelegate: NSObject, ASAuthorizationControllerDelegate {
-    private let continuation: CheckedContinuation<ASAuthorization, Error>
-    
-    init(continuation: CheckedContinuation<ASAuthorization, Error>) {
-        self.continuation = continuation
-        super.init()
-    }
-    
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
-        continuation.resume(returning: authorization)
-    }
-    
-    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        continuation.resume(throwing: error)
-    }
 } 

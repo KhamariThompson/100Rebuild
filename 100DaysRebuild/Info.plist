@@ -73,6 +73,10 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used for uploading your profile picture</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Used if you choose to take a profile photo</string>
 	<key>com.apple.developer.applesignin</key>
 	<array>
 		<string>Default</string>

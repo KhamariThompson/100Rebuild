@@ -7,104 +7,29 @@ struct ReminderTabView: View {
     @State private var showingPermissionAlert = false
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Notification Permission Status
-                    if !notificationService.isAuthorized {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Notifications Disabled")
-                                .font(.headline)
-                                .foregroundColor(.theme.text)
-                            
-                            Text("Enable notifications to receive reminders for your challenges.")
-                                .font(.subheadline)
-                                .foregroundColor(.theme.subtext)
-                            
-                            Button("Enable Notifications") {
-                                requestNotificationPermission()
-                            }
+        ScrollView {
+            VStack(spacing: 24) {
+                // Notification Permission Status
+                if !notificationService.isAuthorized {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Notifications Disabled")
                             .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.vertical, 10)
-                            .padding(.horizontal, 16)
-                            .background(Color.theme.accent)
-                            .cornerRadius(8)
-                            .padding(.top, 4)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color.theme.surface)
-                                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                        )
-                        .padding(.horizontal)
-                    }
-                    
-                    // Daily Reminder
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Daily Reminder")
-                            .font(.title3)
                             .foregroundColor(.theme.text)
                         
-                        Toggle("Enable Daily Reminder", isOn: Binding(
-                            get: { viewModel.state.isDailyReminderEnabled },
-                            set: { 
-                                viewModel.handle(.toggleDailyReminder(isEnabled: $0))
-                                if $0 {
-                                    scheduleReminders()
-                                } else {
-                                    cancelReminders()
-                                }
-                            }
-                        ))
-                        .tint(.theme.accent)
-                        .disabled(!notificationService.isAuthorized)
-                        
-                        DatePicker("Time", selection: Binding(
-                            get: { viewModel.state.dailyReminderTime },
-                            set: { 
-                                viewModel.handle(.updateDailyReminderTime(time: $0))
-                                updateReminderTime($0)
-                            }
-                        ), displayedComponents: .hourAndMinute)
-                        .datePickerStyle(.compact)
-                        .tint(.theme.accent)
-                        .disabled(!notificationService.isAuthorized || !viewModel.state.isDailyReminderEnabled)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                    )
-                    .padding(.horizontal)
-                    
-                    // Streak Reminder
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Streak Reminder")
-                            .font(.title3)
-                            .foregroundColor(.theme.text)
-                        
-                        Toggle("Enable Streak Reminder", isOn: Binding(
-                            get: { viewModel.state.isStreakReminderEnabled },
-                            set: { 
-                                viewModel.handle(.toggleStreakReminder(isEnabled: $0))
-                                if $0 {
-                                    scheduleStreakReminder()
-                                } else {
-                                    cancelStreakReminder()
-                                }
-                            }
-                        ))
-                        .tint(.theme.accent)
-                        .disabled(!notificationService.isAuthorized)
-                        
-                        Text("Get notified when you're about to break your streak")
+                        Text("Enable notifications to receive reminders for your challenges.")
                             .font(.subheadline)
                             .foregroundColor(.theme.subtext)
+                        
+                        Button("Enable Notifications") {
+                            requestNotificationPermission()
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 16)
+                        .background(Color.theme.accent)
+                        .cornerRadius(8)
+                        .padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -114,63 +39,134 @@ struct ReminderTabView: View {
                             .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                     )
                     .padding(.horizontal)
+                }
+                
+                // Daily Reminder
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Daily Reminder")
+                        .font(.title3)
+                        .foregroundColor(.theme.text)
                     
-                    // Notification Settings
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Notification Settings")
-                            .font(.title3)
-                            .foregroundColor(.theme.text)
-                        
-                        Toggle("Sound", isOn: Binding(
-                            get: { viewModel.state.notificationSettings.soundEnabled },
-                            set: { newValue in
-                                viewModel.handle(.updateNotificationSettings(
-                                    sound: newValue,
-                                    vibration: viewModel.state.notificationSettings.vibrationEnabled
-                                ))
+                    Toggle("Enable Daily Reminder", isOn: Binding(
+                        get: { viewModel.state.isDailyReminderEnabled },
+                        set: { 
+                            viewModel.handle(.toggleDailyReminder(isEnabled: $0))
+                            if $0 {
+                                scheduleReminders()
+                            } else {
+                                cancelReminders()
                             }
-                        ))
-                        .tint(.theme.accent)
-                        
-                        Toggle("Vibration", isOn: Binding(
-                            get: { viewModel.state.notificationSettings.vibrationEnabled },
-                            set: { newValue in
-                                viewModel.handle(.updateNotificationSettings(
-                                    sound: viewModel.state.notificationSettings.soundEnabled,
-                                    vibration: newValue
-                                ))
+                        }
+                    ))
+                    .tint(.theme.accent)
+                    .disabled(!notificationService.isAuthorized)
+                    
+                    DatePicker("Time", selection: Binding(
+                        get: { viewModel.state.dailyReminderTime },
+                        set: { 
+                            viewModel.handle(.updateDailyReminderTime(time: $0))
+                            updateReminderTime($0)
+                        }
+                    ), displayedComponents: .hourAndMinute)
+                    .datePickerStyle(.compact)
+                    .tint(.theme.accent)
+                    .disabled(!notificationService.isAuthorized || !viewModel.state.isDailyReminderEnabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .padding(.horizontal)
+                
+                // Streak Reminder
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Streak Reminder")
+                        .font(.title3)
+                        .foregroundColor(.theme.text)
+                    
+                    Toggle("Enable Streak Reminder", isOn: Binding(
+                        get: { viewModel.state.isStreakReminderEnabled },
+                        set: { 
+                            viewModel.handle(.toggleStreakReminder(isEnabled: $0))
+                            if $0 {
+                                scheduleStreakReminder()
+                            } else {
+                                cancelStreakReminder()
                             }
-                        ))
-                        .tint(.theme.accent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                    )
-                    .padding(.horizontal)
+                        }
+                    ))
+                    .tint(.theme.accent)
+                    .disabled(!notificationService.isAuthorized)
+                    
+                    Text("Get notified when you're about to break your streak")
+                        .font(.subheadline)
+                        .foregroundColor(.theme.subtext)
                 }
-                .padding(.vertical)
-            }
-            .background(Color.theme.background.ignoresSafeArea())
-            .navigationTitle("Reminders")
-            .alert("Notification Permission", isPresented: $showingPermissionAlert) {
-                Button("Settings", role: .none) {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        UIApplication.shared.open(url)
-                    }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .padding(.horizontal)
+                
+                // Notification Settings
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Notification Settings")
+                        .font(.title3)
+                        .foregroundColor(.theme.text)
+                    
+                    Toggle("Sound", isOn: Binding(
+                        get: { viewModel.state.notificationSettings.soundEnabled },
+                        set: { newValue in
+                            viewModel.handle(.updateNotificationSettings(
+                                sound: newValue,
+                                vibration: viewModel.state.notificationSettings.vibrationEnabled
+                            ))
+                        }
+                    ))
+                    .tint(.theme.accent)
+                    
+                    Toggle("Vibration", isOn: Binding(
+                        get: { viewModel.state.notificationSettings.vibrationEnabled },
+                        set: { newValue in
+                            viewModel.handle(.updateNotificationSettings(
+                                sound: viewModel.state.notificationSettings.soundEnabled,
+                                vibration: newValue
+                            ))
+                        }
+                    ))
+                    .tint(.theme.accent)
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Please enable notifications in settings to receive reminders.")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .padding(.horizontal)
             }
-            .onAppear {
-                syncWithNotificationService()
-            }
+            .padding(.vertical)
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .background(Color.theme.background.ignoresSafeArea())
+        .alert("Notification Permission", isPresented: $showingPermissionAlert) {
+            Button("Settings", role: .none) {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Please enable notifications in settings to receive reminders.")
+        }
+        .onAppear {
+            syncWithNotificationService()
+        }
     }
     
     private func requestNotificationPermission() {

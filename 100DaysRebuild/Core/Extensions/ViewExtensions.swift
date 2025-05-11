@@ -5,6 +5,7 @@ import UIKit
 extension UIApplication {
     // Disables the input assistant view that can cause layout constraint issues
     static func disableInputAssistant() {
+        print("Disabling input assistant view to fix layout constraints")
         DispatchQueue.main.async {
             // Use the scenes API for iOS 15 and later
             if #available(iOS 15.0, *) {
@@ -34,46 +35,128 @@ extension UIApplication {
         // Check if current view is a SystemInputAssistant
         let viewClassName = NSStringFromClass(type(of: view))
         if viewClassName.contains("SystemInputAssistant") {
-            // Instead of just disabling, remove ALL height constraints
-            var heightConstraintsToRemove: [NSLayoutConstraint] = []
+            print("Found SystemInputAssistantView, fixing constraints")
             
+            // Instead of removing constraints, lower their priority
             for constraint in view.constraints {
                 if constraint.identifier == "assistantHeight" || 
                    (constraint.firstAttribute == .height && constraint.firstItem === view) {
-                    heightConstraintsToRemove.append(constraint)
+                    print("Lowering priority for constraint: \(constraint)")
+                    constraint.priority = .defaultLow
                 }
             }
             
-            // Remove all height constraints
-            for constraint in heightConstraintsToRemove {
-                view.removeConstraint(constraint)
-                #if DEBUG
-                print("Removed height constraint from SystemInputAssistantView")
-                #endif
+            // Specifically fix the constraint conflict from error message
+            for constraint in view.superview?.constraints ?? [] {
+                if constraint.identifier == "assistantView.bottom" {
+                    print("Found assistantView.bottom constraint, lowering priority")
+                    constraint.priority = .defaultLow + 1
+                }
             }
             
-            // Add a very minimal flexible height constraint instead
-            let flexibleHeight = NSLayoutConstraint(
-                item: view,
-                attribute: .height,
-                relatedBy: .lessThanOrEqual,
-                toItem: nil,
-                attribute: .notAnAttribute,
-                multiplier: 1.0,
-                constant: 1.0  // Minimum possible height
-            )
-            flexibleHeight.identifier = "minimalAssistantHeight"
-            flexibleHeight.priority = .defaultHigh
-            view.addConstraint(flexibleHeight)
+            // Look for _UIRemoteKeyboardPlaceholderView
+            var current: UIView? = view
+            while let parent = current?.superview {
+                if NSStringFromClass(type(of: parent)).contains("UIRemoteKeyboardPlaceholderView") {
+                    print("Found _UIRemoteKeyboardPlaceholderView, fixing constraints")
+                    for constraint in parent.constraints {
+                        if constraint.identifier == "accessoryView.bottom" {
+                            print("Found accessoryView.bottom constraint, lowering priority")
+                            constraint.priority = .defaultHigh - 1
+                        }
+                    }
+                }
+                current = parent
+            }
             
-            // Make the view transparent and non-interactive
-            view.isUserInteractionEnabled = false
-            view.alpha = 0.0
+            // Force layout update
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+        }
+        
+        // Also check for _UIRemoteKeyboardPlaceholderView directly
+        if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
+            print("Found _UIRemoteKeyboardPlaceholderView directly, fixing constraints")
+            for constraint in view.constraints {
+                if constraint.identifier == "accessoryView.bottom" {
+                    print("Found accessoryView.bottom constraint, lowering priority")
+                    constraint.priority = .defaultHigh - 1
+                }
+            }
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
         }
         
         // Recursively search and disable input assistants in subviews
         for subview in view.subviews {
             disableInputAssistantInView(subview)
+        }
+    }
+    
+    // New method to address the specific constraints mentioned in the error log
+    static func fixConstraintConflict() {
+        print("Fixing specific constraint conflict mentioned in error log")
+        DispatchQueue.main.async {
+            // Get all windows
+            var windows: [UIWindow] = []
+            if #available(iOS 15.0, *) {
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        windows.append(contentsOf: windowScene.windows)
+                    }
+                }
+            } else {
+                #if DEBUG
+                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
+                #endif
+                windows = UIApplication.shared.windows
+            }
+            
+            // Search for the specific views mentioned in the error
+            for window in windows {
+                findAndFixSpecificConstraintConflict(in: window)
+            }
+        }
+    }
+    
+    private static func findAndFixSpecificConstraintConflict(in view: UIView) {
+        let viewClassName = NSStringFromClass(type(of: view))
+        
+        // Fix SystemInputAssistantView
+        if viewClassName.contains("SystemInputAssistantView") {
+            for constraint in view.constraints where constraint.identifier == "assistantHeight" {
+                constraint.priority = .defaultLow
+                print("Fixed assistantHeight constraint in SystemInputAssistantView")
+            }
+            view.setNeedsLayout()
+        }
+        
+        // Fix _UIRemoteKeyboardPlaceholderView
+        if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
+            for constraint in view.constraints where constraint.identifier == "accessoryView.bottom" {
+                constraint.priority = .defaultHigh - 1
+                print("Fixed accessoryView.bottom constraint in _UIRemoteKeyboardPlaceholderView")
+            }
+            view.setNeedsLayout()
+        }
+        
+        // Fix _UIKBCompatInputView
+        if viewClassName.contains("UIKBCompatInputView") {
+            // Look for incoming constraints
+            for subview in view.subviews {
+                for constraint in subview.constraints {
+                    if constraint.identifier == "assistantView.bottom" {
+                        constraint.priority = .defaultHigh - 1
+                        print("Fixed assistantView.bottom constraint in _UIKBCompatInputView subview")
+                    }
+                }
+            }
+            view.setNeedsLayout()
+        }
+        
+        // Recursively search subviews
+        for subview in view.subviews {
+            findAndFixSpecificConstraintConflict(in: subview)
         }
     }
 }
@@ -117,6 +200,11 @@ extension View {
         return self.modifier(DismissKeyboardOnTap())
     }
     
+    /// Smart keyboard dismissal that doesn't interfere with tab navigation
+    func focusedDismissKeyboardOnTap() -> some View {
+        return self.modifier(FocusedDismissKeyboardOnTap())
+    }
+    
     /// Improved keyboard handling for forms
     func adaptiveKeyboardHandler() -> some View {
         return self.modifier(AdaptiveKeyboardHandler())
@@ -126,6 +214,19 @@ extension View {
     func withSafeKeyboardHandling() -> some View {
         return self.modifier(SafeKeyboardHandlingModifier())
     }
+    
+    /// Applies safe text input settings to prevent RTIInputSystemClient errors
+    func withSafeTextInput() -> some View {
+        self
+            .disableAutocorrection(true)
+            .autocapitalization(.none)
+            .modifier(SafeTextInputModifier())
+    }
+    
+    /// Debounces navigation transitions to prevent keyboard snapshot warnings
+    func withSafeNavigation() -> some View {
+        self.modifier(NavigationDebounceModifier())
+    }
 }
 
 // MARK: - Safe Keyboard Handling Modifier
@@ -133,34 +234,36 @@ struct SafeKeyboardHandlingModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear {
+                // One-time fix for layout constraint issues at the view level
                 UIApplication.disableInputAssistant()
+                UIApplication.fixConstraintConflict()
                 
-                // Apply additional fixes for keyboard handling
+                // Modify keyboard handling to prevent interference with TabView
                 let notificationCenter = NotificationCenter.default
+                
+                // Only observe keyboard notifications
                 notificationCenter.addObserver(
-                    forName: UIWindow.didBecomeKeyNotification,
+                    forName: UIResponder.keyboardWillShowNotification,
                     object: nil,
                     queue: .main
                 ) { _ in
-                    // Re-disable input assistant when window becomes key
-                    UIApplication.disableInputAssistant()
+                    // Fix constraints when keyboard appears
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        UIApplication.disableInputAssistant()
+                        UIApplication.fixConstraintConflict()
+                    }
                 }
                 
-                // Fix text input focus issues that can cause layout problems
+                // Fix constraints when keyboard disappears
                 notificationCenter.addObserver(
-                    forName: UITextField.textDidBeginEditingNotification,
+                    forName: UIResponder.keyboardWillHideNotification,
                     object: nil,
                     queue: .main
                 ) { _ in
-                    UIApplication.disableInputAssistant()
-                }
-                
-                notificationCenter.addObserver(
-                    forName: UITextView.textDidBeginEditingNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    UIApplication.disableInputAssistant()
+                    // Reset any constraint fixes after keyboard is gone
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        UIApplication.fixConstraintConflict() 
+                    }
                 }
             }
     }
@@ -174,6 +277,73 @@ struct DismissKeyboardOnTap: ViewModifier {
             .onTapGesture {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
+    }
+}
+
+// MARK: - Focused Dismiss Keyboard Modifier
+// This version doesn't interfere with tab view navigation
+struct FocusedDismissKeyboardOnTap: ViewModifier {
+    func body(content: Content) -> some View {
+        ZStack {
+            // The main content
+            content
+            
+            // Invisible overlay just for keyboard dismissal that ignores all tab bar regions
+            GeometryReader { geometry in
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // Only dismiss if a text field is currently active
+                        let keyWindow = UIApplication.shared.connectedScenes
+                            .filter { $0.activationState == .foregroundActive }
+                            .compactMap { $0 as? UIWindowScene }
+                            .first?.windows
+                            .filter { $0.isKeyWindow }.first
+                        
+                        if let currentResponder = keyWindow?.findFirstResponderInView(), 
+                           (currentResponder is UITextField || currentResponder is UITextView) {
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), 
+                                                          to: nil, from: nil, for: nil)
+                        }
+                    }
+                    // Important: exclude the tab bar region (typically bottom 49 points)
+                    .frame(height: geometry.size.height - 49)
+                    .allowsHitTesting(keyboardIsPresent())
+            }
+        }
+    }
+    
+    // Helper to check if keyboard is visible
+    private func keyboardIsPresent() -> Bool {
+        let keyWindow = UIApplication.shared.connectedScenes
+            .filter { $0.activationState == .foregroundActive }
+            .compactMap { $0 as? UIWindowScene }
+            .first?.windows
+            .filter { $0.isKeyWindow }.first
+        
+        return keyWindow?.findFirstResponderInView() is UITextField || keyWindow?.findFirstResponderInView() is UITextView
+    }
+}
+
+// Helper extension to find first responder
+@objc extension UIView {
+    @objc func findFirstResponderInView() -> UIView? {
+        guard !isFirstResponder else { return self }
+        
+        for subview in subviews {
+            if let firstResponder = subview.findFirstResponderInView() {
+                return firstResponder
+            }
+        }
+        
+        return nil
+    }
+}
+
+// Extension for UIWindow to find first responder
+extension UIWindow {
+    override func findFirstResponderInView() -> UIView? {
+        return rootViewController?.view.findFirstResponderInView()
     }
 }
 
@@ -229,5 +399,107 @@ struct AdaptiveKeyboardHandler: ViewModifier {
     private func removeKeyboardNotifications() {
         NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+}
+
+// Modifier to ensure text inputs have safe options
+struct SafeTextInputModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: UIResponder.currentFirstResponder()) { _, newValue in
+                if let textField = newValue as? UITextField {
+                    // Disable predictive options to prevent RTIInputSystemClient errors
+                    textField.autocorrectionType = .no
+                    textField.spellCheckingType = .no
+                    textField.smartQuotesType = .no
+                    textField.smartDashesType = .no
+                    textField.smartInsertDeleteType = .no
+                    
+                    // Disable input assistant
+                    textField.inputAssistantItem.leadingBarButtonGroups = []
+                    textField.inputAssistantItem.trailingBarButtonGroups = []
+                }
+                
+                if let textView = newValue as? UITextView {
+                    // Disable predictive options to prevent RTIInputSystemClient errors
+                    textView.autocorrectionType = .no
+                    textView.spellCheckingType = .no
+                    textView.smartQuotesType = .no
+                    textView.smartDashesType = .no
+                    textView.smartInsertDeleteType = .no
+                    
+                    // Disable input assistant
+                    textView.inputAssistantItem.leadingBarButtonGroups = []
+                    textView.inputAssistantItem.trailingBarButtonGroups = []
+                }
+            }
+    }
+}
+
+// Helper extension to get current first responder
+extension UIResponder {
+    private static weak var _currentFirstResponder: UIResponder?
+    
+    static func currentFirstResponder() -> UIResponder? {
+        _currentFirstResponder = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.findFirstResponder(_:)), to: nil, from: nil, for: nil)
+        return _currentFirstResponder
+    }
+    
+    @objc private func findFirstResponder(_ sender: Any?) {
+        UIResponder._currentFirstResponder = self
+    }
+}
+
+/// Modifier to debounce navigation transitions and prevent UIKeyboardImpl snapshotting warnings
+struct NavigationDebounceModifier: ViewModifier {
+    @State private var isTransitioning = false
+    @State private var debounceTimer: Timer? = nil
+    
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                // Listen for keyboard notifications
+                let notificationCenter = NotificationCenter.default
+                notificationCenter.addObserver(
+                    forName: UIResponder.keyboardWillShowNotification,
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    self.isTransitioning = true
+                    
+                    // Reset after a delay
+                    self.debounceTimer?.invalidate()
+                    self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
+                        self.isTransitioning = false
+                    }
+                }
+                
+                notificationCenter.addObserver(
+                    forName: UIResponder.keyboardWillHideNotification,
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    self.isTransitioning = true
+                    
+                    // Reset after a delay
+                    self.debounceTimer?.invalidate()
+                    self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
+                        self.isTransitioning = false
+                    }
+                }
+            }
+            .onDisappear {
+                // Clean up timer when view disappears
+                self.debounceTimer?.invalidate()
+                self.debounceTimer = nil
+            }
+            .transaction { transaction in
+                // If keyboard is transitioning, disable animation to prevent snapshot issues
+                if isTransitioning {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            }
     }
 } 

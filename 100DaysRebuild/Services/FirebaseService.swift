@@ -3,8 +3,9 @@ import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
+import Network
 
-enum FirebaseError: Error {
+enum FirebaseError: Error, LocalizedError {
     case notConfigured
     case authError(Error)
     case firestoreError(Error)
@@ -12,6 +13,28 @@ enum FirebaseError: Error {
     case invalidData
     case documentNotFound
     case unauthorized
+    case networkOffline
+    
+    var errorDescription: String? {
+        switch self {
+        case .notConfigured:
+            return "Firebase is not configured"
+        case .authError(let error):
+            return "Authentication error: \(error.localizedDescription)"
+        case .firestoreError(let error):
+            return "Database error: \(error.localizedDescription)"
+        case .storageError(let error):
+            return "Storage error: \(error.localizedDescription)"
+        case .invalidData:
+            return "Invalid data format"
+        case .documentNotFound:
+            return "Document not found"
+        case .unauthorized:
+            return "You are not authorized to perform this action"
+        case .networkOffline:
+            return "No internet connection. Some features may be limited."
+        }
+    }
 }
 
 enum CollectionPath {
@@ -22,11 +45,11 @@ enum CollectionPath {
 }
 
 struct UserProfile: Codable {
-    let username: String
+    var username: String?
     var displayName: String?
     var photoURL: URL?
     var bio: String?
-    var joinedDate: Date
+    var joinedDate: Date?
     var completedChallenges: Int
     var currentStreak: Int
     var longestStreak: Int
@@ -38,6 +61,34 @@ struct UserProfile: Codable {
         self.currentStreak = 0
         self.longestStreak = 0
     }
+    
+    // Empty initializer with default values
+    init() {
+        self.joinedDate = Date()
+        self.completedChallenges = 0
+        self.currentStreak = 0
+        self.longestStreak = 0
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case username, displayName, photoURL, bio, joinedDate, completedChallenges, currentStreak, longestStreak
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Required fields with defaults if missing
+        username = try container.decodeIfPresent(String.self, forKey: .username)
+        displayName = try container.decodeIfPresent(String.self, forKey: .displayName)
+        photoURL = try container.decodeIfPresent(URL.self, forKey: .photoURL)
+        bio = try container.decodeIfPresent(String.self, forKey: .bio)
+        joinedDate = try container.decodeIfPresent(Date.self, forKey: .joinedDate)
+        
+        // Use 0 as fallback for numeric values
+        completedChallenges = try container.decodeIfPresent(Int.self, forKey: .completedChallenges) ?? 0
+        currentStreak = try container.decodeIfPresent(Int.self, forKey: .currentStreak) ?? 0
+        longestStreak = try container.decodeIfPresent(Int.self, forKey: .longestStreak) ?? 0
+    }
 }
 
 class FirebaseService {
@@ -46,44 +97,128 @@ class FirebaseService {
     private var auth: Auth?
     private var firestore: Firestore?
     private var storage: Storage?
+    private let networkMonitor = NWPathMonitor()
+    private let networkQueue = DispatchQueue(label: "FirebaseService.NetworkMonitor")
+    private var isNetworkAvailable = true
+    
+    private var pendingOperations: [() async throws -> Void] = []
     
     private init() {
         // Firebase configuration will be initialized in AppDelegate
+        setupNetworkMonitoring()
+    }
+    
+    private func setupNetworkMonitoring() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            let isConnected = path.status == .satisfied
+            self?.isNetworkAvailable = isConnected
+            
+            if isConnected {
+                // Execute pending operations when network is back
+                Task {
+                    await self?.executePendingOperations()
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
+    }
+    
+    private func executePendingOperations() async {
+        let operations = pendingOperations
+        pendingOperations.removeAll()
+        
+        for operation in operations {
+            do {
+                try await operation()
+            } catch {
+                print("Failed to execute pending operation: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    deinit {
+        networkMonitor.cancel()
     }
     
     func configure() {
-        // Configure Firebase services
-        FirebaseApp.configure()
+        // Check if Firebase is already configured 
+        if FirebaseApp.app() != nil {
+            print("Firebase already configured in FirebaseService.configure")
+            
+            // Make sure services are initialized
+            initializeServices()
+            
+            return
+        } else {
+            print("ERROR: Firebase not configured. It should be initialized in AppDelegate.")
+            // Don't try to configure Firebase here - that should only happen in AppDelegate
+        }
+    }
+    
+    func configureIfNeeded() {
+        if FirebaseApp.app() == nil {
+            print("WARNING: Firebase not configured, should be initialized in AppDelegate")
+            return
+        } else {
+            print("Firebase already configured, initializing services")
+            
+            // Ensure all services are initialized
+            initializeServices()
+        }
+    }
+    
+    // Helper method to initialize services
+    private func initializeServices() {
+        if auth == nil {
+            auth = Auth.auth()
+            print("Auth service initialized")
+        }
         
-        // Configure Firestore
-        let db = Firestore.firestore()
-        let settings = db.settings
-        settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
-        db.settings = settings
+        if firestore == nil {
+            firestore = Firestore.firestore()
+            print("Firestore service initialized")
+        }
         
-        // Configure Firebase Auth
-        auth = Auth.auth()
-        firestore = Firestore.firestore()
-        storage = Storage.storage()
+        if storage == nil {
+            storage = Storage.storage()
+            print("Storage service initialized")
+        }
     }
     
     // MARK: - Auth Methods
     func signIn(email: String, password: String) async throws -> FirebaseAuth.User {
+        configureIfNeeded()
+        
         guard let auth = auth else {
+            print("Auth is nil in FirebaseService.signIn")
             throw FirebaseError.notConfigured
         }
         
+        guard isNetworkAvailable else {
+            print("Network unavailable in FirebaseService.signIn")
+            throw FirebaseError.networkOffline
+        }
+        
         do {
+            print("Attempting to sign in with email: \(email)")
             let result = try await auth.signIn(withEmail: email, password: password)
+            print("Sign in successful for user: \(result.user.uid)")
             return result.user
         } catch {
+            print("Sign in failed in FirebaseService: \(error.localizedDescription)")
             throw FirebaseError.authError(error)
         }
     }
     
     func signUp(email: String, password: String) async throws -> FirebaseAuth.User {
+        configureIfNeeded()
+        
         guard let auth = auth else {
             throw FirebaseError.notConfigured
+        }
+        
+        guard isNetworkAvailable else {
+            throw FirebaseError.networkOffline
         }
         
         do {
@@ -95,6 +230,8 @@ class FirebaseService {
     }
     
     func signOut() async throws {
+        configureIfNeeded()
+        
         guard let auth = auth else {
             throw FirebaseError.notConfigured
         }
@@ -106,34 +243,108 @@ class FirebaseService {
         }
     }
     
-    // MARK: - Firestore Methods
-    func createDocument<T: Encodable>(_ data: T, in collection: String) async throws -> String {
+    // MARK: - Firestore Methods with Retry Logic
+    func createDocument<T: Encodable>(_ data: T, in collection: String, maxRetries: Int = 3) async throws -> String {
+        configureIfNeeded()
+        
         guard let firestore = firestore else {
             throw FirebaseError.notConfigured
         }
         
-        do {
-            let documentRef = try firestore.collection(collection).addDocument(from: data)
-            return documentRef.documentID
-        } catch {
-            throw FirebaseError.firestoreError(error)
+        if !isNetworkAvailable {
+            // Store operation for later execution
+            let operation: () async throws -> Void = {
+                _ = try await self.createDocument(data, in: collection)
+            }
+            pendingOperations.append(operation)
+            throw FirebaseError.networkOffline
         }
+        
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                let documentRef = try firestore.collection(collection).addDocument(from: data)
+                return documentRef.documentID
+            } catch {
+                lastError = error
+                
+                // Wait before retry (exponential backoff)
+                if attempt < maxRetries - 1 {
+                    try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt)) * 100_000_000))
+                }
+            }
+        }
+        
+        throw FirebaseError.firestoreError(lastError ?? NSError(domain: "FirebaseService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to create document after multiple attempts"]))
     }
     
-    func updateDocument<T: Encodable>(_ data: T, in collection: String, documentId: String) async throws {
+    func updateDocument<T: Encodable>(_ data: T, in collection: String, documentId: String, maxRetries: Int = 3) async throws {
+        configureIfNeeded()
+        
+        guard let firestore = firestore else {
+            throw FirebaseError.notConfigured
+        }
+        
+        if !isNetworkAvailable {
+            // Store operation for later execution
+            let operation: () async throws -> Void = {
+                try await self.updateDocument(data, in: collection, documentId: documentId)
+            }
+            pendingOperations.append(operation)
+            throw FirebaseError.networkOffline
+        }
+        
+        var lastError: Error?
+        for attempt in 0..<maxRetries {
+            do {
+                let docRef = firestore.collection(collection).document(documentId)
+                
+                // Convert the generic type to a dictionary using Firestore's encoder
+                let encodedData = try Firestore.Encoder().encode(data)
+                
+                // Use the standard setData method instead of the generic one
+                try await docRef.setData(encodedData, merge: true)
+                return
+            } catch {
+                lastError = error
+                
+                // Wait before retry (exponential backoff)
+                if attempt < maxRetries - 1 {
+                    try await Task.sleep(nanoseconds: UInt64(pow(2.0, Double(attempt)) * 100_000_000))
+                }
+            }
+        }
+        
+        throw FirebaseError.firestoreError(lastError ?? NSError(domain: "FirebaseService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to update document after multiple attempts"]))
+    }
+    
+    // MARK: - Enhanced Error Handling for Fetching Data
+    func fetchDocument<T: Decodable>(from collection: String, documentId: String) async throws -> T {
+        configureIfNeeded()
+        
         guard let firestore = firestore else {
             throw FirebaseError.notConfigured
         }
         
         do {
             let docRef = firestore.collection(collection).document(documentId)
+            let document = try await docRef.getDocument()
             
-            // Convert the generic type to a dictionary using Firestore's encoder
-            let encodedData = try Firestore.Encoder().encode(data)
+            if !document.exists {
+                throw FirebaseError.documentNotFound
+            }
             
-            // Use the standard setData method instead of the generic one
-            try await docRef.setData(encodedData, merge: true)
+            do {
+                return try document.data(as: T.self)
+            } catch {
+                throw FirebaseError.invalidData
+            }
+        } catch let error as FirebaseError {
+            throw error
         } catch {
+            if !isNetworkAvailable {
+                throw FirebaseError.networkOffline
+            }
             throw FirebaseError.firestoreError(error)
         }
     }
@@ -193,8 +404,19 @@ class FirebaseService {
     
     // MARK: - User Profile Methods
     func createUserProfile(username: String, userId: String) async throws {
+        configureIfNeeded()
+        
         guard let firestore = firestore else {
             throw FirebaseError.notConfigured
+        }
+        
+        if !isNetworkAvailable {
+            // Store operation for later execution
+            let operation: () async throws -> Void = {
+                try await self.createUserProfile(username: username, userId: userId)
+            }
+            pendingOperations.append(operation)
+            throw FirebaseError.networkOffline
         }
         
         do {
@@ -225,12 +447,16 @@ class FirebaseService {
                 .collection(CollectionPath.usernames)
                 .document(username)
                 .setData(["userId": userId])
+        } catch let error as FirebaseError {
+            throw error
         } catch {
             throw FirebaseError.firestoreError(error)
         }
     }
     
     func fetchUserProfile(userId: String) async throws -> UserProfile? {
+        configureIfNeeded()
+        
         guard let firestore = firestore else {
             throw FirebaseError.notConfigured
         }
@@ -241,8 +467,86 @@ class FirebaseService {
                 .document(userId)
                 .getDocument()
             
-            return try document.data(as: UserProfile.self)
+            guard document.exists else {
+                print("⚠️ No user profile document found for user: \(userId)")
+                // Create a default empty profile instead of returning nil
+                return UserProfile()
+            }
+            
+            do {
+                // Try to decode the document data into UserProfile
+                let profile = try document.data(as: UserProfile.self)
+                return profile
+            } catch {
+                print("⚠️ Failed to decode profile: \(error)")
+                
+                // Fallback: Try to manually extract fields from document data
+                if let data = document.data() {
+                    var profile = UserProfile()
+                    
+                    // Manually extract fields with safe fallbacks
+                    if let username = data["username"] as? String {
+                        profile.username = username
+                    }
+                    
+                    if let displayName = data["displayName"] as? String {
+                        profile.displayName = displayName
+                    }
+                    
+                    if let photoURLString = data["photoURL"] as? String, 
+                       let url = URL(string: photoURLString) {
+                        profile.photoURL = url
+                    }
+                    
+                    if let bio = data["bio"] as? String {
+                        profile.bio = bio
+                    }
+                    
+                    if let timestamp = data["joinedDate"] as? Timestamp {
+                        profile.joinedDate = timestamp.dateValue()
+                    }
+                    
+                    if let completedChallenges = data["completedChallenges"] as? Int {
+                        profile.completedChallenges = completedChallenges
+                    }
+                    
+                    if let currentStreak = data["currentStreak"] as? Int {
+                        profile.currentStreak = currentStreak
+                    }
+                    
+                    if let longestStreak = data["longestStreak"] as? Int {
+                        profile.longestStreak = longestStreak
+                    }
+                    
+                    return profile
+                }
+                
+                // If all else fails, return a default profile
+                return UserProfile()
+            }
         } catch {
+            if !isNetworkAvailable {
+                // Try to get from cache
+                do {
+                    let document = try await firestore
+                        .collection(CollectionPath.users)
+                        .document(userId)
+                        .getDocument(source: .cache)
+                    
+                    if document.exists {
+                        do {
+                            return try document.data(as: UserProfile.self)
+                        } catch {
+                            print("⚠️ Failed to decode cached profile: \(error)")
+                            // Return empty profile instead of nil
+                            return UserProfile()
+                        }
+                    }
+                    return UserProfile() // Return empty profile with defaults instead of nil
+                } catch {
+                    throw FirebaseError.networkOffline
+                }
+            }
             throw FirebaseError.firestoreError(error)
         }
     }
@@ -377,19 +681,21 @@ class FirebaseService {
         return try await storageRef.downloadURL().absoluteString
     }
     
-    // MARK: - Auth State
-    func checkAuthState() {
-        guard let auth = auth else { return }
+    // MARK: - Network Status Helper
+    func isNetworkConnected() -> Bool {
+        return isNetworkAvailable
+    }
+    
+    // MARK: - Firestore Utilities
+    func setCacheSettings(sizeLimitInMB: Int = -1) {
+        guard let firestore = firestore else { return }
         
-        // Listen for auth state changes
-        let _ = auth.addStateDidChangeListener { _, user in
-            if let user = user {
-                print("User is signed in with UID: \(user.uid)")
-                // Handle signed in state if needed
-            } else {
-                print("User is signed out")
-                // Handle signed out state if needed
-            }
-        }
+        let settings = firestore.settings
+        let sizeNumber = sizeLimitInMB < 0 ? 
+            NSNumber(value: FirestoreCacheSizeUnlimited) : 
+            NSNumber(value: sizeLimitInMB * 1024 * 1024)
+        
+        settings.cacheSettings = PersistentCacheSettings(sizeBytes: sizeNumber)
+        firestore.settings = settings
     }
 } 

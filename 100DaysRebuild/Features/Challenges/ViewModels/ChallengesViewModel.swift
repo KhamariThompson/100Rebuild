@@ -25,9 +25,13 @@ class ChallengesViewModel: ObservableObject {
     
     init() {
         // Listen for authentication changes to reload challenges
-        userSession.authStateDidChangeHandler = { [weak self] in
-            Task { [weak self] in
-                await self?.loadChallenges()
+        Task {
+            await MainActor.run {
+                userSession.authStateDidChangeHandler = { [weak self] in
+                    Task { [weak self] in
+                        await self?.loadChallenges()
+                    }
+                }
             }
         }
         
@@ -37,6 +41,15 @@ class ChallengesViewModel: ObservableObject {
     
     deinit {
         networkMonitor.cancel()
+        
+        // Clean up auth handler
+        Task {
+            await MainActor.run {
+                // Using a local reference to avoid capturing self
+                let session = userSession
+                session.authStateDidChangeHandler = nil
+            }
+        }
     }
     
     private func setupNetworkMonitoring() {
@@ -156,7 +169,7 @@ class ChallengesViewModel: ObservableObject {
             // Add a proper async operation to avoid the warning
             do {
                 challenges.append(challenge)
-                saveChallengesLocally()
+                saveChallengesLocally() // No await needed here - not async
                 
                 // Use Task.sleep to ensure there's a real async operation here
                 try await Task.sleep(for: .milliseconds(1))
@@ -184,7 +197,7 @@ class ChallengesViewModel: ObservableObject {
             try await docRef.setData(from: challenge)
             
             challenges.append(challenge)
-            saveChallengesLocally()
+            saveChallengesLocally() // No await needed here - not async
             challengeTitle = ""
             isShowingNewChallenge = false
         } catch {
@@ -222,9 +235,9 @@ class ChallengesViewModel: ObservableObject {
         
         // If offline, store changes locally and inform user
         if isOffline {
-            // Using Task.sleep to create a real async operation
             do {
-                try await Task.sleep(for: .milliseconds(1))
+                // Use proper async operation
+                try await Task.sleep(for: .milliseconds(10))
                 isLoading = false
                 showError = true
                 errorMessage = "Changes saved locally. They will sync when you're back online."
@@ -272,7 +285,7 @@ class ChallengesViewModel: ObservableObject {
     func checkIn(to challenge: Challenge, note: String = "") async {
         guard !isLoading, let userId = userSession.currentUser?.uid else { return }
         
-        showLoading()
+        showLoading() // No await needed here - not async
         
         do {
             // Get a reference to the challenge document
@@ -288,27 +301,59 @@ class ChallengesViewModel: ObservableObject {
             // Add to check-ins subcollection
             let checkInRef = challengeRef.collection("checkIns").document()
             
+            // Create a Sendable struct instead of a dictionary
+            struct CheckInData: Sendable {
+                let date: Date
+                let dayNumber: Int
+                let note: String
+            }
+            
+            let checkInData = CheckInData(
+                date: date,
+                dayNumber: dayNumber,
+                note: noteCopy
+            )
+            
             // Use Task.detached with sendable data to avoid main actor isolation issues
             try await Task.detached {
-                var sendableData: [String: Any] = [
-                    "date": date,
-                    "dayNumber": dayNumber
+                // Convert struct to dictionary here
+                var data: [String: Any] = [
+                    "date": checkInData.date,
+                    "dayNumber": checkInData.dayNumber
                 ]
                 
-                if !noteCopy.isEmpty {
-                    sendableData["note"] = noteCopy
+                if !checkInData.note.isEmpty {
+                    data["note"] = checkInData.note
                 }
                 
-                try await checkInRef.setData(sendableData)
+                try await checkInRef.setData(data)
             }.value
             
             // Update challenge metadata
-            try await challengeRef.updateData([
-                "daysCompleted": challenge.daysCompleted + 1,
-                "streakCount": challenge.streakCount + 1,
-                "lastCheckInDate": date,
-                "lastModified": date
-            ])
+            // Create a Sendable struct for the update data
+            struct UpdateData: Sendable {
+                let daysCompleted: Int
+                let streakCount: Int
+                let lastCheckInDate: Date
+                let lastModified: Date
+            }
+            
+            let updateData = UpdateData(
+                daysCompleted: challenge.daysCompleted + 1,
+                streakCount: challenge.streakCount + 1,
+                lastCheckInDate: date,
+                lastModified: date
+            )
+            
+            // Use Task.detached for the updateData operation too
+            try await Task.detached {
+                try await challengeRef.updateData([
+                    "daysCompleted": updateData.daysCompleted,
+                    "streakCount": updateData.streakCount,
+                    "lastCheckInDate": updateData.lastCheckInDate,
+                    "lastModified": updateData.lastModified
+                ])
+            }.value
             
             // Update local challenge data
             if let index = challenges.firstIndex(where: { $0.id == challenge.id }) {
@@ -322,9 +367,9 @@ class ChallengesViewModel: ObservableObject {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
             
-            hideLoading()
+            hideLoading() // No await needed here - not async
         } catch {
-            handleError(error)
+            handleError(error) // No await needed here - not async
         }
     }
     
@@ -337,13 +382,13 @@ class ChallengesViewModel: ObservableObject {
         
         // Remove from local array immediately for better UX
         challenges.removeAll { $0.id == challenge.id }
-        saveChallengesLocally()
+        saveChallengesLocally() // No await needed here - not async
         
         // If offline, store changes locally and inform user
         if isOffline {
-            // Using Task.sleep to create a real async operation
             do {
-                try await Task.sleep(for: .milliseconds(1))
+                // Use proper async operation
+                try await Task.sleep(for: .milliseconds(10))
                 showError = true
                 errorMessage = "Challenge deleted locally. Changes will sync when you're back online."
                 return
@@ -368,7 +413,7 @@ class ChallengesViewModel: ObservableObject {
         } catch {
             // Add the challenge back to the array if deletion failed
             challenges.append(challenge)
-            saveChallengesLocally()
+            saveChallengesLocally() // No await needed here - not async
             
             showError = true
             errorMessage = "Failed to delete challenge: \(error.localizedDescription)"
@@ -378,8 +423,9 @@ class ChallengesViewModel: ObservableObject {
     // Function to sync cached changes when back online
     func syncLocalChanges() async {
         do {
-            // Using Task.sleep for a real async operation
-            try await Task.sleep(for: .milliseconds(1))
+            // Use proper async operation
+            try await Task.sleep(for: .milliseconds(10))
+            // loadChallenges is async so retain the await here
             await loadChallenges()
         } catch {
             // Handle potential task cancellation
