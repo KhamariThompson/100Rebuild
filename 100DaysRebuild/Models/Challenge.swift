@@ -1,6 +1,6 @@
 import Foundation
 
-struct Challenge: Identifiable, Codable {
+struct Challenge: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     let startDate: Date
@@ -15,7 +15,16 @@ struct Challenge: Identifiable, Codable {
     // Computed properties
     var hasStreakExpired: Bool {
         guard let lastCheckIn = lastCheckInDate else { return true }
-        return Calendar.current.dateComponents([.day], from: lastCheckIn, to: Date()).day ?? 0 > 1
+        
+        // A streak is considered expired if more than 1 day has passed since the last check-in
+        let calendar = Calendar.current
+        let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
+        let today = calendar.startOfDay(for: Date())
+        
+        let daysSinceLastCheckIn = calendar.dateComponents([.day], from: lastCheckInDay, to: today).day ?? 0
+        
+        // Streak is expired if more than 1 day has passed
+        return daysSinceLastCheckIn > 1
     }
     
     var endDate: Date {
@@ -44,6 +53,70 @@ struct Challenge: Identifiable, Codable {
         }
     }
     
+    // Recalculate isCompletedToday based on lastCheckInDate
+    func checkIfCompletedToday() -> Challenge {
+        var updatedChallenge = self
+        
+        if let lastCheckIn = lastCheckInDate {
+            updatedChallenge.isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
+        } else {
+            updatedChallenge.isCompletedToday = false
+        }
+        
+        return updatedChallenge
+    }
+    
+    // Check if streak is active (not expired)
+    func isStreakActive() -> Bool {
+        !hasStreakExpired
+    }
+    
+    // Get the effective streak count (0 if expired)
+    func effectiveStreakCount() -> Int {
+        isStreakActive() ? streakCount : 0
+    }
+    
+    // Create an updated version of this challenge after check-in
+    func afterCheckIn() -> Challenge {
+        var updatedChallenge = self
+        
+        // Set today as the last check-in date
+        updatedChallenge.lastCheckInDate = Date()
+        
+        // Calculate new streak count
+        if let lastCheckIn = lastCheckInDate {
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
+            let daysBetween = calendar.dateComponents([.day], from: lastCheckInDay, to: today).day ?? 0
+            
+            if daysBetween == 1 {
+                // Checked in yesterday, continue streak
+                updatedChallenge.streakCount = streakCount + 1
+            } else if daysBetween > 1 {
+                // Streak broken, start new streak
+                updatedChallenge.streakCount = 1
+            } else {
+                // Same day check-in (shouldn't happen), keep streak
+                updatedChallenge.streakCount = streakCount
+            }
+        } else {
+            // First check-in
+            updatedChallenge.streakCount = 1
+        }
+        
+        // Increment days completed
+        updatedChallenge.daysCompleted += 1
+        
+        // Mark as completed today
+        updatedChallenge.isCompletedToday = true
+        
+        // Update last modified
+        updatedChallenge.lastModified = Date()
+        
+        return updatedChallenge
+    }
+    
     init(id: UUID = UUID(), 
          title: String, 
          startDate: Date = Date(), 
@@ -60,9 +133,31 @@ struct Challenge: Identifiable, Codable {
         self.lastCheckInDate = lastCheckInDate
         self.streakCount = streakCount
         self.daysCompleted = daysCompleted
-        self.isCompletedToday = isCompletedToday
+        
+        // Set isCompletedToday based on lastCheckInDate if provided
+        if let lastCheckIn = lastCheckInDate {
+            self.isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
+        } else {
+            self.isCompletedToday = isCompletedToday
+        }
+        
         self.isArchived = isArchived
         self.ownerId = ownerId
         self.lastModified = lastModified
+    }
+    
+    // MARK: - Equatable
+    
+    public static func == (lhs: Challenge, rhs: Challenge) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.title == rhs.title &&
+               lhs.startDate == rhs.startDate &&
+               lhs.lastCheckInDate == rhs.lastCheckInDate &&
+               lhs.streakCount == rhs.streakCount &&
+               lhs.daysCompleted == rhs.daysCompleted &&
+               lhs.isCompletedToday == rhs.isCompletedToday &&
+               lhs.isArchived == rhs.isArchived &&
+               lhs.ownerId == rhs.ownerId &&
+               lhs.lastModified == rhs.lastModified
     }
 } 

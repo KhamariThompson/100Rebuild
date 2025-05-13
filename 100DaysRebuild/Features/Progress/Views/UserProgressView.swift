@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UserProgressView: View {
-    @StateObject private var viewModel = UserProgressViewModel()
+    @StateObject private var viewModel = UserProgressViewMock()
     @EnvironmentObject var subscriptionService: SubscriptionService
     
     var body: some View {
@@ -14,9 +14,14 @@ struct UserProgressView: View {
     }
 }
 
+// A mock view model to avoid conflicts with the main progress view model
+class UserProgressViewMock: ObservableObject {
+    // Add any properties or methods needed for this view
+}
+
 // Separate content view to simplify structure
 struct UserProgressContent: View {
-    let viewModel: UserProgressViewModel
+    let viewModel: UserProgressViewMock
     @EnvironmentObject var subscriptionService: SubscriptionService
     
     var body: some View {
@@ -45,13 +50,13 @@ struct ProgressStatsView: View {
                 .foregroundColor(.theme.text)
             
             HStack(spacing: 20) {
-                StatCard(title: "Current Streak", value: "\(currentStreak)")
-                StatCard(title: "Longest Streak", value: "\(longestStreak)")
+                ProgressStatCard(title: "Current Streak", value: "\(currentStreak)")
+                ProgressStatCard(title: "Longest Streak", value: "\(longestStreak)")
             }
             
             HStack(spacing: 20) {
-                StatCard(title: "Challenges", value: "\(totalChallenges)")
-                StatCard(title: "Completed", value: "\(completedChallenges)")
+                ProgressStatCard(title: "Challenges", value: "\(totalChallenges)")
+                ProgressStatCard(title: "Completed", value: "\(completedChallenges)")
             }
         }
         .padding()
@@ -88,7 +93,7 @@ struct ProgressChartView: View {
     }
 }
 
-struct StatCard: View {
+struct ProgressStatCard: View {
     let title: String
     let value: String
     

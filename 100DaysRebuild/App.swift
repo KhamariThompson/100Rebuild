@@ -7,6 +7,7 @@ import AuthenticationServices
 import Network
 import FirebaseFirestore
 
+// Explicitly conform to UIApplicationDelegate protocol
 class AppDelegate: NSObject, UIApplicationDelegate {
     private var networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
@@ -15,12 +16,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Configure Firebase at the very beginning, before any other Firebase-related code
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
-            print("Firebase configured successfully at app launch")
+            print("✅ Firebase configured")
             
-            // Configure Firestore for offline persistence
+            // Configure Firestore for offline persistence using the newer cacheSettings API
             let db = Firestore.firestore()
             let settings = db.settings
-            settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
+            
+            // Replace deprecated properties with new cacheSettings API
+            let cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 104857600)) // 100MB as a default size
+            settings.cacheSettings = cacheSettings
+            
             db.settings = settings
             print("Firestore offline persistence configured")
         } else {
@@ -476,12 +481,13 @@ struct App100Days: App {
     @StateObject private var userSession = UserSession.shared
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
+    @StateObject private var adManager = AdManager.shared
     @AppStorage("AppTheme") private var appTheme: String = "system"
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
         
-        // Remove Firebase initialization from here - it should only be in AppDelegate
+        // Removed redundant Firebase initialization code to prevent duplicate initialization
         
         // Set up improved navigation bar appearance
         let navBarAppearance = UINavigationBarAppearance()
@@ -509,6 +515,7 @@ struct App100Days: App {
                 .environmentObject(userSession)
                 .environmentObject(subscriptionService)
                 .environmentObject(notificationService)
+                .environmentObject(adManager)
                 .onOpenURL { url in
                     GIDSignIn.sharedInstance.handle(url)
                 }
@@ -573,6 +580,7 @@ struct AppContentView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var adManager: AdManager
     
     var body: some View {
         Group {
@@ -582,17 +590,22 @@ struct AppContentView: View {
                         .environmentObject(userSession)
                         .environmentObject(subscriptionService)
                         .environmentObject(notificationService)
+                        .environmentObject(adManager)
                 } else {
-                    OnboardingView()
+                    // Replace OnboardingView with UsernameSetupView to avoid duplicate login screens
+                    UsernameSetupView()
                         .environmentObject(userSession)
                         .environmentObject(subscriptionService)
                         .environmentObject(notificationService)
+                        .environmentObject(adManager)
                 }
             } else {
+                // Only use AuthView for login/signup
                 AuthView()
                     .environmentObject(userSession)
                     .environmentObject(subscriptionService)
                     .environmentObject(notificationService)
+                    .environmentObject(adManager)
             }
         }
     }

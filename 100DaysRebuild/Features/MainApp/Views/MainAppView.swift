@@ -23,9 +23,9 @@ struct MainAppView: View {
                     }
                     .tag(1)
                 
-                RemindersTabView()
+                MainApp_SocialTabView()
                     .tabItem {
-                        Label("Reminders", systemImage: "bell")
+                        Label("Social", systemImage: "person.2")
                     }
                     .tag(2)
                 
@@ -95,11 +95,11 @@ struct ProgressTabView: View {
     }
 }
 
-struct RemindersTabView: View {
+struct MainApp_SocialTabView: View {
     var body: some View {
         NavigationView {
-            ReminderTabView()
-                .navigationTitle("Reminders")
+            SocialView()
+                .navigationTitle("Social")
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }

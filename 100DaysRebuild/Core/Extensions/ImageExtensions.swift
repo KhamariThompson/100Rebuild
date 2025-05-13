@@ -83,4 +83,83 @@ extension AsyncImage {
     static func profilePicture(url: URL?, size: CGFloat = 100) -> ProfilePictureView {
         return ProfilePictureView(url: url, size: size)
     }
+}
+
+// MARK: - View Extensions for Fallback Images
+extension Image {
+    /// Creates a fallback view for AppIconRounded
+    static func appIconWithFallback(size: CGFloat = 80) -> some View {
+        Group {
+            if let _ = UIImage(named: "AppIconRounded") {
+                Image("AppIconRounded")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+                    .cornerRadius(size * 0.2)
+            } else if let _ = UIImage(named: "AppIcon") {
+                Image("AppIcon")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+                    .cornerRadius(size * 0.2)
+            } else {
+                // Ultimate fallback if no app icon assets are found
+                Image(systemName: "app.fill")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+                    .foregroundColor(.theme.accent)
+                    .background(Color.theme.surface)
+                    .cornerRadius(size * 0.2)
+            }
+        }
+        .shadow(color: Color.theme.shadow.opacity(0.2), radius: 10, x: 0, y: 5)
+    }
+}
+
+// MARK: - Image Loading Error Handling View Modifier
+struct ImageLoadingErrorModifier: ViewModifier {
+    let imageName: String
+    @State private var imageLoadFailed = false
+    
+    init(imageName: String) {
+        self.imageName = imageName
+        // Check if image exists
+        self._imageLoadFailed = State(initialValue: UIImage(named: imageName) == nil)
+    }
+    
+    func body(content: Content) -> some View {
+        Group {
+            if imageLoadFailed {
+                fallbackImage
+            } else {
+                content
+                    .onAppear {
+                        // Double-check image loading on appear
+                        if UIImage(named: imageName) == nil {
+                            imageLoadFailed = true
+                        }
+                    }
+            }
+        }
+    }
+    
+    var fallbackImage: some View {
+        if imageName == "AppIconRounded" {
+            return AnyView(Image.appIconWithFallback())
+        } else {
+            return AnyView(
+                Image(systemName: "photo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundColor(.gray)
+            )
+        }
+    }
+}
+
+extension View {
+    func withImageFallback(for imageName: String) -> some View {
+        self.modifier(ImageLoadingErrorModifier(imageName: imageName))
+    }
 } 

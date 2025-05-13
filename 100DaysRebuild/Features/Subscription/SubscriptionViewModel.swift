@@ -78,9 +78,14 @@ class SubscriptionViewModel: ObservableObject {
         defer { isLoading = false }
         
         do {
-            // Since we can't directly access updateSubscriptionStatus, we'll trigger a purchase
-            // with a known product to force a status update
-            try await subscriptionService.purchaseSubscription(plan: .monthly)
+            // Properly use the restore purchases method instead of triggering a purchase
+            try await subscriptionService.restorePurchases()
+            
+            // Check if Pro status was successfully restored
+            if !subscriptionService.isProUser {
+                errorMessage = "No previous purchases found to restore"
+                showError = true
+            }
         } catch {
             errorMessage = "Failed to restore purchases: \(error.localizedDescription)"
             showError = true

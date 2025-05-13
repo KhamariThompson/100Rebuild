@@ -3,6 +3,9 @@ import PhotosUI
 import Firebase
 import FirebaseAuth
 
+// Using canonical Challenge model
+// (No import needed as it will be accessed directly)
+
 struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
@@ -10,6 +13,9 @@ struct ProfileView: View {
     @StateObject private var viewModel = ProfileViewModel()
     
     @State private var isShowingSettings = false
+    @State private var isShowingAnalytics = false
+    @State private var isShowingNewChallenge = false
+    @State private var isShowingShareSheet = false
     @FocusState private var isUsernameFocused: Bool
     
     var body: some View {
@@ -28,40 +34,19 @@ struct ProfileView: View {
                     }
                     .padding(.vertical, 20)
                     
-                    // Identity-Focused Stats (not duplicating Progress stats)
+                    // Identity-Focused Stats
                     identityStatsSection
                     
-                    // Social Section (Pro-gated)
-                    socialSection
+                    // Quick Actions Section
+                    quickActionsSection
                     
                     // Last Active Challenge
                     if let lastActiveChallenge = viewModel.lastActiveChallenge {
                         lastActiveChallengeSection(challenge: lastActiveChallenge)
                     }
-                    
-                    // Sign Out Button at the bottom
-                    Button(action: {
-                        Task {
-                            await viewModel.signOutWithoutThrowing()
-                        }
-                    }) {
-                        Text("Sign Out")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.red)
-                            )
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 20)
-                    .padding(.bottom, 30)
                 }
             }
             .background(Color.theme.background.ignoresSafeArea())
-            .navigationTitle("Profile")
             .navigationBarItems(trailing: 
                 Button(action: { isShowingSettings = true }) {
                     Image(systemName: "gear")
@@ -73,6 +58,22 @@ struct ProfileView: View {
                     .environmentObject(userSession)
                     .environmentObject(subscriptionService)
                     .environmentObject(notificationService)
+            }
+            .sheet(isPresented: $isShowingAnalytics) {
+                ProgressView()
+                    .environmentObject(userSession)
+                    .environmentObject(subscriptionService)
+            }
+            .sheet(isPresented: $isShowingNewChallenge) {
+                ChallengesView()
+                    .environmentObject(userSession)
+                    .environmentObject(subscriptionService)
+                    .environmentObject(notificationService)
+            }
+            .sheet(isPresented: $isShowingShareSheet) {
+                Utilities_ShareSheet(items: [
+                    "I'm building my habit with 100Days! Track your progress and never break your streak: https://apps.apple.com/app/100days-habit-challenge/id1234567890"
+                ])
             }
             .onAppear {
                 viewModel.loadUserProfile()
@@ -237,7 +238,7 @@ struct ProfileView: View {
     
     private var identityStatsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("About You")
+            Text("Your Stats")
                 .font(.headline)
                 .padding(.horizontal)
             
@@ -251,10 +252,67 @@ struct ProfileView: View {
                 
                 // Total Challenges
                 IdentityStatCard(
-                    title: "Challenges", 
+                    title: "Active Challenges", 
                     value: "\(viewModel.totalChallenges)", 
                     icon: "flag.fill"
                 )
+                
+                // Current Streak
+                IdentityStatCard(
+                    title: "Current Streak", 
+                    value: "\(viewModel.currentStreak)", 
+                    icon: "flame.fill"
+                )
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    // Quick Actions Section with real features
+    private var quickActionsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Quick Actions")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                // View Analytics Button
+                ActionButton(
+                    title: "View Analytics",
+                    icon: "chart.bar.fill",
+                    action: { isShowingAnalytics = true }
+                )
+                
+                // Start New Challenge Button
+                ActionButton(
+                    title: "New Challenge",
+                    icon: "plus.circle.fill",
+                    action: { isShowingNewChallenge = true }
+                )
+                
+                // Share Progress Button
+                ActionButton(
+                    title: "Share Progress",
+                    icon: "square.and.arrow.up.fill",
+                    action: { isShowingShareSheet = true }
+                )
+                
+                // Upgrade to Pro or Pro Features
+                if !subscriptionService.isProUser {
+                    ActionButton(
+                        title: "Upgrade to Pro",
+                        icon: "star.fill",
+                        action: { subscriptionService.showPaywall = true },
+                        color: .yellow
+                    )
+                } else {
+                    ActionButton(
+                        title: "Pro Features",
+                        icon: "crown.fill",
+                        action: { subscriptionService.showPaywall = true },
+                        color: .yellow
+                    )
+                }
             }
             .padding(.horizontal)
         }
@@ -278,42 +336,6 @@ struct ProfileView: View {
         
         // If all else fails, show "Unavailable"
         return "Unavailable"
-    }
-    
-    private var socialSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Social")
-                .font(.title3)
-                .bold()
-                .padding(.horizontal)
-                
-            // Replace the hardcoded social stats with a simple "Coming Soon" message
-            VStack(spacing: 12) {
-                Image(systemName: "person.3.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.gray.opacity(0.7))
-                    .padding(.top, 8)
-                
-                Text("Social features coming in future update")
-                    .font(.headline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                
-                Text("Connect with friends, share progress, and join community challenges")
-                    .font(.caption)
-                    .foregroundColor(.secondary.opacity(0.8))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-            )
-            .padding(.horizontal)
-        }
     }
     
     private func lastActiveChallengeSection(challenge: Challenge) -> some View {
@@ -385,7 +407,39 @@ struct ProfileView: View {
         }
     }
     
-    // MARK: - New UI Components
+    // MARK: - Action Button Component
+    
+    struct ActionButton: View {
+        let title: String
+        let icon: String
+        let action: () -> Void
+        var color: Color = .theme.accent
+        
+        var body: some View {
+            Button(action: action) {
+                VStack(spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.system(size: 24))
+                        .foregroundColor(color)
+                    
+                    Text(title)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.theme.text)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                )
+            }
+            .buttonStyle(ScaleButtonStyle())
+        }
+    }
+    
+    // MARK: - Utility UI Components
     
     struct IdentityStatCard: View {
         let title: String

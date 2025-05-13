@@ -5,6 +5,9 @@ import PhotosUI
 import FirebaseFirestore
 import FirebaseAuth
 
+// Using canonical Challenge model
+// (No import needed as it will be accessed directly)
+
 @MainActor
 class ProfileViewModel: ObservableObject {
     // User state
@@ -28,6 +31,7 @@ class ProfileViewModel: ObservableObject {
     // Dependencies
     private let firebaseService = FirebaseService.shared
     private let userSession = UserSession.shared
+    private let subscriptionService = SubscriptionService.shared
     
     // User stats
     @Published var totalChallenges: Int = 0
@@ -82,36 +86,65 @@ class ProfileViewModel: ObservableObject {
                     
                     // Process image using extensions
                     let processedImage = image.resized(to: CGSize(width: 500, height: 500)).circleCropped()
-                    if let processedImageData = processedImage.compressedJPEG(quality: 0.7) {
-                        // Upload to Firebase Storage
-                        if let userId = userSession.currentUser?.uid {
-                            let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
+                    
+                    // Ensure we're getting valid data back for the processed image
+                    guard let processedImageData = processedImage.compressedJPEG(quality: 0.7) else {
+                        print("Failed to convert processed image to JPEG data")
+                        await MainActor.run {
+                            self.error = "Failed to process the image"
+                            self.isLoadingImage = false
+                        }
+                        return
+                    }
+                    
+                    // Upload to Firebase Storage
+                    if let userId = userSession.currentUser?.uid {
+                        print("Starting upload to Firebase Storage for user: \(userId)")
+                        print("Image data size: \(processedImageData.count) bytes")
+                        
+                        let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
+                        print("Image uploaded successfully to: \(url.absoluteString)")
+                        
+                        // Update Firestore with photoURL and UserSession
+                        try await updatePhotoURL(url)
+                        print("Firestore photoURL updated")
+                        
+                        // Update UserSession to ensure photoURL is accessible app-wide
+                        try await userSession.updateProfilePhoto(url)
+                        print("UserSession photoURL updated")
+                        
+                        // Update UI
+                        await MainActor.run {
+                            self.profileImage = processedImage
+                            self.imageURL = url
+                            self.isLoadingImage = false
+                            self.showSuccessAnimation = true
                             
-                            // Update Firestore with photoURL and UserSession
-                            try await updatePhotoURL(url)
-                            // Update UserSession to ensure photoURL is accessible app-wide
-                            try await userSession.updateProfilePhoto(url)
+                            // Trigger haptic feedback
+                            let generator = UINotificationFeedbackGenerator()
+                            generator.notificationOccurred(.success)
                             
-                            // Update UI
-                            await MainActor.run {
-                                self.profileImage = processedImage
-                                self.imageURL = url
-                                self.isLoadingImage = false
-                                self.showSuccessAnimation = true
-                                
-                                // Trigger haptic feedback
-                                let generator = UINotificationFeedbackGenerator()
-                                generator.notificationOccurred(.success)
-                                
-                                // Hide success animation after a delay
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    self.showSuccessAnimation = false
-                                }
+                            // Hide success animation after a delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                self.showSuccessAnimation = false
                             }
                         }
+                    } else {
+                        print("No user ID available for upload")
+                        await MainActor.run {
+                            self.error = "User not logged in"
+                            self.isLoadingImage = false
+                        }
+                    }
+                } else {
+                    print("Failed to load image data from PhotosPickerItem")
+                    await MainActor.run {
+                        self.error = "Failed to load the selected image"
+                        self.isLoadingImage = false
                     }
                 }
             } catch {
+                print("Error uploading profile image: \(error.localizedDescription)")
                 await MainActor.run {
                     self.error = "Failed to upload image: \(error.localizedDescription)"
                     self.isLoadingImage = false
@@ -245,8 +278,18 @@ class ProfileViewModel: ObservableObject {
             
             // Process the data on the main actor to avoid data races
             await MainActor.run {
-                // Calculate stats based on active challenges only
-                self.totalChallenges = challenges.count
+                // For display purposes, respect the free user limit of 2 active challenges
+                // This ensures consistency with the Challenges screen
+                let allChallenges = challenges.count
+                let isProUser = subscriptionService.isProUser
+                
+                // Limit total challenges shown for free users
+                if !isProUser && allChallenges > 2 {
+                    self.totalChallenges = 2 // Free users can only have 2 active challenges
+                } else {
+                    self.totalChallenges = allChallenges
+                }
+                
                 self.completedChallenges = challenges.filter { doc in
                     (doc.data()["isCompleted"] as? Bool) == true
                 }.count
@@ -328,19 +371,25 @@ class ProfileViewModel: ObservableObject {
     }
     
     private func updatePhotoURL(_ url: URL) async throws {
-        guard let userId = userSession.currentUser?.uid else { throw NSError(domain: "ProfileViewModel", code: 1) }
+        guard let userId = userSession.currentUser?.uid else { 
+            print("No user ID available for updatePhotoURL")
+            throw NSError(domain: "ProfileViewModel", code: 1) 
+        }
         
-        // Note: This will also be updated by userSession.updateProfilePhoto, but we keep it
-        // to ensure data consistency in case the UserSession method fails.
         let urlString = url.absoluteString // Create a sendable copy of the URL string
+        print("Updating Firestore with photoURL: \(urlString)")
         
-        // Use Task.detached to handle non-sendable dictionary
-        try await Task.detached {
+        // Attempt to update Firestore directly with error handling
+        do {
             try await Firestore.firestore()
                 .collection("users")
                 .document(userId)
                 .updateData(["photoURL": urlString])
-        }.value
+            print("Firestore photoURL updated successfully")
+        } catch {
+            print("Error updating Firestore photoURL: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     private func isUsernameAvailable(_ username: String) async throws -> Bool {

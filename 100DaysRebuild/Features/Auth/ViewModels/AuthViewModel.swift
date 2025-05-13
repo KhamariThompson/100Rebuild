@@ -79,17 +79,18 @@ class AuthViewModel: ObservableObject {
         // Create a weak reference to self
         weak var weakSelf = self
         
-        // Create a MainActor Task that doesn't capture self strongly
-        Task { @MainActor in
-            // Use the local userSession reference that doesn't capture self
-            let session = userSession
-            session.authStateDidChangeHandler = {
-                Task { @MainActor in
-                    // Use the weak reference inside the handler
-                    weakSelf?.isLoading = false
-                    if weakSelf?.userSession.errorMessage == nil {
-                        weakSelf?.showError = false
-                    }
+        // Use a local reference to userSession to avoid capturing self
+        let userSession = self.userSession
+        
+        // Set the handler without capturing self
+        userSession.authStateDidChangeHandler = { [weak userSession] in
+            Task { @MainActor in
+                // Use the weak reference inside the handler
+                guard let strongSelf = weakSelf else { return }
+                strongSelf.isLoading = false
+                // Use optional chaining with weak userSession
+                if userSession?.errorMessage == nil {
+                    strongSelf.showError = false
                 }
             }
         }
@@ -106,11 +107,10 @@ class AuthViewModel: ObservableObject {
         
         // Remove the handler to avoid retain cycles - don't capture self
         Task { 
+            // Use MainActor without capturing self
             await MainActor.run {
-                // We're in deinit, so it's safe to directly access userSession
                 // Using a local reference to avoid capturing self
-                let session = userSession
-                session.authStateDidChangeHandler = nil
+                UserSession.shared.authStateDidChangeHandler = nil
             }
         }
     }
@@ -118,7 +118,7 @@ class AuthViewModel: ObservableObject {
     private func setupNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 
                 // Avoid multiple UI updates for same state
@@ -151,9 +151,15 @@ class AuthViewModel: ObservableObject {
         
         switch lastMode {
         case .emailSignIn:
-            Task { await signInWithEmail() }
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.signInWithEmail()
+            }
         case .emailSignUp:
-            Task { await signUpWithEmail() }
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.signUpWithEmail()
+            }
         case .forgotPassword:
             // No need to retry password reset
             break
@@ -280,19 +286,33 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         lastAuthAttemptMode = .emailSignIn
         
-        let success = await authService.signInWithEmail(email: email, password: password)
+        // Use Task with weak self to avoid capturing self strongly
+        let email = self.email
+        let password = self.password
         
-        // Check for error message from UserSession
-        if let errorMsg = userSession.errorMessage {
-            errorMessage = errorMsg
-            showError = true
-        }
+        // Create local reference to avoid capturing self in Task
+        let authService = self.authService
+        let userSession = self.userSession
         
-        if success {
-            // Clear credentials only on success
-            clearCredentials()
-        } else {
-            isLoading = false
+        Task { [weak self] in
+            let success = await authService.signInWithEmail(email: email, password: password)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Check for error message from UserSession
+                if let errorMsg = userSession.errorMessage {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+                
+                if success {
+                    // Clear credentials only on success
+                    self.clearCredentials()
+                } else {
+                    self.isLoading = false
+                }
+            }
         }
     }
     
@@ -312,19 +332,31 @@ class AuthViewModel: ObservableObject {
         isLoading = true
         lastAuthAttemptMode = .emailSignUp
         
-        let success = await authService.signUpWithEmail(email: email, password: password)
+        // Create local copies to avoid capturing self
+        let email = self.email
+        let password = self.password
+        let authService = self.authService
+        let userSession = self.userSession
         
-        // Check for error message from UserSession
-        if let errorMsg = userSession.errorMessage {
-            errorMessage = errorMsg
-            showError = true
-        }
-        
-        if success {
-            // Clear credentials only on success
-            clearCredentials()
-        } else {
-            isLoading = false
+        Task { [weak self] in
+            let success = await authService.signUpWithEmail(email: email, password: password)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Check for error message from UserSession
+                if let errorMsg = userSession.errorMessage {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+                
+                if success {
+                    // Clear credentials only on success
+                    self.clearCredentials()
+                } else {
+                    self.isLoading = false
+                }
+            }
         }
     }
     
@@ -339,16 +371,27 @@ class AuthViewModel: ObservableObject {
         }
         
         isLoading = true
-        let success = await authService.signInWithGoogle(viewController: rootViewController)
         
-        // Check for error message from UserSession
-        if let errorMsg = userSession.errorMessage {
-            errorMessage = errorMsg
-            showError = true
-        }
+        // Create local references to avoid capturing self
+        let authService = self.authService
+        let userSession = self.userSession
         
-        if !success {
-            isLoading = false
+        Task { [weak self] in
+            let success = await authService.signInWithGoogle(viewController: rootViewController)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Check for error message from UserSession
+                if let errorMsg = userSession.errorMessage {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+                
+                if !success {
+                    self.isLoading = false
+                }
+            }
         }
     }
     
@@ -362,41 +405,62 @@ class AuthViewModel: ObservableObject {
         }
         
         isLoading = true
-        let success = await authService.signInWithApple(credential: credential, nonce: nonce)
         
-        // Check for error message from UserSession
-        if let errorMsg = userSession.errorMessage {
-            errorMessage = errorMsg
-            showError = true
+        // Create local references to avoid capturing self
+        let authService = self.authService
+        let userSession = self.userSession
+        
+        Task { [weak self] in
+            let success = await authService.signInWithApple(credential: credential, nonce: nonce)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Check for error message from UserSession
+                if let errorMsg = userSession.errorMessage {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+                
+                if !success {
+                    self.isLoading = false
+                }
+                
+                // Reset Apple credential data
+                self.appleIDCredential = nil
+                self.appleNonce = nil
+            }
         }
-        
-        if !success {
-            isLoading = false
-        }
-        
-        // Reset Apple credential data
-        appleIDCredential = nil
-        appleNonce = nil
     }
     
     /// Password reset
     func resetPassword(email: String) async {
         isLoading = true
         
-        let success = await authService.resetPassword(email: email)
+        // Create local references to avoid capturing self
+        let authService = self.authService
+        let userSession = self.userSession
         
-        // Check for error message from UserSession
-        if let errorMsg = userSession.errorMessage {
-            errorMessage = errorMsg
-            showError = true
-        }
-        
-        isLoading = false
-        
-        if success {
-            // Return to sign in mode after successful password reset
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.authMode = .emailSignIn
+        Task { [weak self] in
+            let success = await authService.resetPassword(email: email)
+            
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                // Check for error message from UserSession
+                if let errorMsg = userSession.errorMessage {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+                
+                self.isLoading = false
+                
+                if success {
+                    // Return to sign in mode after successful password reset
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                        self?.authMode = .emailSignIn
+                    }
+                }
             }
         }
     }
@@ -405,15 +469,25 @@ class AuthViewModel: ObservableObject {
     func signOut() async {
         isLoading = true
         
-        let success = await authService.signOut()
+        // Create local references to avoid capturing self
+        let authService = self.authService
+        let userSession = self.userSession
         
-        if !success {
-            isLoading = false
+        Task { [weak self] in
+            let success = await authService.signOut()
             
-            // Check for error message from UserSession
-            if let errorMsg = userSession.errorMessage {
-                errorMessage = errorMsg
-                showError = true
+            await MainActor.run {
+                guard let self = self else { return }
+                
+                if !success {
+                    self.isLoading = false
+                    
+                    // Check for error message from UserSession
+                    if let errorMsg = userSession.errorMessage {
+                        self.errorMessage = errorMsg
+                        self.showError = true
+                    }
+                }
             }
         }
     }
@@ -422,14 +496,24 @@ class AuthViewModel: ObservableObject {
     func setUsernameWithHandling(username: String) async {
         isLoading = true
         
-        do {
-            try await userSession.updateUsername(username)
-            print("Username set successfully: \(username)")
-        } catch {
-            setError(error)
-        }
+        // Create local references to avoid capturing self
+        let userSession = self.userSession
         
-        isLoading = false
+        Task { [weak self] in
+            do {
+                try await userSession.updateUsername(username)
+                print("Username set successfully: \(username)")
+            } catch {
+                await MainActor.run {
+                    guard let self = self else { return }
+                    self.setError(error)
+                }
+            }
+            
+            await MainActor.run {
+                self?.isLoading = false
+            }
+        }
     }
     
     // MARK: - Helper Methods for Apple Sign In

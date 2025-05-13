@@ -20,6 +20,8 @@ Before you begin, ensure you have the following installed:
 - **Progress Stats**: View detailed progress metrics and completion rates
 - **Smart Reminders**: Get notified when it's time to check in
 - **Multiple Challenges**: Manage different challenges simultaneously
+- **Milestone Celebrations**: Beautiful, animated celebration modals when you reach key milestones (Day 3, 7, 30, 50, 100)
+- **Social Sharing**: Share your milestone achievements with customizable cards
 - **Dark Mode**: Beautiful dark-themed UI that's easy on the eyes
 - **Pro Features**: Analytics, unlimited challenges, and more with a subscription
 
@@ -98,11 +100,12 @@ pod install
 4. Place `GoogleService-Info.plist` in the `SupportingFiles` directory
 5. Enable Authentication and Firestore in Firebase Console
 
-### 4. RevenueCat Setup (Optional)
+### 4. RevenueCat Setup
 
 1. Create a RevenueCat account
-2. Add your API key to `Configuration/RevenueCat.xcconfig`
-3. Configure your subscription products in RevenueCat dashboard
+2. Set up your product and entitlement in the RevenueCat dashboard
+3. Ensure your "pro" entitlement is properly configured
+4. The production API key is already configured in the app
 
 ### 5. Build and Run
 

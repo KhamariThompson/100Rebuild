@@ -454,7 +454,7 @@ private extension AuthView {
             // Google sign-in
             Button {
                 guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                      let rootViewController = windowScene.windows.first?.rootViewController else {
+                      let _ = windowScene.windows.first?.rootViewController else {
                     print("Failed to get root view controller")
                     return
                 }
@@ -462,22 +462,7 @@ private extension AuthView {
                 viewModel.isLoading = true
                 
                 Task {
-                    let success = await AuthService.shared.signInWithGoogle(viewController: rootViewController)
-                    
-                    await MainActor.run {
-                        viewModel.isLoading = false
-                        
-                        if !success {
-                            // AuthService already updated UserSession with error
-                            if let errorMsg = userSession.errorMessage {
-                                viewModel.errorMessage = errorMsg
-                                viewModel.showError = true
-                            } else {
-                                viewModel.errorMessage = "Google sign-in failed. Please try again."
-                                viewModel.showError = true
-                            }
-                        }
-                    }
+                    await viewModel.signInWithGoogle()
                 }
             } label: {
                 HStack {
@@ -502,35 +487,50 @@ private extension AuthView {
             }
             .disabled(!viewModel.networkConnected)
             
-            // Apple Sign In
-            Button(action: {
-                viewModel.isLoading = true
+            // Apple Sign In - Replace with Apple's official SignInWithAppleButton
+            SignInWithAppleButton(
+                onRequest: configureAppleRequest,
+                onCompletion: handleAppleSignIn
+            )
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(maxWidth: .infinity, minHeight: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 8)
+            .disabled(!viewModel.networkConnected)
+        }
+    }
+    
+    // Apple Sign In configuration methods
+    private func configureAppleRequest(_ request: ASAuthorizationAppleIDRequest) {
+        request.requestedScopes = [.fullName, .email]
+        // Create and store a new nonce for this sign-in session
+        let nonce = viewModel.randomNonceString()
+        viewModel.appleNonce = nonce
+        request.nonce = viewModel.sha256(nonce)
+    }
+    
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
+                guard viewModel.appleNonce != nil else {
+                    viewModel.setError(NSError(domain: "AppleSignIn", code: 1002, 
+                                            userInfo: [NSLocalizedDescriptionKey: "Invalid state: Missing nonce"]))
+                    return
+                }
                 
+                // Set the credentials on the view model
+                viewModel.appleIDCredential = appleIDCredential
+                
+                // Call sign in method
                 Task {
                     await viewModel.signInWithApple()
                 }
-            }) {
-                HStack {
-                    Image(systemName: "apple.logo")
-                        .font(.system(size: 20))
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
-                    
-                    Text("Sign in with Apple")
-                        .font(.headline)
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(colorScheme == .dark ? Color.black : Color.white)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.theme.border, lineWidth: 1)
-                )
             }
-            .disabled(!viewModel.networkConnected)
+        case .failure(let error):
+            if (error as NSError).code != ASAuthorizationError.canceled.rawValue {
+                viewModel.setError(error)
+            }
         }
     }
     

@@ -3,6 +3,9 @@ import FirebaseFirestore
 import FirebaseAuth
 import SwiftUI
 
+// Using canonical Challenge model
+// (No import needed as it will be accessed directly)
+
 @MainActor
 class ProgressService: ObservableObject {
     static let shared = ProgressService()

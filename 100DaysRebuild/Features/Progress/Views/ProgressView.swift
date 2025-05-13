@@ -2,657 +2,514 @@ import SwiftUI
 import Charts
 import FirebaseFirestore
 import FirebaseAuth
+import Foundation
+
+// Always be explicit about UserProgressViewModel type to avoid ambiguity
+// Updated to reference UserProgressViewModelImpl to avoid conflicts
+typealias UPViewModel = UserProgressViewModelImpl
+
+// Define the models needed for the view - renamed to avoid conflicts
+struct ProgressViewChallenge {
+    let id: String
+    var title: String
+    var description: String
+    var isCompleted: Bool
+    var hasStreakExpired: Bool
+    
+    init(id: String, title: String, description: String, isCompleted: Bool = false, hasStreakExpired: Bool = false) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.isCompleted = isCompleted
+        self.hasStreakExpired = hasStreakExpired
+    }
+}
+
+// Define the ProgressBadge struct directly here to avoid import issues
+struct ProgressBadge: Identifiable {
+    let id: Int
+    let title: String
+    let iconName: String
+    
+    init(id: Int, title: String, iconName: String) {
+        self.id = id
+        self.title = title
+        self.iconName = iconName
+    }
+}
+
+// Define the ProgressChallengeItem struct directly here to avoid import issues
+struct ProgressChallengeItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let completionPercentage: Int
+    
+    init(title: String, completionPercentage: Int) {
+        self.title = title
+        self.completionPercentage = completionPercentage
+    }
+}
+
+// Define the ProgressDailyCheckIn struct directly here to avoid import issues
+struct ProgressDailyCheckIn: Identifiable {
+    let id = UUID()
+    let date: Date
+    let count: Int
+    
+    init(date: Date, count: Int) {
+        self.date = date
+        self.count = count
+    }
+}
 
 // MARK: - Main View
 struct ProgressView: View {
-    @StateObject private var viewModel = UserProgressViewModel()
+    @StateObject private var viewModel = UPViewModel()
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     
     var body: some View {
-        ProgressContentView(viewModel: viewModel)
-            .background(Color.theme.background.ignoresSafeArea())
-            .navigationTitle("Progress")
-            .task {
-                await viewModel.loadData()
-            }
+        NavigationView {
+            ProgressContentView(viewModel: viewModel)
+                .background(Color.theme.background.ignoresSafeArea())
+                .navigationTitle("Progress")
+                .onAppear {
+                    Task {
+                        await viewModel.loadData()
+                    }
+                }
+        }
     }
 }
 
 // MARK: - Content View
 struct ProgressContentView: View {
-    @ObservedObject var viewModel: UserProgressViewModel
+    @ObservedObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                if viewModel.isLoading {
-                    ProgressLoadingView()
-                } else if viewModel.hasData {
-                    // Free Tier Features
-                    MotivationalHeaderView(streak: viewModel.currentStreak)
-                    CompletionRingView(
-                        completionPercentage: viewModel.completionPercentage,
-                        animateOnAppear: true
-                    )
-                    MetricsSection(viewModel: viewModel)
-                    
-                    // Pro Tier Features
-                    if subscriptionService.isProUser {
-                        ProFeaturesSectionView(viewModel: viewModel)
-                    } else {
-                        ProgressProLockedView()
-                    }
-                } else {
-                    // Improved empty state with more helpful messaging
-                    VStack(spacing: 24) {
-                        Image(systemName: "chart.line.uptrend.xyaxis.circle")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                            .padding(.bottom, 8)
-                        
-                        Text("No Progress Data Yet")
-                            .font(.headline)
-                        
-                        Text("Start a challenge to begin tracking your progress. Your stats and streaks will appear here.")
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                            
-                        Spacer().frame(height: 20)
-                        
-                        NavigationLink(destination: ChallengesTabView()) {
-                            Text("Create Your First Challenge")
-                                .fontWeight(.semibold)
-                                .padding()
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                        }
-                    }
-                    .padding(32)
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            .padding(.vertical, 16)
-        }
-        .withSafeNavigation() // Add navigation safety
-    }
-}
-
-// MARK: - Free Features Components
-struct ProgressLoadingView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .frame(width: 60, height: 60)
+        ZStack {
+            // Background
+            Color.theme.background.ignoresSafeArea()
             
-            Text("Loading your progress data...")
-                .font(.headline)
+            // Main content
+            ScrollView {
+                VStack(spacing: 24) {
+                    if viewModel.isLoading && !viewModel.hasData {
+                        loadingView
+                    } else if viewModel.hasData {
+                        VStack(spacing: 24) {
+                            // Stats Section
+                            statsSection
+                            
+                            // Journey Carousel (Your Journey So Far)
+                            JourneyCarouselView(viewModel: viewModel)
+
+                            // Daily Spark
+                            dailySparkSection
+                            
+                            // Projected Completion (Your Pace) - Pro Feature
+                            projectedCompletionSection
+                            
+                            // Consistency Graph - Pro Feature
+                            consistencyGraphSection
+                            
+                            // Activity Heatmap (Pro Feature)
+                            heatmapSection
+                            
+                            // Badges Section
+                            badgesSection
+                            
+                            // Add padding at the bottom for better scrolling
+                            Spacer().frame(height: 20)
+                        }
+                        .transition(.opacity)
+                    } else if let error = viewModel.errorMessage {
+                        errorState(message: error)
+                    } else {
+                        emptyState
+                    }
+                }
+                .padding(.vertical)
+            }
+            .refreshable {
+                await viewModel.loadData(forceRefresh: true)
+            }
+            
+            // Overlay loading indicator when refreshing with existing data
+            if viewModel.isLoading && viewModel.hasData {
+                VStack {
+                    SwiftUI.ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .scaleEffect(1.5)
+                        .padding()
+                }
+                .frame(width: 100, height: 100)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface.opacity(0.8))
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+    
+    private var loadingView: some View {
+        VStack {
+            SwiftUI.ProgressView()
+                .progressViewStyle(CircularProgressViewStyle())
+                .scaleEffect(1.5)
+                .padding()
+            
+            Text("Loading your progress...")
                 .foregroundColor(.theme.subtext)
+                .padding(.top, 8)
+            
+            // Add a tip about what's happening
+            Text("This may take a moment as we gather your data.")
+                .font(.caption)
+                .foregroundColor(.theme.subtext)
+                .padding(.top, 4)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 100)
-    }
-}
-
-struct MotivationalHeaderView: View {
-    let streak: Int
-    
-    private var streakEmoji: String {
-        switch streak {
-        case 0...2: return "🔥"
-        case 3...6: return "🔥🔥"
-        case 7...13: return "🔥🔥🔥"
-        case 14...20: return "🔥🔥🔥🔥"
-        default: return "🔥🔥🔥🔥🔥"
-        }
+        .padding(.top, 100)
     }
     
-    private var motivationalText: String {
-        switch streak {
-        case 0:
-            return "Start your journey today!"
-        case 1...3:
-            return "Great start! Keep the momentum going."
-        case 4...7:
-            return "You're building a solid habit! Keep it up!"
-        case 8...14:
-            return "Impressive streak! You're making real progress."
-        case 15...30:
-            return "Incredible dedication! You're transforming your life!"
-        default:
-            return "You're unstoppable! This is life-changing commitment!"
-        }
-    }
-    
-    var body: some View {
-        VStack(spacing: 12) {
-            Text(streakEmoji)
-                .font(.system(size: 48))
-                .padding(.bottom, 4)
-            
-            Text(motivationalText)
-                .font(.headline)
+    private var statsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your Progress")
+                .font(.title2)
                 .foregroundColor(.theme.text)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+            
+            HStack(spacing: 20) {
+                AppProgressStatCard(title: "Current Streak", value: "\(viewModel.currentStreak)")
+                AppProgressStatCard(title: "Longest Streak", value: "\(viewModel.longestStreak)")
+            }
+            
+            HStack(spacing: 20) {
+                AppProgressStatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%")
+                AppProgressStatCard(title: "Challenges", value: "\(viewModel.totalChallenges)")
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .padding(.horizontal, 16)
+        .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .padding(.horizontal, 16)
+        .padding(.horizontal)
     }
-}
-
-struct CompletionRingView: View {
-    let completionPercentage: Double
-    var animateOnAppear: Bool = false
-    @State private var animatedPercentage: Double = 0
     
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Overall Completion")
-                .font(.headline)
+    private var heatmapSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Activity")
+                .font(.title3)
                 .foregroundColor(.theme.text)
             
-            ZStack {
-                // Background ring
-                Circle()
-                    .stroke(Color.theme.surface, lineWidth: 24)
-                    .frame(width: 200, height: 200)
-                
-                // Foreground ring
-                Circle()
-                    .trim(from: 0, to: animateOnAppear ? animatedPercentage : completionPercentage)
-                    .stroke(
-                        AngularGradient(
-                            colors: [.theme.accent, .theme.accent.opacity(0.7)],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 24, lineCap: .round)
-                    )
-                    .frame(width: 200, height: 200)
-                    .rotationEffect(.degrees(-90))
-                
-                // Percentage text
-                VStack(spacing: 4) {
-                    Text("\(Int(animateOnAppear ? (animatedPercentage * 100) : (completionPercentage * 100)))%")
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundColor(.theme.text)
-                    
-                    Text("Complete")
-                        .font(.subheadline)
+            if subscriptionService.isProUser {
+                if viewModel.dateIntensityMap.isEmpty {
+                    Text("No activity data available yet")
                         .foregroundColor(.theme.subtext)
+                        .frame(height: 140, alignment: .center)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    // Show the heatmap directly for Pro users
+                    ActivityHeatmapView(dateIntensityMap: viewModel.dateIntensityMap)
+                        .frame(height: 140)
+                }
+            } else {
+                // Show locked view for free users
+                ProLockedView {
+                    ActivityHeatmapView(dateIntensityMap: viewModel.dateIntensityMap)
+                        .frame(height: 140)
                 }
             }
-            .padding(.vertical, 16)
         }
-        .padding(24)
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .padding(.horizontal, 16)
-        .onAppear {
-            if animateOnAppear {
-                withAnimation(.easeInOut(duration: 1.5)) {
-                    animatedPercentage = completionPercentage
+        .padding(.horizontal)
+    }
+    
+    private var badgesSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Badges")
+                .font(.title3)
+                .foregroundColor(.theme.text)
+            
+            if viewModel.earnedBadges.isEmpty {
+                Text("You haven't earned any badges yet")
+                    .foregroundColor(.theme.subtext)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100))], spacing: 16) {
+                    ForEach(viewModel.earnedBadges) { badge in
+                        ProgressBadgeCard(badge: badge)
+                    }
                 }
             }
         }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal)
     }
-}
-
-struct MetricsSection: View {
-    @ObservedObject var viewModel: UserProgressViewModel
     
-    var body: some View {
-        VStack(spacing: 16) {
-            MetricCard(
-                title: "Total Challenges",
-                value: "\(viewModel.totalChallenges)",
-                icon: "trophy.fill"
-            )
+    private var emptyState: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 60))
+                .foregroundColor(.theme.accent)
             
-            MetricCard(
-                title: "Current Streak",
-                value: "\(viewModel.currentStreak) days",
-                icon: "flame.fill"
-            )
+            Text("No Progress Data Yet")
+                .font(.title2)
+                .foregroundColor(.theme.text)
             
-            MetricCard(
-                title: "Longest Streak",
-                value: "\(viewModel.longestStreak) days",
-                icon: "star.fill"
-            )
+            Text("Start a challenge and check in daily to see your progress here")
+                .font(.body)
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
             
-            MetricCard(
-                title: "Completion Rate",
-                value: "\(Int(viewModel.completionPercentage * 100))%",
-                icon: "chart.bar.fill"
-            )
-            
-            MetricCard(
-                title: "Last Check-in",
-                value: viewModel.lastCheckInDateFormatted,
-                icon: "calendar.badge.clock"
-            )
+            // Add a button to navigate to challenges
+            NavigationLink(destination: ChallengesView()) {
+                Text("Start a Challenge")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.theme.accent)
+                    )
+            }
+            .padding(.top, 8)
         }
-        .padding(.horizontal, 16)
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+    
+    private func errorState(message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 60))
+                .foregroundColor(.orange)
+            
+            Text("Couldn't Load Progress")
+                .font(.title2)
+                .foregroundColor(.theme.text)
+            
+            Text(message)
+                .font(.body)
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button {
+                Task {
+                    await viewModel.loadData(forceRefresh: true)
+                }
+            } label: {
+                Text("Try Again")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.theme.accent)
+                    )
+            }
+            .padding(.top, 8)
+            
+            // If not connected, show offline indicator
+            if !viewModel.isNetworkConnected {
+                HStack {
+                    Image(systemName: "wifi.slash")
+                    Text("You're offline")
+                }
+                .font(.caption)
+                .foregroundColor(.red)
+                .padding(.top, 8)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+    
+    // Daily Spark Section
+    private var dailySparkSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Daily Spark")
+                .font(.title3)
+                .foregroundColor(.theme.text)
+            
+            DailySparkView(currentStreak: viewModel.currentStreak, completionPercentage: viewModel.completionPercentage)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal)
+    }
+    
+    // Projected Completion Section
+    private var projectedCompletionSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Your Pace")
+                .font(.title3)
+                .foregroundColor(.theme.text)
+            
+            if subscriptionService.isProUser {
+                if let projectedDate = viewModel.projectedCompletionDate {
+                    ProjectedCompletionView(
+                        projectedDate: projectedDate,
+                        currentPace: viewModel.currentPace,
+                        completionPercentage: viewModel.completionPercentage
+                    )
+                } else {
+                    Text("Not enough data to predict completion date yet")
+                        .foregroundColor(.theme.subtext)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 20)
+                }
+            } else {
+                // Show locked view for free users
+                ProLockedView {
+                    ProjectedCompletionView(
+                        projectedDate: Date().addingTimeInterval(60*60*24*30), // Example date - 30 days from now
+                        currentPace: "4.5 days/week",
+                        completionPercentage: 0.35
+                    )
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal)
+    }
+    
+    // Consistency Graph Section
+    private var consistencyGraphSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Consistency Graph")
+                .font(.title3)
+                .foregroundColor(.theme.text)
+            
+            if subscriptionService.isProUser {
+                if viewModel.dailyCheckInsData.isEmpty {
+                    Text("Not enough data to show consistency graph yet")
+                        .foregroundColor(.theme.subtext)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 20)
+                } else {
+                    ConsistencyGraphView(dailyCheckIns: viewModel.dailyCheckInsData)
+                        .frame(height: 200)
+                }
+            } else {
+                // Show locked view for free users
+                ProLockedView {
+                    ConsistencyGraphView(dailyCheckIns: generateSampleCheckInData())
+                        .frame(height: 200)
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal)
+    }
+    
+    // Helper function to generate sample data for locked preview
+    private func generateSampleCheckInData() -> [ProgressDailyCheckIn] {
+        let calendar = Calendar.current
+        var sampleData: [ProgressDailyCheckIn] = []
+        
+        for i in 0..<7 {
+            if let date = calendar.date(byAdding: .day, value: -i, to: Date()) {
+                let count = Int.random(in: 0...3)
+                sampleData.append(ProgressDailyCheckIn(date: date, count: count))
+            }
+        }
+        
+        return sampleData
     }
 }
 
-struct MetricCard: View {
+struct AppProgressStatCard: View {
     let title: String
     let value: String
-    let icon: String
     
     var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.title2)
+        VStack(spacing: 8) {
+            Text(value)
+                .font(.title)
                 .foregroundColor(.theme.accent)
-                .frame(width: 32, height: 32)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-                
-                Text(value)
-                    .font(.headline)
-                    .foregroundColor(.theme.text)
-            }
-            
-            Spacer()
+            Text(title)
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
         }
-        .padding(16)
+        .frame(maxWidth: .infinity)
+        .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         )
     }
 }
 
-// MARK: - Pro Features Components
-struct ProFeaturesSectionView: View {
-    @ObservedObject var viewModel: UserProgressViewModel
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            Text("Pro Analytics")
-                .font(.title3.bold())
-                .foregroundColor(.theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-            
-            StreakCalendarView(
-                checkInDays: viewModel.activityData
-            )
-            
-            ChallengeProgressChart(
-                challengeData: viewModel.challengeProgressData
-            )
-            
-            CheckInHistoryChart(
-                historyData: viewModel.dailyCheckInsData
-            )
-            
-            CompletionForecastView(
-                completionDate: viewModel.projectedCompletionDate,
-                currentPace: viewModel.currentPace
-            )
-            
-            BadgesView(badges: viewModel.earnedBadges)
-        }
-    }
-}
-
-struct StreakCalendarView: View {
-    let checkInDays: [Date]
-    @State private var monthsToShow = 3
-    
-    private var calendarStart: Date {
-        let calendar = Calendar.current
-        let today = Date()
-        let startComponents = calendar.dateComponents([.year, .month], from: today)
-        return calendar.date(from: startComponents)!
-            .addingTimeInterval(-TimeInterval(86400 * 30 * (monthsToShow - 1)))
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Activity Calendar")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(0..<30*monthsToShow, id: \.self) { day in
-                    let date = calendarStart.addingTimeInterval(TimeInterval(day * 86400))
-                    let isCheckInDay = checkInDays.contains { Calendar.current.isDate($0, inSameDayAs: date) }
-                    
-                    Circle()
-                        .fill(isCheckInDay ? Color.theme.accent : Color.theme.surface)
-                        .frame(width: 12, height: 12)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.theme.surface.opacity(0.3), lineWidth: 1)
-                        )
-                }
-            }
-            .padding(8)
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
-struct ChallengeProgressChart: View {
-    let challengeData: [ChallengeProgress]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Challenge Progress")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Chart {
-                ForEach(challengeData) { challenge in
-                    BarMark(
-                        x: .value("Progress", challenge.completionPercentage),
-                        y: .value("Challenge", challenge.title)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.theme.accent, .theme.accent.opacity(0.7)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                }
-            }
-            .frame(height: 180)
-            .chartYAxis {
-                AxisMarks(preset: .aligned) { value in
-                    AxisValueLabel {
-                        if let title = value.as(String.self) {
-                            Text(title)
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                    }
-                }
-            }
-            .chartXAxis {
-                AxisMarks(values: [0, 25, 50, 75, 100]) { value in
-                    AxisValueLabel {
-                        if let percent = value.as(Int.self) {
-                            Text("\(percent)%")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                    }
-                    AxisGridLine()
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
-struct CheckInHistoryChart: View {
-    let historyData: [DailyCheckIn]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Check-in Trend")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Chart {
-                ForEach(historyData) { data in
-                    LineMark(
-                        x: .value("Date", data.date),
-                        y: .value("Check-ins", data.count)
-                    )
-                    .foregroundStyle(Color.theme.accent)
-                    .symbol {
-                        Circle()
-                            .fill(Color.theme.accent)
-                            .frame(width: 8, height: 8)
-                    }
-                    .interpolationMethod(.catmullRom)
-                    
-                    AreaMark(
-                        x: .value("Date", data.date),
-                        y: .value("Check-ins", data.count)
-                    )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.theme.accent.opacity(0.3), .theme.accent.opacity(0.01)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .interpolationMethod(.catmullRom)
-                }
-            }
-            .frame(height: 180)
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 5)) { value in
-                    AxisValueLabel(format: .dateTime.day().month())
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
-struct CompletionForecastView: View {
-    let completionDate: Date?
-    let currentPace: String
-    
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Completion Forecast")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 16) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.title2)
-                        .foregroundColor(.theme.accent)
-                        .frame(width: 32, height: 32)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Projected Completion")
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                        
-                        Text(completionDate != nil ? dateFormatter.string(from: completionDate!) : "Not enough data")
-                            .font(.headline)
-                            .foregroundColor(.theme.text)
-                    }
-                }
-                
-                HStack(alignment: .top, spacing: 16) {
-                    Image(systemName: "speedometer")
-                        .font(.title2)
-                        .foregroundColor(.theme.accent)
-                        .frame(width: 32, height: 32)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Current Pace")
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                        
-                        Text(currentPace)
-                            .font(.headline)
-                            .foregroundColor(.theme.text)
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
-struct BadgesView: View {
-    let badges: [Badge]
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Earned Badges")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            if badges.isEmpty {
-                Text("Complete challenges to earn badges!")
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 24)
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ForEach(badges) { badge in
-                        BadgeItemView(badge: badge)
-                    }
-                }
-            }
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
-        .padding(.horizontal, 16)
-    }
-}
-
-struct BadgeItemView: View {
-    let badge: Badge
+struct ProgressBadgeCard: View {
+    let badge: ProgressBadge
     
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: badge.iconName)
-                .font(.system(size: 32))
+                .font(.system(size: 30))
                 .foregroundColor(.theme.accent)
-                .frame(width: 56, height: 56)
-                .background(
-                    Circle()
-                        .fill(Color.theme.accent.opacity(0.1))
-                )
             
             Text(badge.title)
                 .font(.caption)
-                .fontWeight(.medium)
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
         }
-        .frame(height: 100)
-        .padding(8)
-    }
-}
-
-struct ProgressProLockedView: View {
-    @EnvironmentObject var subscriptionService: SubscriptionService
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            VStack(spacing: 16) {
-                Image(systemName: "chart.bar.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.theme.accent.opacity(0.7))
-                
-                Text("Unlock Advanced Analytics")
-                    .font(.title3.bold())
-                    .foregroundColor(.theme.text)
-                
-                Text("Get detailed insights, challenge breakdowns, and predictive analysis with 100Days Pro.")
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.vertical, 8)
-            
-            Button(action: {
-                subscriptionService.showPaywall = true
-            }) {
-                Text("Upgrade to Pro")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.accent)
-                            .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
-                    )
-            }
-        }
-        .padding(24)
+        .padding()
+        .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         )
-        .padding(.horizontal, 16)
     }
 }
 
-// MARK: - Data Models
 @MainActor
 class UserProgressViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var hasData = false
+    @Published var errorMessage: String?
     
     // Free tier metrics
     @Published var totalChallenges = 0
@@ -663,286 +520,305 @@ class UserProgressViewModel: ObservableObject {
     
     // Pro tier data
     @Published var activityData: [Date] = []
-    @Published var challengeProgressData: [ChallengeProgress] = []
-    @Published var dailyCheckInsData: [DailyCheckIn] = []
+    @Published var challengeProgressData: [ProgressChallengeItem] = []
+    @Published var dailyCheckInsData: [ProgressDailyCheckIn] = []
     @Published var projectedCompletionDate: Date? = nil
     @Published var currentPace = "0 days/week"
-    @Published var earnedBadges: [Badge] = []
+    @Published var earnedBadges: [ProgressBadge] = []
+    @Published var dateIntensityMap: [Date: Int] = [:]
     
     // Firestore reference
     private let firestore = Firestore.firestore()
+    private var loadTask: Task<Void, Never>?
+    private let timeoutDuration: TimeInterval = 10.0 // 10 second timeout
     
-    var lastCheckInDateFormatted: String {
-        guard let date = lastCheckInDate else { return "No check-ins yet" }
-        
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: date)
+    deinit {
+        loadTask?.cancel()
     }
     
-    func loadData() async {
-        isLoading = true
-        hasData = false
-        
-        // Check for authenticated user
-        guard let userId = Auth.auth().currentUser?.uid else {
-            isLoading = false
+    func loadData(forceRefresh: Bool = false) async {
+        // Don't load data if already loading unless forced
+        if isLoading && !forceRefresh {
             return
         }
         
-        do {
-            // Fetch user challenges from Firestore - only get active (non-archived) challenges
-            let challenges = try await loadChallenges(for: userId)
+        // Cancel any existing task
+        loadTask?.cancel()
+        
+        // Start new loading task
+        loadTask = Task { [weak self] in
+            guard let self = self else { return }
             
-            if challenges.isEmpty {
-                // No data yet
-                isLoading = false
-                hasData = false
-                return
-            }
-            
-            // Calculate metrics
-            totalChallenges = challenges.count
-            currentStreak = calculateCurrentStreak(challenges)
-            longestStreak = calculateLongestStreak(challenges)
-            completionPercentage = calculateCompletionRate(challenges)
-            lastCheckInDate = findLastCheckInDate(challenges)
-            
-            // Pro features data
-            await loadProFeaturesData(from: challenges)
-            
-            isLoading = false
-            hasData = true
-            
-            // Force the UI to update by explicitly setting hasData
-            // This fixes the "No Progress Data Yet" issue when hasData wasn't being set properly
-            if !challenges.isEmpty {
-                hasData = true
-            }
-        } catch {
-            print("Error loading progress data: \(error.localizedDescription)")
-            isLoading = false
-        }
-    }
-    
-    private func loadChallenges(for userId: String) async throws -> [Challenge] {
-        // Modified the query to use the correct path structure and handle errors gracefully
-        do {
-            let snapshot = try await firestore
-                .collection("users")
-                .document(userId)
-                .collection("challenges")
-                .whereField("isArchived", isEqualTo: false)
-                .getDocuments()
-            
-            let challenges = snapshot.documents.compactMap { document in
-                do {
-                    return try document.data(as: Challenge.self)
-                } catch {
-                    print("Error decoding challenge document \(document.documentID): \(error.localizedDescription)")
-                    return nil
+            // Set up timeout
+            let timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(self.timeoutDuration * 1_000_000_000))
+                if self.isLoading {
+                    await MainActor.run {
+                        self.errorMessage = "Loading timed out. Please try again."
+                        self.isLoading = false
+                    }
                 }
             }
             
-            return challenges
-        } catch let error as NSError {
-            // Handle "missing" error differently to avoid showing error message for new users
-            if error.domain == FirestoreErrorDomain && 
-               (error.code == 4 || error.code == 5 || error.localizedDescription.contains("missing")) {
-                print("No progress data exists yet - not an error for new users")
-                return []
+            await MainActor.run {
+                self.isLoading = true
+                self.errorMessage = nil
             }
             
-            print("Firestore error loading challenges: \(error.localizedDescription)")
-            // For any other error, return empty array instead of failing completely
-            return []
+            // Verify the user is logged in
+            guard let userId = Auth.auth().currentUser?.uid else {
+                await MainActor.run {
+                    self.errorMessage = "You must be logged in to view progress"
+                    self.isLoading = false
+                    self.hasData = false
+                }
+                timeoutTask.cancel()
+                return
+            }
+            
+            do {
+                // Fetch challenges from Firestore
+                let challengesQuery = firestore
+                    .collection("users")
+                    .document(userId)
+                    .collection("challenges")
+                
+                let challengesSnapshot = try await challengesQuery.getDocuments()
+                
+                if Task.isCancelled { 
+                    timeoutTask.cancel()
+                    return 
+                }
+                
+                // Convert to Challenge objects
+                var challenges: [Challenge] = []
+                
+                for document in challengesSnapshot.documents {
+                    if Task.isCancelled {
+                        timeoutTask.cancel()
+                        return
+                    }
+                    
+                    do {
+                        if let challengeId = UUID(uuidString: document.documentID),
+                           let title = document.data()["title"] as? String,
+                           let ownerId = document.data()["ownerId"] as? String,
+                           let startDateTimestamp = document.data()["startDate"] as? Timestamp,
+                           let streakCount = document.data()["streakCount"] as? Int,
+                           let daysCompleted = document.data()["daysCompleted"] as? Int,
+                           let isArchived = document.data()["isArchived"] as? Bool {
+                            
+                            let startDate = startDateTimestamp.dateValue()
+                            let lastCheckInDate = (document.data()["lastCheckInDate"] as? Timestamp)?.dateValue()
+                            let lastModified = (document.data()["lastModified"] as? Timestamp)?.dateValue() ?? Date()
+                            
+                            // Determine if completed today by checking if lastCheckInDate is today
+                            let isCompletedToday: Bool
+                            if let lastCheckIn = lastCheckInDate {
+                                isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
+                            } else {
+                                isCompletedToday = false
+                            }
+                            
+                            let challenge = Challenge(
+                                id: challengeId,
+                                title: title,
+                                startDate: startDate,
+                                lastCheckInDate: lastCheckInDate,
+                                streakCount: streakCount,
+                                daysCompleted: daysCompleted,
+                                isCompletedToday: isCompletedToday,
+                                isArchived: isArchived,
+                                ownerId: ownerId,
+                                lastModified: lastModified
+                            )
+                            
+                            challenges.append(challenge)
+                        }
+                    } catch {
+                        print("Error parsing challenge document: \(error.localizedDescription)")
+                        continue
+                    }
+                }
+                
+                if Task.isCancelled { 
+                    timeoutTask.cancel()
+                    return 
+                }
+                
+                // Calculate metrics
+                let totalChallengesCount = challenges.count
+                let currentStreakCount = calculateCurrentStreak(challenges)
+                let longestStreakCount = calculateLongestStreak(challenges)
+                let overallCompletionRate = calculateCompletionRate(challenges)
+                
+                // Generate data for heatmap from check-ins
+                var intensityMap: [Date: Int] = [:]
+                
+                // Get check-ins for each challenge to build intensity map
+                for challenge in challenges {
+                    if Task.isCancelled {
+                        timeoutTask.cancel()
+                        return
+                    }
+                    
+                    do {
+                        let checkInsRef = firestore
+                            .collection("users")
+                            .document(userId)
+                            .collection("challenges")
+                            .document(challenge.id.uuidString)
+                            .collection("checkIns")
+                        
+                        // Get check-ins from the last 6 months
+                        let sixMonthsAgo = Calendar.current.date(
+                            byAdding: .month,
+                            value: -6,
+                            to: Date()
+                        )!
+                        
+                        let checkInsQuery = checkInsRef
+                            .whereField("date", isGreaterThan: Timestamp(date: sixMonthsAgo))
+                        
+                        let checkInsSnapshot = try await checkInsQuery.getDocuments()
+                        
+                        if Task.isCancelled { 
+                            timeoutTask.cancel()
+                            return 
+                        }
+                        
+                        // Process check-ins to build intensity map
+                        for document in checkInsSnapshot.documents {
+                            if let dateTimestamp = document.data()["date"] as? Timestamp {
+                                let date = dateTimestamp.dateValue()
+                                // Normalize date to beginning of day
+                                let normalizedDate = Calendar.current.startOfDay(for: date)
+                                // Increment intensity for this date
+                                let currentIntensity = intensityMap[normalizedDate] ?? 0
+                                intensityMap[normalizedDate] = currentIntensity + 1
+                            }
+                        }
+                    } catch {
+                        print("Error loading check-ins for challenge \(challenge.id): \(error.localizedDescription)")
+                        continue
+                    }
+                }
+                
+                if Task.isCancelled { 
+                    timeoutTask.cancel()
+                    return 
+                }
+                
+                // Calculate badges based on progress
+                let earnedBadges = calculateEarnedBadges(challenges)
+                
+                // Update UI on main thread
+                await MainActor.run {
+                    self.totalChallenges = totalChallengesCount
+                    self.currentStreak = currentStreakCount
+                    self.longestStreak = longestStreakCount
+                    self.completionPercentage = overallCompletionRate
+                    self.dateIntensityMap = intensityMap
+                    self.earnedBadges = earnedBadges
+                    
+                    self.hasData = totalChallengesCount > 0
+                    self.isLoading = false
+                    timeoutTask.cancel()
+                }
+            } catch {
+                if !Task.isCancelled {
+                    await MainActor.run {
+                        self.errorMessage = "Failed to load progress data: \(error.localizedDescription)"
+                        self.isLoading = false
+                        // Set hasData to true if we had data before
+                        // so we don't show empty state due to temporary error
+                        self.hasData = self.totalChallenges > 0
+                        timeoutTask.cancel()
+                    }
+                }
+            }
         }
     }
     
     private func calculateCurrentStreak(_ challenges: [Challenge]) -> Int {
-        // Find the highest active streak
-        return challenges
-            .filter { !$0.hasStreakExpired }
-            .map { $0.streakCount }
-            .max() ?? 0
+        // Get the maximum current streak across all active challenges
+        let activeChallenges = challenges.filter { !$0.isArchived && !$0.isCompleted }
+        if activeChallenges.isEmpty {
+            return 0
+        }
+        
+        // Find challenges with active streaks (checked in yesterday or today)
+        let challengesWithActiveStreaks = activeChallenges.filter { challenge in
+            guard let lastCheckIn = challenge.lastCheckInDate else { return false }
+            let daysSinceLastCheckIn = Calendar.current.dateComponents([.day], from: lastCheckIn, to: Date()).day ?? 0
+            return daysSinceLastCheckIn <= 1 // Streak is active if checked in today or yesterday
+        }
+        
+        // Return the maximum streak count from active challenges
+        return challengesWithActiveStreaks.map { $0.streakCount }.max() ?? 0
     }
     
     private func calculateLongestStreak(_ challenges: [Challenge]) -> Int {
-        // Get the highest streak count across all challenges
-        return challenges.map { $0.streakCount }.max() ?? 0
+        // Get the maximum streak from all challenges, including completed ones
+        let allStreaks = challenges.map { $0.streakCount }
+        return allStreaks.max() ?? 0
     }
     
     private func calculateCompletionRate(_ challenges: [Challenge]) -> Double {
         guard !challenges.isEmpty else { return 0.0 }
         
-        let totalDaysCompleted = challenges.reduce(0) { $0 + $1.daysCompleted }
-        let totalPossibleDays = challenges.count * 100 // Each challenge is 100 days
+        let totalCompletedDays = challenges.reduce(0) { $0 + $1.daysCompleted }
+        let totalPossibleDays = challenges.count * 100 // Each challenge has 100 days
         
-        return Double(totalDaysCompleted) / Double(totalPossibleDays)
+        return min(1.0, Double(totalCompletedDays) / Double(totalPossibleDays))
     }
     
-    private func findLastCheckInDate(_ challenges: [Challenge]) -> Date? {
-        // Find the most recent check-in date
-        return challenges.compactMap { $0.lastCheckInDate }.max()
-    }
-    
-    private func loadProFeaturesData(from challenges: [Challenge]) async {
-        // Activity data - collect all dates where any check-ins occurred
-        let allCheckInDates = challenges.compactMap { challenge in
-            // For each challenge, reconstruct all check-in dates
-            // In a real app, we'd store this as a subcollection in Firestore
-            var dates: [Date] = []
-            if let lastDate = challenge.lastCheckInDate {
-                dates.append(lastDate)
-            }
-            return dates
-        }.flatMap { $0 }
-        
-        // Prepare data for main thread updates
-        let processedChallengeData = challenges.map { challenge in
-            ChallengeProgress(
-                title: challenge.title,
-                completionPercentage: Int(challenge.progressPercentage * 100)
-            )
-        }
-        
-        // Daily check-ins (last 30 days)
-        let calendar = Calendar.current
-        let today = Date()
-        
-        // Create a dictionary to count check-ins by date
-        var checkInsByDate: [Date: Int] = [:]
-        
-        for date in allCheckInDates {
-            // Only include last 30 days
-            if let daysAgo = calendar.dateComponents([.day], from: date, to: today).day, daysAgo <= 30 {
-                // Normalize date to remove time component
-                let normalizedDate = calendar.startOfDay(for: date)
-                checkInsByDate[normalizedDate, default: 0] += 1
-            }
-        }
-        
-        // Convert to array sorted by date
-        let processedDailyCheckIns = checkInsByDate.map { 
-            DailyCheckIn(date: $0.key, count: $0.value) 
-        }.sorted { $0.date < $1.date }
-        
-        // Now update all published properties on the main thread
-        await MainActor.run {
-            // Update all properties on the main thread
-            self.activityData = allCheckInDates
-            self.challengeProgressData = processedChallengeData
-            self.dailyCheckInsData = processedDailyCheckIns
-            
-            // Call other calculation methods that will update published properties
-            calculateProjectedCompletionDate(challenges)
-            calculateEarnedBadges(challenges)
-        }
-    }
-    
-    private func calculateProjectedCompletionDate(_ challenges: [Challenge]) {
-        guard !challenges.isEmpty else {
-            projectedCompletionDate = nil
-            currentPace = "0 days/week"
-            return
-        }
-        
-        // Get incomplete challenges
-        let incompleteChallenges = challenges.filter { !$0.isCompleted }
-        if incompleteChallenges.isEmpty {
-            projectedCompletionDate = nil
-            currentPace = "All completed"
-            return
-        }
-        
-        // Calculate average check-ins per week over the last month
-        let checkInsLast30Days = dailyCheckInsData.reduce(0) { $0 + $1.count }
-        let weeklyRate = Double(checkInsLast30Days) / 4.0 // 30 days ≈ 4 weeks
-        
-        if weeklyRate <= 0 {
-            projectedCompletionDate = nil
-            currentPace = "0 days/week"
-            return
-        }
-        
-        // Calculate days remaining
-        let totalDaysRemaining = incompleteChallenges.reduce(0) { $0 + $1.daysRemaining }
-        
-        // Estimate days to completion
-        let weeksToCompletion = Double(totalDaysRemaining) / weeklyRate
-        let daysToCompletion = weeksToCompletion * 7
-        
-        // Calculate projected date
-        projectedCompletionDate = Calendar.current.date(byAdding: .day, value: Int(daysToCompletion), to: Date())
-        
-        // Format current pace
-        let formattedPace = String(format: "%.1f", weeklyRate)
-        currentPace = "\(formattedPace) days/week"
-    }
-    
-    private func calculateEarnedBadges(_ challenges: [Challenge]) {
-        var badges: [Badge] = []
+    private func calculateEarnedBadges(_ challenges: [Challenge]) -> [ProgressBadge] {
+        var badges: [ProgressBadge] = []
         
         // Streak badges
         if longestStreak >= 7 {
-            badges.append(Badge(id: 1, title: "7-Day Streak", iconName: "flame.fill"))
+            badges.append(ProgressBadge(id: 1, title: "7-Day Streak", iconName: "flame.fill"))
         }
         if longestStreak >= 30 {
-            badges.append(Badge(id: 2, title: "30-Day Streak", iconName: "flame.fill"))
+            badges.append(ProgressBadge(id: 2, title: "30-Day Streak", iconName: "flame.fill"))
         }
         
         // Completion badges
-        let completedChallenges = challenges.filter { $0.isCompleted }.count
-        if completedChallenges > 0 {
-            badges.append(Badge(id: 3, title: "First Completion", iconName: "checkmark.circle.fill"))
+        let completedChallengesCount = challenges.filter { $0.isCompleted }.count
+        if completedChallengesCount > 0 {
+            badges.append(ProgressBadge(id: 3, title: "First Completion", iconName: "checkmark.circle.fill"))
         }
-        if completedChallenges >= 3 {
-            badges.append(Badge(id: 4, title: "Triple Completion", iconName: "checkmark.circle.fill"))
+        if completedChallengesCount >= 3 {
+            badges.append(ProgressBadge(id: 4, title: "Triple Completion", iconName: "checkmark.circle.fill"))
         }
         
         // Progress badges
         if completionPercentage >= 0.25 {
-            badges.append(Badge(id: 5, title: "25% Complete", iconName: "chart.bar.fill"))
+            badges.append(ProgressBadge(id: 5, title: "25% Complete", iconName: "chart.bar.fill"))
         }
         if completionPercentage >= 0.50 {
-            badges.append(Badge(id: 6, title: "50% Complete", iconName: "chart.bar.fill"))
+            badges.append(ProgressBadge(id: 6, title: "50% Complete", iconName: "chart.bar.fill"))
         }
         if completionPercentage >= 0.75 {
-            badges.append(Badge(id: 7, title: "75% Complete", iconName: "chart.bar.fill"))
+            badges.append(ProgressBadge(id: 7, title: "75% Complete", iconName: "chart.bar.fill"))
         }
         
-        // Consistency badge
-        if totalChallenges > 0 && !challenges.contains(where: { $0.hasStreakExpired }) {
-            badges.append(Badge(id: 8, title: "Perfect Consistency", iconName: "star.fill"))
+        // Consistency badge - only if at least one challenge and no expired streaks
+        let hasExpiredStreak = challenges.contains { $0.hasStreakExpired }
+        if !challenges.isEmpty && !hasExpiredStreak {
+            badges.append(ProgressBadge(id: 8, title: "Perfect Consistency", iconName: "star.fill"))
         }
         
-        earnedBadges = badges
+        return badges
     }
 }
 
-// MARK: - Model Structs
-struct ChallengeProgress: Identifiable {
-    let id = UUID()
-    let title: String
-    let completionPercentage: Int
-}
-
-struct DailyCheckIn: Identifiable {
-    let id = UUID()
-    let date: Date
-    let count: Int
-}
-
-struct Badge: Identifiable {
-    let id: Int
-    let title: String
-    let iconName: String
-}
-
 // MARK: - Preview
-struct ProgressView_Previews: PreviewProvider {
+struct UserProgressDashboardView_Previews: PreviewProvider {
     static var previews: some View {
-        ProgressView()
+        UserProgressDashboardView()
             .environmentObject(SubscriptionService.shared)
+            .environmentObject(NotificationService.shared)
     }
 } 

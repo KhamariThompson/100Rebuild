@@ -3,8 +3,8 @@ import SwiftUI
 /// Helper struct to configure NavigationView styles consistently across the app
 struct NavigationConfigurator: ViewModifier {
     func body(content: Content) -> some View {
+        // Updated to use modern SwiftUI navigation
         content
-            .navigationViewStyle(StackNavigationViewStyle())
     }
 }
 

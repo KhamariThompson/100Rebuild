@@ -213,6 +213,12 @@ class AuthService {
     // MARK: - Sign Out
     
     func signOut() async -> Bool {
+        // Skip sign out for anonymous users to prevent errors
+        if Auth.auth().currentUser?.isAnonymous == true {
+            print("AuthService: Current user is anonymous, skipping sign out")
+            return true
+        }
+        
         do {
             print("AuthService: Signing out")
             try Auth.auth().signOut()

@@ -139,6 +139,12 @@ class UserSession: ObservableObject {
                 
                 // Notify listeners about auth state change
                 self.authStateDidChangeHandler?()
+                
+                // Post notification for SubscriptionService
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("AuthStateChanged"),
+                    object: nil
+                )
             }
         }
     }
@@ -441,6 +447,12 @@ class UserSession: ObservableObject {
     
     /// Sign out the current user
     func signOut() async throws {
+        // Check if user is anonymous - prevents errors with anonymous users
+        if Auth.auth().currentUser?.isAnonymous == true {
+            print("UserSession: Current user is anonymous, skipping sign out")
+            return
+        }
+        
         if !isNetworkAvailable {
             throw NSError(domain: "UserSession", 
                         code: 100, 
@@ -451,6 +463,12 @@ class UserSession: ObservableObject {
     }
     
     func signOutWithoutThrowing() async {
+        // Check if user is anonymous - prevents errors with anonymous users
+        if Auth.auth().currentUser?.isAnonymous == true {
+            print("UserSession: Current user is anonymous, skipping sign out")
+            return
+        }
+        
         do {
             try auth.signOut()
             // Auth state listener will handle the state update

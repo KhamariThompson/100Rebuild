@@ -5,6 +5,9 @@ import FirebaseFirestore
 import FirebaseStorage
 import Network
 
+// Using canonical Challenge model
+// (No import needed as it will be accessed directly)
+
 enum FirebaseError: Error, LocalizedError {
     case notConfigured
     case authError(Error)

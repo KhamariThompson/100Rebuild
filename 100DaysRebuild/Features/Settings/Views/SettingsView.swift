@@ -1,209 +1,568 @@
 import SwiftUI
 import FirebaseAuth
+import MessageUI
+import StoreKit
 
 struct SettingsView: View {
+    // Environment
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     
+    // State
     @AppStorage("AppTheme") private var appTheme: String = "system"
     @State private var showingChangeEmail = false
     @State private var showingChangePassword = false
-    @State private var showingDeleteAccount = false
     @State private var isRestoringPurchases = false
+    @State private var isPerformingAction = false
+    @State private var showingShareSheet = false
+    @State private var showingEmailComposer = false
+    @State private var showingDeleteConfirmation = false
+    @State private var showingDeleteChallengesConfirmation = false
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var isNotificationsEnabled = false
-    @State private var showingDeleteConfirmation = false
+    @State private var showSuccessMessage = false
+    @State private var successMessage = ""
     
+    // Notification Settings
+    @State private var isDailyReminderEnabled: Bool = true
+    @State private var isStreakReminderEnabled: Bool = true
+    @State private var reminderTime: Date = Calendar.current.date(from: DateComponents(hour: 20, minute: 0)) ?? Date()
+    @State private var isSoundEnabled: Bool = true
+    @State private var isVibrationEnabled: Bool = true
+    @State private var showingPermissionAlert = false
+    
+    // Theme options
     private let themeOptions = ["light", "dark", "system"]
     
     var body: some View {
         NavigationView {
-            Form {
-                notificationsContent
-                accountContent
-                appearanceContent
-                membershipContent()
-                aboutContent
-            }
-            .navigationTitle("Settings")
-            .navigationBarItems(trailing: Button("Done") { dismiss() })
-            .sheet(isPresented: $showingChangeEmail) {
-                ChangeEmailView()
-            }
-            .sheet(isPresented: $showingChangePassword) {
-                ChangePasswordView()
-            }
-            .sheet(isPresented: $subscriptionService.showPaywall) {
-                PaywallView()
-            }
-            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    Task {
-                        await handleDeleteAccount()
+            mainContent
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.large)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") { dismiss() }
+                            .fontWeight(.medium)
                     }
                 }
-            } message: {
-                Text("Are you sure you want to delete your account? This action cannot be undone.")
-            }
-            .alert("Error", isPresented: $showingError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
-            }
-        }
-    }
-    
-    private var notificationsContent: some View {
-        Group {
-            Section {
-                Toggle("Daily Reminders", isOn: $isNotificationsEnabled)
-                    .onChange(of: isNotificationsEnabled) { oldValue, newValue in
+                // Sheets
+                .sheet(isPresented: $showingChangeEmail) {
+                    ChangeEmailView()
+                }
+                .sheet(isPresented: $showingChangePassword) {
+                    ChangePasswordView()
+                }
+                .sheet(isPresented: $subscriptionService.showPaywall) {
+                    PaywallView()
+                }
+                .sheet(isPresented: $showingEmailComposer) {
+                    if EmailComposer.canSendEmail() {
+                        EmailComposer(
+                            recipient: "support@100days.site",
+                            subject: "100Days App Support",
+                            body: getEmailSupportBody()
+                        )
+                    }
+                }
+                .sheet(isPresented: $showingShareSheet) {
+                    Utilities_ShareSheet(items: [
+                        AppStoreHelper.getShareMessage(),
+                        AppStoreHelper.getShareableAppLink()
+                    ])
+                }
+                // Alerts
+                .alert("Success", isPresented: $showSuccessMessage) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(successMessage)
+                }
+                .alert("Error", isPresented: $showingError) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(errorMessage)
+                }
+                .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Delete", role: .destructive) {
                         Task {
-                            await handleNotificationToggle(newValue)
+                            await handleDeleteAccount()
                         }
                     }
-            } header: {
-                Text("Notifications")
-            }
-        }
-    }
-    
-    private var accountContent: some View {
-        Group {
-            Section {
-                Button(action: { showingChangeEmail = true }) {
-                    Label("Change Email", systemImage: "envelope")
+                } message: {
+                    Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")
                 }
-                
-                Button(action: { showingChangePassword = true }) {
-                    Label("Change Password", systemImage: "lock")
-                }
-                
-                Button(action: { 
-                    Task {
-                        await handleSignOut()
+                .alert("Delete All Challenges", isPresented: $showingDeleteChallengesConfirmation) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Delete", role: .destructive) {
+                        Task {
+                            await handleDeleteAllChallenges()
+                        }
                     }
-                }) {
-                    Label("Sign Out", systemImage: "arrow.right.square")
-                        .foregroundColor(.red)
+                } message: {
+                    Text("Are you sure you want to delete all your challenges? This action cannot be undone.")
                 }
-                
-                Button(action: { showingDeleteConfirmation = true }) {
-                    Label("Delete Account", systemImage: "trash")
-                        .foregroundColor(.red)
+                .alert("Notification Permission", isPresented: $showingPermissionAlert) {
+                    Button("Settings", role: .none) {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Please enable notifications in settings to receive reminders.")
                 }
-            } header: {
-                Text("Account")
+                .onAppear {
+                    syncWithNotificationService()
+                }
+        }
+        .accentColor(.theme.accent)
+    }
+    
+    // MARK: - Content Views
+    
+    private var mainContent: some View {
+        ZStack {
+            Color.theme.background.ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    accountSection
+                    subscriptionSection
+                    dataSection
+                    notificationsSection
+                    appearanceSection
+                    communitySection
+                    legalSection
+                    appInfoSection
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 30)
             }
         }
     }
     
-    private var appearanceContent: some View {
-        Group {
-            Section {
-                Picker("Theme", selection: $appTheme) {
-                    ForEach(themeOptions, id: \.self) { theme in
-                        Text(theme.capitalized)
-                            .tag(theme)
+    // MARK: - Section Views
+    
+    private var accountSection: some View {
+        SettingsSection(title: "Account", icon: "person.crop.circle.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let email = userSession.currentUser?.email {
+                        HStack {
+                            Image(systemName: "envelope.fill")
+                                .foregroundColor(.theme.accent)
+                            Text(email)
+                                .foregroundColor(.theme.text)
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
+                    Divider()
+                    
+                    Button(action: { showingChangeEmail = true }) {
+                        SettingsRow(icon: "pencil", title: "Change Email", showChevron: true)
+                    }
+                    
+                    Button(action: { showingChangePassword = true }) {
+                        SettingsRow(icon: "lock", title: "Change Password", showChevron: true)
+                    }
+                    
+                    Button(action: { 
+                        Task {
+                            await handleSignOut()
+                        }
+                    }) {
+                        SettingsRow(icon: "arrow.right.square", title: "Sign Out", color: .red)
+                    }
+                    
+                    Button(action: { showingDeleteConfirmation = true }) {
+                        SettingsRow(icon: "trash", title: "Delete Account", color: .red)
                     }
                 }
-                .pickerStyle(SegmentedPickerStyle())
-            } header: {
-                Text("Appearance")
+                .padding(.vertical, 4)
             }
         }
     }
     
-    private func membershipContent() -> some View {
-        Group {
-            Section {
-                if subscriptionService.isProUser {
+    private var subscriptionSection: some View {
+        SettingsSection(title: "Subscription", icon: "star.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Current plan display
                     HStack {
-                        Image(systemName: "sparkles")
-                        Text("Pro Member")
+                        Image(systemName: subscriptionService.isProUser ? "sparkles" : "sparkles.rectangle.stack")
+                            .foregroundColor(subscriptionService.isProUser ? .yellow : .theme.subtext)
+                        
+                        Text(subscriptionService.isProUser ? "Pro" : "Free")
+                            .font(.headline)
+                            .foregroundColor(subscriptionService.isProUser ? .theme.accent : .theme.text)
+                        
                         Spacer()
-                        if let renewalDate = subscriptionService.renewalDate {
+                        
+                        if subscriptionService.isProUser, let renewalDate = subscriptionService.renewalDate {
                             Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
                                 .font(.caption)
                                 .foregroundColor(.theme.subtext)
                         }
                     }
+                    .padding(.vertical, 4)
                     
+                    Divider()
+                    
+                    // Manage subscription
+                    if subscriptionService.isProUser {
+                        Button(action: {
+                            AppStoreHelper.openSubscriptionManagement()
+                        }) {
+                            SettingsRow(icon: "creditcard", title: "Manage Subscription", showChevron: true)
+                        }
+                    } else {
+                        Button(action: {
+                            subscriptionService.presentSubscriptionSheet()
+                        }) {
+                            SettingsRow(icon: "star.fill", title: "Upgrade to Pro", color: .theme.accent, showChevron: true)
+                        }
+                    }
+                    
+                    // Restore purchases
                     Button(action: restorePurchases) {
                         HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text("Restore Purchases")
+                            SettingsRow(icon: "arrow.clockwise", title: "Restore Purchases")
+                            
                             if isRestoringPurchases {
                                 Spacer()
                                 ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
                             }
                         }
                     }
                     .disabled(isRestoringPurchases)
-                } else {
-                    Button(action: {
-                        subscriptionService.presentSubscriptionSheet()
-                    }) {
-                        Label("Upgrade to Pro", systemImage: "star.fill")
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+    
+    private var dataSection: some View {
+        SettingsSection(title: "Data & Challenges", icon: "tray.full.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Button(action: { showingDeleteChallengesConfirmation = true }) {
+                        SettingsRow(icon: "trash.fill", title: "Delete All Challenges", color: .red)
+                    }
+                    .disabled(isPerformingAction)
+                    
+                    if isPerformingAction {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                            Spacer()
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
-            } header: {
-                Text("Membership")
+                .padding(.vertical, 4)
             }
         }
     }
     
-    private var aboutContent: some View {
-        Group {
-            Section {
-                Link(destination: URL(string: "https://100days.site/privacy")!) {
-                    Label("Privacy Policy", systemImage: "hand.raised")
+    private var notificationsSection: some View {
+        SettingsSection(title: "Notifications", icon: "bell.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Notification Permission Status
+                    if !notificationService.isAuthorized {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Notifications Disabled")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            Text("Enable notifications to receive reminders for your challenges.")
+                                .font(.subheadline)
+                                .foregroundColor(.theme.subtext)
+                            
+                            Button("Enable Notifications") {
+                                requestNotificationPermission()
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.vertical, 10)
+                            .padding(.horizontal, 16)
+                            .background(Color.theme.accent)
+                            .cornerRadius(8)
+                            .padding(.top, 4)
+                        }
+                        .padding(.vertical, 4)
+                        
+                        Divider()
+                    }
+                    
+                    // Daily Reminder
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Daily Reminder")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                        
+                        Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
+                            .onChange(of: isDailyReminderEnabled) { oldValue, newValue in
+                                if newValue {
+                                    scheduleReminders()
+                                } else {
+                                    cancelReminders()
+                                }
+                            }
+                            .tint(.theme.accent)
+                            .disabled(!notificationService.isAuthorized)
+                        
+                        DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                            .datePickerStyle(.compact)
+                            .onChange(of: reminderTime) { oldValue, newValue in
+                                if isDailyReminderEnabled {
+                                    updateReminderTime()
+                                }
+                            }
+                            .tint(.theme.accent)
+                            .disabled(!notificationService.isAuthorized || !isDailyReminderEnabled)
+                    }
+                    .padding(.vertical, 4)
+                    
+                    Divider()
+                    
+                    // Streak Reminder
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Streak Reminder")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                        
+                        Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
+                            .onChange(of: isStreakReminderEnabled) { oldValue, newValue in
+                                if newValue {
+                                    scheduleStreakReminder()
+                                } else {
+                                    cancelStreakReminder()
+                                }
+                            }
+                            .tint(.theme.accent)
+                            .disabled(!notificationService.isAuthorized)
+                        
+                        Text("Get notified when you're about to break your streak")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                    }
+                    .padding(.vertical, 4)
+                    
+                    Divider()
+                    
+                    // Notification Settings
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Settings")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                        
+                        Toggle("Sound", isOn: $isSoundEnabled)
+                            .tint(.theme.accent)
+                            .disabled(!notificationService.isAuthorized)
+                        
+                        Toggle("Vibration", isOn: $isVibrationEnabled)
+                            .tint(.theme.accent)
+                            .disabled(!notificationService.isAuthorized)
+                    }
+                    .padding(.vertical, 4)
                 }
-                
-                Link(destination: URL(string: "https://100days.site/terms")!) {
-                    Label("Terms of Service", systemImage: "doc.text")
-                }
-                
-                HStack {
-                    Label("Version", systemImage: "info.circle")
-                    Spacer()
-                    Text("1.0.0")
-                        .foregroundColor(.gray)
-                }
-            } header: {
-                Text("About")
+                .padding(.vertical, 4)
             }
         }
     }
     
-    private func handleNotificationToggle(_ isEnabled: Bool) async {
-        do {
-            if isEnabled {
-                try await notificationService.scheduleDailyReminder()
-            } else {
-                notificationService.cancelAllNotifications()
+    private var appearanceSection: some View {
+        SettingsSection(title: "Appearance", icon: "paintpalette.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Theme")
+                        .font(.subheadline)
+                        .foregroundColor(.theme.subtext)
+                        .padding(.bottom, 4)
+                    
+                    // Simplified Picker to avoid type-checking complexity
+                    Picker("Theme", selection: $appTheme) {
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                        Text("System").tag("system")
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .onChange(of: appTheme) { oldValue, newValue in
+                        hapticFeedback()
+                    }
+                }
+                .padding(.vertical, 8)
             }
-        } catch {
-            errorMessage = error.localizedDescription
-            showingError = true
         }
     }
+    
+    private var communitySection: some View {
+        SettingsSection(title: "Community & Support", icon: "bubble.left.and.bubble.right.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Button(action: { showingShareSheet = true }) {
+                        SettingsRow(icon: "square.and.arrow.up", title: "Refer a Friend", showChevron: true)
+                    }
+                    
+                    Button(action: {
+                        if EmailComposer.canSendEmail() {
+                            showingEmailComposer = true
+                        } else {
+                            let encodedSubject = "100Days App Support".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                            if let url = URL(string: "mailto:support@100days.site?subject=\(encodedSubject)") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }) {
+                        SettingsRow(icon: "envelope.fill", title: "Contact Support", showChevron: true)
+                    }
+                    
+                    Button(action: {
+                        AppStoreHelper.openAppStoreReview()
+                    }) {
+                        SettingsRow(icon: "star.bubble.fill", title: "Rate on App Store", showChevron: true)
+                    }
+                    
+                    Button(action: {
+                        if let twitterURL = URL(string: "https://twitter.com/100daysapp") {
+                            UIApplication.shared.open(twitterURL)
+                        }
+                    }) {
+                        SettingsRow(icon: "bird.fill", title: "Follow Us on Twitter", showChevron: true)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+    
+    private var legalSection: some View {
+        SettingsSection(title: "Legal", icon: "doc.plaintext.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Link(destination: URL(string: "https://100days.site/privacy")!) {
+                        SettingsRow(icon: "hand.raised.fill", title: "Privacy Policy", showChevron: true)
+                    }
+                    
+                    Link(destination: URL(string: "https://100days.site/terms")!) {
+                        SettingsRow(icon: "doc.text.fill", title: "Terms of Service", showChevron: true)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+    }
+    
+    private var appInfoSection: some View {
+        SettingsSection(title: "App Info", icon: "info.circle.fill") {
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Version info
+                    InfoRow(title: "Version", value: getAppVersion())
+                    InfoRow(title: "Build", value: getBuildNumber())
+                    InfoRow(title: "Last Updated", value: getFormattedDate())
+                }
+                .padding(.vertical, 8)
+            }
+        }
+    }
+    
+    // MARK: - Helper Views
+    
+    private struct InfoRow: View {
+        let title: String
+        let value: String
+        
+        var body: some View {
+            HStack {
+                Text(title)
+                    .foregroundColor(.theme.subtext)
+                Spacer()
+                Text(value)
+                    .foregroundColor(.theme.text)
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func themeIcon(for theme: String) -> String {
+        switch theme {
+        case "light": return "sun.max.fill"
+        case "dark": return "moon.fill"
+        default: return "gearshape.fill"
+        }
+    }
+    
+    private func getEmailSupportBody() -> String {
+        """
+        
+        
+        ----------
+        Device: \(UIDevice.current.model)
+        iOS Version: \(UIDevice.current.systemVersion)
+        App Version: \(getAppVersion()) (\(getBuildNumber()))
+        ----------
+        """
+    }
+    
+    private func getAppVersion() -> String {
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+    
+    private func getBuildNumber() -> String {
+        return Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+    }
+    
+    private func getFormattedDate() -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: Date())
+    }
+    
+    private func hapticFeedback() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+    
+    // MARK: - Action Handlers
     
     private func handleSignOut() async {
-        await userSession.signOutWithoutThrowing()
+        isPerformingAction = true
+        
+        do {
+            try await userSession.signOut()
+            dismiss()
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to sign out: \(error.localizedDescription)"
+                showingError = true
+                isPerformingAction = false
+            }
+        }
     }
     
     private func restorePurchases() {
         isRestoringPurchases = true
+        
         Task {
             do {
-                try await subscriptionService.purchaseSubscription(plan: .monthly)
+                try await subscriptionService.restorePurchases()
+                
                 await MainActor.run {
                     isRestoringPurchases = false
+                    successMessage = "Purchases restored successfully"
+                    showSuccessMessage = true
                 }
             } catch {
                 await MainActor.run {
@@ -216,24 +575,222 @@ struct SettingsView: View {
     }
     
     private func handleDeleteAccount() async {
+        isPerformingAction = true
+        
         do {
-            // Use the UserSession method that handles both Auth and Firestore data deletion
             try await userSession.deleteAccount()
-            
-            await MainActor.run {
-                errorMessage = ""
-                showingError = false
-                // Close the settings view after successful deletion
-                dismiss()
-            }
+            dismiss()
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
                 showingError = true
+                isPerformingAction = false
+            }
+        }
+    }
+    
+    private func handleDeleteAllChallenges() async {
+        guard let userId = userSession.currentUser?.uid else {
+            errorMessage = "You must be signed in to delete challenges"
+            showingError = true
+            return
+        }
+        
+        isPerformingAction = true
+        
+        do {
+            try await ChallengeService.shared.deleteAllChallenges(userId: userId)
+            
+            await MainActor.run {
+                isPerformingAction = false
+                successMessage = "All challenges deleted successfully"
+                showSuccessMessage = true
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to delete challenges: \(error.localizedDescription)"
+                showingError = true
+                isPerformingAction = false
+            }
+        }
+    }
+    
+    // MARK: - Notification Helpers
+    
+    private func syncWithNotificationService() {
+        // Get notification settings from the service
+        isDailyReminderEnabled = notificationService.isDailyReminderEnabled
+        isStreakReminderEnabled = notificationService.isStreakReminderEnabled
+        reminderTime = notificationService.reminderTime
+        isSoundEnabled = UserDefaults.standard.bool(forKey: "NotificationSoundEnabled")
+        isVibrationEnabled = UserDefaults.standard.bool(forKey: "NotificationVibrationEnabled")
+        
+        // If they have default values, initialize them
+        if UserDefaults.standard.object(forKey: "NotificationSoundEnabled") == nil {
+            isSoundEnabled = true
+            UserDefaults.standard.set(true, forKey: "NotificationSoundEnabled")
+        }
+        
+        if UserDefaults.standard.object(forKey: "NotificationVibrationEnabled") == nil {
+            isVibrationEnabled = true
+            UserDefaults.standard.set(true, forKey: "NotificationVibrationEnabled")
+        }
+    }
+    
+    private func requestNotificationPermission() {
+        Task {
+            do {
+                let authorized = try await notificationService.requestNotificationPermission()
+                if !authorized {
+                    showingPermissionAlert = true
+                }
+            } catch {
+                errorMessage = "Could not request notification permissions: \(error.localizedDescription)"
+                showingError = true
+            }
+        }
+    }
+    
+    private func scheduleReminders() {
+        Task {
+            do {
+                try await notificationService.scheduleDailyReminder()
+                UserDefaults.standard.set(true, forKey: "isDailyReminderEnabled")
+                notificationService.isDailyReminderEnabled = true
+            } catch {
+                errorMessage = "Could not schedule reminder: \(error.localizedDescription)"
+                showingError = true
+                isDailyReminderEnabled = false
+            }
+        }
+    }
+    
+    private func updateReminderTime() {
+        Task {
+            do {
+                try await notificationService.updateReminderTime(reminderTime)
+                // Save user preference
+                notificationService.reminderTime = reminderTime
+            } catch {
+                errorMessage = "Could not update reminder time: \(error.localizedDescription)"
+                showingError = true
+            }
+        }
+    }
+    
+    private func cancelReminders() {
+        Task {
+            try? await notificationService.cancelDailyReminder()
+            UserDefaults.standard.set(false, forKey: "isDailyReminderEnabled")
+            notificationService.isDailyReminderEnabled = false
+        }
+    }
+    
+    private func scheduleStreakReminder() {
+        Task {
+            do {
+                try await notificationService.scheduleStreakReminder()
+                UserDefaults.standard.set(true, forKey: "isStreakReminderEnabled")
+                notificationService.isStreakReminderEnabled = true
+            } catch {
+                errorMessage = "Could not schedule streak reminder: \(error.localizedDescription)"
+                showingError = true
+                isStreakReminderEnabled = false
+            }
+        }
+    }
+    
+    private func cancelStreakReminder() {
+        Task {
+            notificationService.cancelStreakReminder()
+            UserDefaults.standard.set(false, forKey: "isStreakReminderEnabled")
+            notificationService.isStreakReminderEnabled = false
+        }
+    }
+}
+
+// MARK: - Supporting Views
+
+/// A styled section header for the settings page
+struct SettingsSection<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.theme.accent)
+                    .font(.system(size: 18, weight: .semibold))
+                
+                Text(title)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+            }
+            .padding(.horizontal, 4)
+            
+            content
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+/// A styled card container for settings content
+struct SettingsCard<Content: View>: View {
+    let content: Content
+    
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+    
+    var body: some View {
+        content
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 10, x: 0, y: 4)
+            )
+    }
+}
+
+/// A styled row for settings options
+struct SettingsRow: View {
+    let icon: String
+    let title: String
+    var color: Color = .theme.text
+    var showChevron: Bool = false
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .frame(width: 24)
+            
+            Text(title)
+                .foregroundColor(color)
+            
+            Spacer()
+            
+            if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color.theme.subtext.opacity(0.6))
             }
         }
     }
 }
+
+// MARK: - Change Email/Password Views
 
 struct ChangeEmailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -261,17 +818,26 @@ struct ChangeEmailView: View {
                 
                 Section {
                     Button(action: updateEmail) {
+                        HStack {
+                            Spacer()
+                            
                         if isUpdating {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle())
                         } else {
                             Text("Update Email")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.theme.accent)
+                            }
+                            
+                            Spacer()
                         }
                     }
                     .disabled(newEmail.isEmpty || password.isEmpty || isUpdating)
                 }
             }
             .navigationTitle("Change Email")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(trailing: Button("Cancel") { dismiss() })
             .alert("Error", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}
@@ -338,17 +904,26 @@ struct ChangePasswordView: View {
                 
                 Section {
                     Button(action: updatePassword) {
+                        HStack {
+                            Spacer()
+                            
                         if isUpdating {
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle())
                         } else {
                             Text("Update Password")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.theme.accent)
+                            }
+                            
+                            Spacer()
                         }
                     }
                     .disabled(currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty || isUpdating)
                 }
             }
             .navigationTitle("Change Password")
+            .navigationBarTitleDisplayMode(.inline)
             .navigationBarItems(trailing: Button("Cancel") { dismiss() })
             .alert("Error", isPresented: $showingError) {
                 Button("OK", role: .cancel) {}

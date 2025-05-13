@@ -36,8 +36,11 @@ class SocialViewModel: ObservableObject {
     @Published private(set) var friends: [Friend] = []
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
+    @Published var showError = false
+    @Published var errorMessage = ""
     
     private let socialService = SocialService.shared
+    private let subscriptionService = SubscriptionService.shared
     
     init() {
         self.state = SocialState()
@@ -46,20 +49,20 @@ class SocialViewModel: ObservableObject {
     func handle(_ action: SocialAction) {
         switch action {
         case .loadFriends:
-            // TODO: Implement friends loading
+            // Implementation pending
             break
         case .addFriend:
-            // TODO: Implement friend addition
+            // Implementation pending
             break
         case .removeFriend(let friendId):
-            // TODO: Implement friend removal using friendId
+            // Implementation pending
             print("Will remove friend with ID: \(friendId)")
             break
         case .loadActivityFeed:
-            // TODO: Implement activity feed loading
+            // Implementation pending
             break
         case .shareProgress:
-            // TODO: Implement progress sharing
+            // Implementation pending
             break
         }
     }
@@ -71,48 +74,87 @@ class SocialViewModel: ObservableObject {
         do {
             friends = try await socialService.fetchFriends()
         } catch {
-            self.error = error
+            handleError(error)
         }
     }
     
     func sendFriendRequest(to userId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
             try await socialService.sendFriendRequest(to: userId)
         } catch {
-            self.error = error
+            handleError(error)
         }
     }
     
     func acceptFriendRequest(from userId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
             try await socialService.acceptFriendRequest(from: userId)
             await loadFriends()
         } catch {
-            self.error = error
+            handleError(error)
         }
     }
     
     func createGroupChallenge(title: String, participants: [String]) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
             try await socialService.createGroupChallenge(title: title, participants: participants)
         } catch {
-            self.error = error
+            handleError(error)
         }
     }
     
     func joinGroupChallenge(challengeId: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
             try await socialService.joinGroupChallenge(challengeId: challengeId)
         } catch {
-            self.error = error
+            handleError(error)
         }
     }
     
     func shareMilestone(challengeId: String, message: String) async {
+        isLoading = true
+        defer { isLoading = false }
+        
         do {
             try await socialService.shareMilestone(challengeId: challengeId, message: message)
         } catch {
-            self.error = error
+            handleError(error)
+        }
+    }
+    
+    // Handles and displays errors to the user
+    private func handleError(_ error: Error) {
+        self.error = error
+        
+        if let socialError = error as? SocialError {
+            switch socialError {
+            case .friendLimitReached, .proFeatureRequired:
+                // These errors will trigger the paywall in the service layer
+                errorMessage = socialError.localizedDescription
+                showError = true
+            case .networkError, .notFound:
+                errorMessage = socialError.localizedDescription
+                showError = true
+            }
+        } else if let proError = error as? ProFeatureError {
+            errorMessage = proError.localizedDescription
+            showError = true
+            subscriptionService.showPaywall = true
+        } else {
+            errorMessage = "An error occurred: \(error.localizedDescription)"
+            showError = true
         }
     }
 } 
