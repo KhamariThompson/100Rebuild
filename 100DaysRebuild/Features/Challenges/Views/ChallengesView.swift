@@ -1,4 +1,10 @@
 import SwiftUI
+import Firebase
+import FirebaseFirestore
+import Combine
+
+// Using canonical Challenge model
+// (No import needed as it will be accessed directly)
 
 struct ChallengesView: View {
     @StateObject private var viewModel = ChallengesViewModel()
@@ -8,6 +14,12 @@ struct ChallengesView: View {
     @State private var challengeToEdit: Challenge?
     @State private var isShowingCheckInSheet = false
     @State private var challengeToCheckIn: Challenge?
+    @State private var isCheckingIn = false
+    @State private var checkInError: String?
+    @State private var offlineCheckInQueued = false
+    @State private var showSuccessToast = false
+    @State private var showOfflineToast = false
+    @State private var showErrorAlert = false
     
     var body: some View {
         contentView
@@ -40,12 +52,12 @@ struct ChallengesView: View {
                     .environmentObject(notificationService)
             }
         }
-        .sheet(isPresented: $isShowingCheckInSheet, onDismiss: {
-            challengeToCheckIn = nil
-        }) {
+        .sheet(isPresented: $isShowingCheckInSheet) {
             if let challenge = challengeToCheckIn {
-                CheckInSheet(viewModel: viewModel, challenge: challenge)
-                    .environmentObject(subscriptionService)
+                EnhancedCheckInView(
+                    challengesViewModel: viewModel,
+                    challenge: challenge
+                )
             }
         }
         .alert("Error", isPresented: $viewModel.showError) {
@@ -56,9 +68,9 @@ struct ChallengesView: View {
         .onAppear {
             Task {
                 await viewModel.loadChallenges()
+                await viewModel.loadUserProfile()
             }
         }
-        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     private var contentView: some View {
@@ -74,15 +86,29 @@ struct ChallengesView: View {
     }
     
     private var loadingView: some View {
-        ProgressView()
-            .overlay(
-                Text("Loading challenges...")
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(.theme.accent)
+            
+            Text("Loading challenges...")
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.theme.background)
     }
     
     private var emptyStateView: some View {
         VStack(spacing: 16) {
+            GreetingView(viewModel: viewModel)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            
+            FliqloTimerView(viewModel: viewModel)
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+            
             Image(systemName: "flag.fill")
                 .font(.system(size: 70))
                 .foregroundColor(.theme.accent.opacity(0.7))
@@ -121,12 +147,24 @@ struct ChallengesView: View {
                 OfflineBanner()
             }
             
-            List {
-                ForEach(viewModel.challenges) { challenge in
-                    challengeCardView(challenge)
+            ScrollView {
+                VStack(spacing: 24) {
+                    GreetingView(viewModel: viewModel)
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+                    
+                    FliqloTimerView(viewModel: viewModel)
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                    
+                    LazyVStack(spacing: 16) {
+                        ForEach(viewModel.challenges) { challenge in
+                            challengeCardView(challenge)
+                        }
+                    }
+                    .padding(.horizontal)
                 }
             }
-            .listStyle(.plain)
         }
     }
     
@@ -142,8 +180,7 @@ struct ChallengesView: View {
                 }
             }
         )
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
+        .padding(.bottom, 4)
         .contentShape(Rectangle())
         .contextMenu {
             Button {
@@ -270,104 +307,6 @@ struct NewChallengeSheet: View {
     }
 }
 
-struct CheckInSheet: View {
-    @ObservedObject var viewModel: ChallengesViewModel
-    let challenge: Challenge
-    @Environment(\.dismiss) private var dismiss
-    @State private var note: String = ""
-    @State private var showSuccessAnimation = false
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Daily Check-In")) {
-                    Text(challenge.title)
-                        .font(.headline)
-                        .foregroundColor(.theme.text)
-                        .padding(.vertical, 4)
-                    
-                    HStack {
-                        Text("Day \(challenge.daysCompleted + 1) of 100")
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                        
-                        Spacer()
-                        
-                        Text("Current streak: \(challenge.streakCount) days")
-                            .font(.caption)
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-                
-                Section(header: Text("Notes (Optional)")) {
-                    TextEditor(text: $note)
-                        .frame(minHeight: 100)
-                        .padding(4)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.theme.subtext.opacity(0.3), lineWidth: 1)
-                        )
-                        .overlay(
-                            Group {
-                                if note.isEmpty {
-                                    Text("Add a note about today's progress...")
-                                        .foregroundColor(.theme.subtext.opacity(0.6))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 12)
-                                        .allowsHitTesting(false)
-                                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                }
-                            }
-                        )
-                }
-                
-                Section {
-                    Button(action: {
-                        // Perform check-in
-                        Task {
-                            await viewModel.checkIn(to: challenge, note: note)
-                            showSuccessAnimation = true
-                            
-                            // Dismiss after a brief delay to show success animation
-                            try? await Task.sleep(for: .seconds(1.5))
-                            dismiss()
-                        }
-                    }) {
-                        HStack {
-                            Spacer()
-                            if showSuccessAnimation {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.white)
-                                Text("Success!")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                            } else {
-                                Text("Complete Check-In")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                            }
-                            Spacer()
-                        }
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(showSuccessAnimation ? Color.green : Color.theme.accent)
-                        )
-                        .animation(.spring, value: showSuccessAnimation)
-                    }
-                }
-            }
-            .navigationTitle("Check In")
-            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
-            .alert("Error", isPresented: $viewModel.showError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(viewModel.errorMessage)
-            }
-        }
-    }
-}
-
 struct EditChallengeSheet: View {
     @ObservedObject var viewModel: ChallengesViewModel
     let challenge: Challenge
@@ -463,6 +402,175 @@ struct EditChallengeSheet: View {
             } message: {
                 Text(viewModel.errorMessage)
             }
+        }
+    }
+}
+
+struct GreetingView: View {
+    @ObservedObject var viewModel: ChallengesViewModel
+    
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(viewModel.getGreeting())
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .minimumScaleFactor(0.7)
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            // Time of day icon
+            ZStack {
+                Circle()
+                    .fill(timeOfDayGradient)
+                    .frame(width: 50, height: 50)
+                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 3)
+                
+                Text(viewModel.currentTimeOfDay.emoji)
+                    .font(.system(size: 24))
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .background(Color.theme.background)
+        .transition(.opacity)
+    }
+    
+    private var timeOfDayGradient: LinearGradient {
+        switch viewModel.currentTimeOfDay {
+        case .morning:
+            return LinearGradient(
+                gradient: Gradient(colors: [Color.orange.opacity(0.7), Color.yellow.opacity(0.5)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .afternoon:
+            return LinearGradient(
+                gradient: Gradient(colors: [Color.blue.opacity(0.6), Color.cyan.opacity(0.4)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .evening:
+            return LinearGradient(
+                gradient: Gradient(colors: [Color.indigo.opacity(0.6), Color.purple.opacity(0.4)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+}
+
+struct FliqloTimerView: View {
+    @ObservedObject var viewModel: ChallengesViewModel
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if viewModel.lastCheckInDate == nil {
+                Text("You haven't checked in yet — today's your Day 1.")
+                    .font(.headline)
+                    .foregroundColor(.theme.accent)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.theme.accent)
+                        
+                        Text("Since your last check-in")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                    }
+                    
+                    if let lastCheckIn = viewModel.lastCheckInDate {
+                        Text("Last check-in: \(formattedDate(lastCheckIn))")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                            .padding(.bottom, 4)
+                    }
+                    
+                    // Use TimelineView to update every second
+                    TimelineView(.animation(minimumInterval: 1, paused: false)) { _ in
+                        ModernFlipClockView(timeString: viewModel.formattedTimeSinceLastCheckIn())
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 5)
+        )
+    }
+    
+    private func formattedDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+struct ModernFlipClockView: View {
+    var timeString: String
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            // Parse the timeString (format: "Xh Ym Zs")
+            let components = timeString.components(separatedBy: " ")
+            
+            ForEach(0..<components.count, id: \.self) { index in
+                let component = components[index]
+                let isValue = component.dropLast().allSatisfy { $0.isNumber }
+                
+                if isValue {
+                    // This is a number component (with unit suffix like 'h', 'm', 's')
+                    let digitPart = String(component.dropLast())
+                    let unitPart = String(component.suffix(1))
+                    
+                    VStack(spacing: 4) {
+                        // Create flip panel for the digit
+                        Text(digitPart)
+                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundColor(.theme.text)
+                            .frame(minWidth: 60)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.theme.surface,
+                                                Color.theme.surface.opacity(0.9)
+                                            ]),
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                    .shadow(color: Color.black.opacity(0.05), radius: 3, x: 0, y: 2)
+                            )
+                        
+                        // Unit label
+                        Text(unitLabel(for: unitPart))
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.theme.subtext)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func unitLabel(for unit: String) -> String {
+        switch unit {
+        case "h": return "hours"
+        case "m": return "minutes"
+        case "s": return "seconds"
+        default: return unit
         }
     }
 }
