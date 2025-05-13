@@ -5,8 +5,8 @@ import FirebaseAuth
 import Foundation
 
 // Always be explicit about UserProgressViewModel type to avoid ambiguity
-// Updated to reference UserProgressViewModelImpl to avoid conflicts
-typealias UPViewModel = UserProgressViewModelImpl
+// Updated to reference ProgressDashboardViewModel to avoid conflicts
+typealias UPViewModel = ProgressDashboardViewModel
 
 // Define the models needed for the view - renamed to avoid conflicts
 struct ProgressViewChallenge {

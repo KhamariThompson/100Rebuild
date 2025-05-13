@@ -367,7 +367,7 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
 
 // MARK: - UPViewModel Implementation
 @MainActor
-class UserProgressViewModelImpl: ObservableObject {
+class ProgressDashboardViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var hasData = false
     @Published var errorMessage: String?
