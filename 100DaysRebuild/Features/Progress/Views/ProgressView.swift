@@ -815,9 +815,9 @@ class UserProgressViewModel: ObservableObject {
 }
 
 // MARK: - Preview
-struct UserProgressDashboardView_Previews: PreviewProvider {
+struct ProgressView_Previews: PreviewProvider {
     static var previews: some View {
-        UserProgressDashboardView()
+        ProgressView()
             .environmentObject(SubscriptionService.shared)
             .environmentObject(NotificationService.shared)
     }
