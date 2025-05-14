@@ -64,7 +64,7 @@ struct ProgressDailyCheckIn: Identifiable {
 
 // MARK: - Main View
 struct ProgressView: View {
-    @StateObject private var viewModel = UPViewModel()
+    @EnvironmentObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     
@@ -73,11 +73,6 @@ struct ProgressView: View {
             ProgressContentView(viewModel: viewModel)
                 .background(Color.theme.background.ignoresSafeArea())
                 .navigationTitle("Progress")
-                .onAppear {
-                    Task {
-                        await viewModel.loadData()
-                    }
-                }
         }
     }
 }
@@ -620,7 +615,7 @@ class UserProgressViewModel: ObservableObject {
                                 isCompletedToday = false
                             }
                             
-                            let challenge = Challenge(
+                            let challenge = try Challenge(
                                 id: challengeId,
                                 title: title,
                                 startDate: startDate,
@@ -663,6 +658,9 @@ class UserProgressViewModel: ObservableObject {
                     }
                     
                     do {
+                        // Validate the challenge data
+                        try validateChallengeData(challenge)
+                        
                         let checkInsRef = firestore
                             .collection("users")
                             .document(userId)
@@ -811,6 +809,47 @@ class UserProgressViewModel: ObservableObject {
         }
         
         return badges
+    }
+    
+    /// Validates the challenge data to ensure it's properly formatted
+    /// - Parameter challenge: The challenge to validate
+    /// - Throws: Error if the challenge data is invalid
+    private func validateChallengeData(_ challenge: Challenge) throws {
+        // Validate the challenge ID
+        guard challenge.id != UUID.init(uuid: UUID_NULL) else {
+            throw NSError(domain: "ProgressViewModel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid challenge ID"])
+        }
+        
+        // Validate the title
+        guard !challenge.title.isEmpty else {
+            throw NSError(domain: "ProgressViewModel", code: 2, userInfo: [NSLocalizedDescriptionKey: "Challenge title is empty"])
+        }
+        
+        // Validate date constraints
+        let startDate = challenge.startDate
+        let endDate = challenge.endDate
+        
+        // End date should be after start date
+        guard endDate > startDate else {
+            throw NSError(domain: "ProgressViewModel", code: 3, userInfo: [NSLocalizedDescriptionKey: "Invalid date range for challenge"])
+        }
+            
+        // Duration should be reasonable (between 1 and 365 days)
+        let daysBetween = Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 0
+        guard daysBetween >= 1 && daysBetween <= 365 else {
+            throw NSError(domain: "ProgressViewModel", code: 4, userInfo: [NSLocalizedDescriptionKey: "Challenge duration is invalid"])
+        }
+        
+        // Validate completion status consistency
+        if challenge.isCompleted {
+            guard challenge.daysCompleted == 100 else {
+                throw NSError(domain: "ProgressViewModel", code: 5, userInfo: [NSLocalizedDescriptionKey: "Completion status inconsistency"])
+            }
+        }
+    }
+    
+    func cancelTasks() {
+        loadTask?.cancel()
     }
 }
 

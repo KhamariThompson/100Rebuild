@@ -14,6 +14,14 @@ class SubscriptionService: ObservableObject {
     @Published var errorLoadingOfferings = false
     @Published var offeringsLoaded = false
     
+    // Flag to disable purchases during App Review
+    // Set to false for release builds when products are in "Waiting for Review" status
+    #if DEBUG
+    @Published var isPurchasingEnabled = true
+    #else
+    @Published var isPurchasingEnabled = true // Set to false for App Store submissions until products are approved
+    #endif
+    
     // RevenueCat API key
     private var apiKey: String {
         // Production SDK API key (not secret key)

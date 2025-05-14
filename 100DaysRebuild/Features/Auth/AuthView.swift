@@ -493,9 +493,9 @@ private extension AuthView {
                 onCompletion: handleAppleSignIn
             )
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.vertical, 8)
             .disabled(!viewModel.networkConnected)
         }
     }

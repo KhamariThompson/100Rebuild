@@ -115,6 +115,7 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
     private var loadTask: Task<Void, Never>?
     private let maxRetries = 3
     private let retryDelay: TimeInterval = 2.0
+    @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
     
     deinit {
         loadTask?.cancel()
@@ -187,6 +188,16 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
             }
             
             do {
+                // First, use the UserStatsService to fetch progress data
+                let overallProgress = await MainActor.run {
+                    let statsService = UserStatsService.shared
+                    Task {
+                        await statsService.fetchUserStats()
+                    }
+                    return statsService.userStats.overallCompletionPercentage
+                }
+                
+                // We still need to load challenges to extract milestones
                 // Configure Firestore for this specific request
                 let db = self.firestore
                 
@@ -196,9 +207,6 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
                     timeoutTask.cancel()
                     return 
                 }
-                
-                // Calculate overall progress
-                let overallProgress = self.calculateOverallProgress(challenges)
                 
                 // Convert significant milestones to our data model
                 let milestones = self.extractMilestones(from: challenges)
@@ -309,6 +317,8 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         return challenges
     }
     
+    // This function is kept for historical milestone extraction, but now the overall progress 
+    // comes from the centralized UserStatsService
     private func calculateOverallProgress(_ challenges: [ProgressChallenge]) -> Double {
         guard !challenges.isEmpty else { return 0.0 }
         
@@ -373,14 +383,7 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isNetworkConnected = true
     
-    // Free tier metrics
-    @Published var totalChallenges = 0
-    @Published var currentStreak = 0
-    @Published var longestStreak = 0
-    @Published var completionPercentage: Double = 0.0
-    @Published var lastCheckInDate: Date? = nil
-    
-    // Pro tier data
+    // State variables
     @Published var activityData: [Date] = []
     @Published var challengeProgressData: [ProgressChallengeItem] = []
     @Published var dailyCheckInsData: [ProgressDailyCheckIn] = []
@@ -391,12 +394,56 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var journeyCards: [JourneyCard] = []
     @Published var recentPhotosNotes: [(photo: URL?, note: String, dayNumber: Int, date: Date)] = []
     
-    // Firestore reference
+    // Dependencies
     private let firestore = Firestore.firestore()
-    private var loadTask: Task<Void, Never>?
+    @MainActor private var loadTask: Task<Void, Never>?
+    @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
+    
+    // Computed properties that get data from the centralized UserStatsService
+    var totalChallenges: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.totalChallenges 
+    }
+    var currentStreak: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.currentStreak 
+    }
+    var longestStreak: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.longestStreak 
+    }
+    var completionPercentage: Double { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.overallCompletionPercentage 
+    }
+    var lastCheckInDate: Date? { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.lastCheckInDate 
+    }
     
     deinit {
-        loadTask?.cancel()
+        cancelTaskOnly()
+        print("ProgressDashboardViewModel deinit - tasks cancelled")
+    }
+    
+    // Non-isolated method for deinit to use
+    nonisolated func cancelTaskOnly() {
+        Task { @MainActor in
+            loadTask?.cancel()
+            loadTask = nil
+        }
+    }
+    
+    // Main actor method for UI updates
+    @MainActor
+    func cancelTasks() {
+        cancelTaskOnly()
+        
+        // Ensure we update the loading state
+        if isLoading {
+            isLoading = false
+            print("ProgressDashboardViewModel - Cancelled tasks and reset loading state")
+        }
     }
     
     func loadData(forceRefresh: Bool = false) async {
@@ -405,7 +452,7 @@ class ProgressDashboardViewModel: ObservableObject {
         }
         
         // Cancel any previous loading task
-        loadTask?.cancel()
+        cancelTasks()
         
         loadTask = Task { [weak self] in
             guard let self = self else { return }
@@ -413,12 +460,23 @@ class ProgressDashboardViewModel: ObservableObject {
             await MainActor.run {
                 self.isLoading = true
                 self.errorMessage = nil
+                print("ProgressDashboardViewModel - Starting data load")
+            }
+            
+            // First, load centralized stats
+            await MainActor.run {
+                Task {
+                    await userStatsService.fetchUserStats()
+                }
             }
             
             // Simple delay to simulate data loading
             try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
             
-            if Task.isCancelled { return }
+            if Task.isCancelled { 
+                print("ProgressDashboardViewModel - Task was cancelled during delay")
+                return 
+            }
             
             // Check if the user is logged in
             guard Auth.auth().currentUser != nil else {
@@ -433,12 +491,14 @@ class ProgressDashboardViewModel: ObservableObject {
             // Generate some sample data for immediate display
             let sampleData = self.generateSampleData()
             
+            // Check for cancellation before updating UI
+            if Task.isCancelled {
+                print("ProgressDashboardViewModel - Task was cancelled before UI update")
+                return
+            }
+            
             await MainActor.run {
-                // Set the sample data
-                self.totalChallenges = sampleData.totalChallenges
-                self.currentStreak = sampleData.currentStreak
-                self.longestStreak = sampleData.longestStreak
-                self.completionPercentage = sampleData.completionPercentage
+                // Only set supplementary data that isn't provided by UserStatsService
                 self.journeyCards = sampleData.journeyCards
                 self.dateIntensityMap = sampleData.dateIntensityMap
                 self.dailyCheckInsData = sampleData.dailyCheckInsData
@@ -449,15 +509,12 @@ class ProgressDashboardViewModel: ObservableObject {
                 // Mark as loaded with data
                 self.hasData = true
                 self.isLoading = false
+                print("ProgressDashboardViewModel - Data load complete")
             }
         }
     }
     
     private func generateSampleData() -> (
-        totalChallenges: Int,
-        currentStreak: Int,
-        longestStreak: Int,
-        completionPercentage: Double,
         journeyCards: [JourneyCard],
         dateIntensityMap: [Date: Int],
         dailyCheckInsData: [ProgressDailyCheckIn],
@@ -465,70 +522,58 @@ class ProgressDashboardViewModel: ObservableObject {
         currentPace: String,
         earnedBadges: [ProgressBadge]
     ) {
-        // Generate some reasonable sample data
-        let totalChallenges = Int.random(in: 1...3)
-        let currentStreak = Int.random(in: 1...15)
-        let longestStreak = max(currentStreak, Int.random(in: 10...30))
-        let completionPercentage = Double.random(in: 0.1...0.6)
+        // Generate some sample journey cards
+        let journeyCards: [JourneyCard] = [
+            JourneyCard(type: .milestone(
+                message: "First Challenge",
+                emoji: "flag.fill",
+                dayNumber: nil,
+                date: Date().addingTimeInterval(-30*24*60*60)
+            )),
+            JourneyCard(type: .milestone(
+                message: "One Week Streak",
+                emoji: "flame.fill",
+                dayNumber: nil,
+                date: Date().addingTimeInterval(-14*24*60*60)
+            ))
+        ]
         
-        // Journey cards
-        var journeyCards: [JourneyCard] = []
-        
-        // Add milestone cards
-        for i in 1...5 {
-            let dayNumber = i * 10
-            let daysAgo = 30 - (i * 5)
-            let date = Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
-            journeyCards.append(JourneyCard.milestoneCard(dayNumber: dayNumber, date: date))
-        }
-        
-        // Heat map data
+        // Generate sample date intensity map (for heat map)
         var dateIntensityMap: [Date: Int] = [:]
-        for i in 0..<30 {
+        for i in 0..<90 {
             if Bool.random() && i % 3 != 0 {
-                let date = Calendar.current.date(byAdding: .day, value: -i, to: Date()) ?? Date()
-                let startOfDay = Calendar.current.startOfDay(for: date)
-                dateIntensityMap[startOfDay] = Int.random(in: 1...3)
+                let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
+                dateIntensityMap[date] = Int.random(in: 1...3)
             }
         }
         
-        // Daily check-ins for graph
-        var dailyCheckInsData: [ProgressDailyCheckIn] = []
-        for i in 0..<7 {
-            let date = Calendar.current.date(byAdding: .day, value: -i, to: Date()) ?? Date()
-            let count = Int.random(in: 0...3)
-            dailyCheckInsData.append(ProgressDailyCheckIn(date: date, count: count))
-        }
+        // Generate sample daily check-ins
+        let dailyCheckIns: [ProgressDailyCheckIn] = [
+            ProgressDailyCheckIn(date: Date().addingTimeInterval(-1*24*60*60), count: 1),
+            ProgressDailyCheckIn(date: Date().addingTimeInterval(-2*24*60*60), count: 1),
+            ProgressDailyCheckIn(date: Date().addingTimeInterval(-4*24*60*60), count: 2),
+            ProgressDailyCheckIn(date: Date().addingTimeInterval(-5*24*60*60), count: 1)
+        ]
         
-        // Projected completion
-        let projectedCompletionDate = Calendar.current.date(byAdding: .day, value: Int.random(in: 30...90), to: Date())
-        let currentPace = String(format: "%.1f days/week", Double.random(in: 3.0...6.5))
+        // Generate sample projected completion date
+        let projectedDate = Calendar.current.date(byAdding: .day, value: 45, to: Date())
         
-        // Badges
-        var earnedBadges: [ProgressBadge] = []
-        earnedBadges.append(ProgressBadge(id: 1, title: "7-Day Streak", iconName: "flame.fill"))
+        // Sample current pace
+        let pace = "4.5 days/week"
         
-        if longestStreak >= 14 {
-            earnedBadges.append(ProgressBadge(id: 2, title: "14-Day Streak", iconName: "flame.fill"))
-        }
-        
-        earnedBadges.append(ProgressBadge(id: 3, title: "First Challenge", iconName: "flag.fill"))
-        
-        if completionPercentage >= 0.25 {
-            earnedBadges.append(ProgressBadge(id: 4, title: "25% Complete", iconName: "chart.bar.fill"))
-        }
+        // Sample badges
+        let badges: [ProgressBadge] = [
+            ProgressBadge(id: 1, title: "First Day", iconName: "checkmark.circle.fill"),
+            ProgressBadge(id: 2, title: "Week Streak", iconName: "flame.fill")
+        ]
         
         return (
-            totalChallenges: totalChallenges,
-            currentStreak: currentStreak,
-            longestStreak: longestStreak,
-            completionPercentage: completionPercentage,
             journeyCards: journeyCards,
             dateIntensityMap: dateIntensityMap,
-            dailyCheckInsData: dailyCheckInsData,
-            projectedCompletionDate: projectedCompletionDate,
-            currentPace: currentPace,
-            earnedBadges: earnedBadges
+            dailyCheckInsData: dailyCheckIns,
+            projectedCompletionDate: projectedDate,
+            currentPace: pace,
+            earnedBadges: badges
         )
     }
 } 

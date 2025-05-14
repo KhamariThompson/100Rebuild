@@ -52,28 +52,51 @@ extension UIImage {
 struct ProfilePictureView: View {
     let url: URL?
     let size: CGFloat
+    @State private var imageLoadingError = false
+    
+    // Configure URLCache for profile images
+    private static let imageCache: URLCache = {
+        let cacheSizeMemory = 50 * 1024 * 1024 // 50 MB memory cache
+        let cacheSizeDisk = 100 * 1024 * 1024  // 100 MB disk cache
+        let cache = URLCache(memoryCapacity: cacheSizeMemory, diskCapacity: cacheSizeDisk, diskPath: "profile_images")
+        return cache
+    }()
     
     var body: some View {
-        AsyncImage(url: url) { phase in
+        AsyncImage(url: url, urlCache: Self.imageCache) { phase in
             switch phase {
             case .empty:
-                ProgressView()
-                    .frame(width: size, height: size)
+                ZStack {
+                    Circle()
+                        .fill(Color.theme.surface)
+                        .frame(width: size, height: size)
+                    
+                    ProgressView()
+                        .frame(width: size, height: size)
+                }
             case .success(let image):
                 image
                     .resizable()
                     .scaledToFill()
                     .circularAvatarStyle(size: size)
+                    .onAppear {
+                        imageLoadingError = false
+                    }
             case .failure:
                 Image(systemName: "person.circle.fill")
                     .font(.system(size: size))
                     .foregroundColor(.theme.accent)
+                    .onAppear {
+                        imageLoadingError = true
+                        print("Failed to load profile image: \(url?.absoluteString ?? "nil")")
+                    }
             @unknown default:
                 Image(systemName: "person.circle.fill")
                     .font(.system(size: size))
                     .foregroundColor(.theme.accent)
             }
         }
+        .transition(.opacity.combined(with: .scale))
     }
 }
 
@@ -85,25 +108,48 @@ extension AsyncImage {
     }
 }
 
+// MARK: - AsyncImage with URLCache
+extension AsyncImage where Content: View {
+    init(
+        url: URL?,
+        urlCache: URLCache? = nil,
+        @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
+    ) {
+        if let urlCache = urlCache, let url = url {
+            let config = URLSessionConfiguration.default
+            config.urlCache = urlCache
+            let session = URLSession(configuration: config)
+            
+            var urlRequest = URLRequest(url: url)
+            // Cache for up to one day
+            urlRequest.cachePolicy = .returnCacheDataElseLoad
+            
+            self.init(url: url, transaction: Transaction(animation: .easeInOut)) { phase in
+                content(phase)
+            }
+        } else {
+            self.init(url: url) { phase in
+                content(phase)
+            }
+        }
+    }
+}
+
 // MARK: - View Extensions for Fallback Images
 extension Image {
-    /// Creates a fallback view for AppIconRounded
+    /// Creates a properly fallbacked app icon view regardless of whether AppIconRounded exists
     static func appIconWithFallback(size: CGFloat = 80) -> some View {
+        // Try each option in sequence with guaranteed fallbacks
         Group {
-            if let _ = UIImage(named: "AppIconRounded") {
-                Image("AppIconRounded")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: size, height: size)
-                    .cornerRadius(size * 0.2)
-            } else if let _ = UIImage(named: "AppIcon") {
+            if let _ = UIImage(named: "AppIcon") {
+                // Use AppIcon if available (this should always be available)
                 Image("AppIcon")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
                     .cornerRadius(size * 0.2)
             } else {
-                // Ultimate fallback if no app icon assets are found
+                // Ultimate fallback using SF Symbol
                 Image(systemName: "app.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -145,7 +191,8 @@ struct ImageLoadingErrorModifier: ViewModifier {
     }
     
     var fallbackImage: some View {
-        if imageName == "AppIconRounded" {
+        // Always use appIconWithFallback for any app icon related requests
+        if imageName == "AppIconRounded" || imageName == "AppIcon" {
             return AnyView(Image.appIconWithFallback())
         } else {
             return AnyView(

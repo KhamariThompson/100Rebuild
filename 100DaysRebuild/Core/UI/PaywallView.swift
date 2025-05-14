@@ -405,7 +405,7 @@ struct PaywallView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
             } else {
-                Text(offeringsFailedToLoad ? "Try to Subscribe" : "Subscribe Now")
+                Text(offeringsFailedToLoad ? "Subscriptions Unavailable" : "Subscribe Now")
                     .font(.headline)
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
@@ -413,7 +413,20 @@ struct PaywallView: View {
             }
         }
         .buttonStyle(.primary)
-        .disabled(isPurchasing)
+        .disabled(isPurchasing || offeringsFailedToLoad || !subscriptionService.isPurchasingEnabled)
+        .overlay(
+            Group {
+                if offeringsFailedToLoad || !subscriptionService.isPurchasingEnabled {
+                    Text(offeringsFailedToLoad ? "Subscriptions unavailable. Please try again later." : "Subscriptions coming soon")
+                        .font(.caption)
+                        .foregroundColor(.theme.subtext)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 2)
+                        .frame(maxWidth: .infinity)
+                        .offset(y: 32)
+                }
+            }
+        )
     }
     
     private var restorePurchasesButton: some View {
