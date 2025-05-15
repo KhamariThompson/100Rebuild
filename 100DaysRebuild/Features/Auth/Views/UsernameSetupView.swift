@@ -149,7 +149,7 @@ struct UsernameSetupView: View {
                             )
                     }
                 }
-                .buttonStyle(.scale)
+                .buttonStyle(ScaleButtonStyle())
                 .disabled(viewModel.username.isEmpty || viewModel.isLoading || !viewModel.isValid)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 32)

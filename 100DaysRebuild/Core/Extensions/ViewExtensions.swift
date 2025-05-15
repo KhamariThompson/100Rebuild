@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 // MARK: - UIApplication Extension to disable input assistants
 extension UIApplication {
@@ -226,6 +227,45 @@ extension View {
     /// Debounces navigation transitions to prevent keyboard snapshot warnings
     func withSafeNavigation() -> some View {
         self.modifier(NavigationDebounceModifier())
+    }
+    
+    /// Adds a PhotosPicker that activates when this view is tapped
+    func photoPickerTrigger(selection: Binding<PhotosPickerItem?>) -> some View {
+        ZStack {
+            self
+            
+            PhotosPicker(
+                selection: selection,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                Color.clear
+                    .frame(width: 0, height: 0)
+            }
+            .opacity(0.001) // Nearly invisible but still functional
+        }
+    }
+    
+    /// Adds a menu for choosing between camera and photo library
+    func photoSourcePicker(
+        showSourceOptions: Binding<Bool>,
+        showCameraPicker: Binding<Bool>, 
+        photosPickerSelection: Binding<PhotosPickerItem?>
+    ) -> some View {
+        self
+            .onTapGesture {
+                showSourceOptions.wrappedValue = true
+            }
+            .confirmationDialog("Choose Photo Source", isPresented: showSourceOptions) {
+                Button("Camera") {
+                    showCameraPicker.wrappedValue = true
+                }
+                Button("Photo Library") {
+                    // This will trigger the PhotosPicker
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photoPickerTrigger(selection: photosPickerSelection)
     }
 }
 
@@ -502,4 +542,20 @@ struct NavigationDebounceModifier: ViewModifier {
                 }
             }
     }
+}
+
+// MARK: - Button Styles
+
+/// Simple scale effect button style for interactive feedback
+public struct ScaleButtonStyle: ButtonStyle {
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// Extension to make it accessible via .buttonStyle(.scale)
+public extension ButtonStyle where Self == ScaleButtonStyle {
+    static var scale: ScaleButtonStyle { ScaleButtonStyle() }
 } 

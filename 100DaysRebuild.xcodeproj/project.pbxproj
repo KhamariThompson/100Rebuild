@@ -29,6 +29,9 @@
 		54080C102DCA4512000747B5 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Configuration/Config.xcconfig,
+				Configuration/Development.xcconfig,
+				Configuration/Production.xcconfig,
 				Info.plist,
 			);
 			target = 5482AAD92DC25D9600AF37F0 /* 100DaysRebuild */;

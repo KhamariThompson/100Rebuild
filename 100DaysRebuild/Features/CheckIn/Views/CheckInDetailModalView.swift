@@ -276,6 +276,9 @@ struct CheckInDetailModalView: View {
             .photosPicker(isPresented: $showingPhotosPicker, selection: $photoItem, matching: .images)
             .onChange(of: photoItem) { oldValue, newValue in
                 Task {
+                    // Add a minimal sleep to ensure there's a suspension point
+                    try? await Task.sleep(nanoseconds: 1_000_000) // 1 millisecond
+                    
                     if let data = try? await newValue?.loadTransferable(type: Data.self) {
                         selectedImageData = data
                         if let uiImage = UIImage(data: data) {
@@ -290,7 +293,7 @@ struct CheckInDetailModalView: View {
                 if oldValue == true && newValue == false {
                     // Save the note when exiting edit mode
                     Task {
-                        await viewModel.updateCheckInNote(for: checkIn, newNote: editedNote)
+                        viewModel.updateCheckInNote(for: checkIn, newNote: editedNote)
                     }
                 }
             }

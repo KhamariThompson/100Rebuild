@@ -75,6 +75,25 @@ struct ProfileView: View {
                     "I'm building my habit with 100Days! Track your progress and never break your streak: https://apps.apple.com/app/100days-habit-challenge/id1234567890"
                 ])
             }
+            .fullScreenCover(isPresented: $viewModel.showCameraPicker) {
+                ImagePicker(selectedImage: $viewModel.profileImage, isPresented: $viewModel.showCameraPicker, source: .camera)
+                    .ignoresSafeArea()
+                    .onDisappear {
+                        if viewModel.profileImage != nil {
+                            viewModel.uploadProfilePhotoFromCamera(viewModel.profileImage!)
+                        }
+                    }
+            }
+            .alert(isPresented: Binding<Bool>(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
+                Alert(
+                    title: Text("Error"),
+                    message: Text(viewModel.error ?? "Unknown error occurred"),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
             .onAppear {
                 viewModel.loadUserProfile()
             }
@@ -99,8 +118,34 @@ struct ProfileView: View {
             } else {
                 // Use AsyncImage with the profile picture if available in UserSession
                 if let photoURL = userSession.photoURL {
-                    ProfilePictureView(url: photoURL, size: 100)
-                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
+                    CachedAsyncImage(url: photoURL) { phase in
+                        switch phase {
+                        case .empty:
+                            ZStack {
+                                Circle()
+                                    .fill(Color.theme.surface)
+                                    .frame(width: 100, height: 100)
+                                
+                                ProgressView()
+                                    .scaleEffect(1.2)
+                            }
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .circularAvatarStyle(size: 100)
+                        case .failure:
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.theme.accent)
+                        @unknown default:
+                            // Handle any future cases that might be added to AsyncImagePhase
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 100))
+                                .foregroundColor(.theme.accent)
+                        }
+                    }
+                    .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 100))
@@ -110,26 +155,25 @@ struct ProfileView: View {
             }
             
             // Edit photo button overlay
-            PhotosPicker(
-                selection: $viewModel.selectedPhoto,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                Circle()
-                    .fill(Color.black.opacity(0.4))
-                    .frame(width: 100, height: 100)
-                    .overlay(
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                    )
-                    .opacity(0.7)
-            }
-            .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
-                if newValue != nil {
-                    viewModel.updateProfilePhoto()
+            Circle()
+                .fill(Color.black.opacity(0.4))
+                .frame(width: 100, height: 100)
+                .overlay(
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(.white)
+                )
+                .opacity(0.7)
+                .photoSourcePicker(
+                    showSourceOptions: $viewModel.showPhotoSourceOptions,
+                    showCameraPicker: $viewModel.showCameraPicker,
+                    photosPickerSelection: $viewModel.selectedPhoto
+                )
+                .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
+                    if newValue != nil {
+                        viewModel.updateProfilePhoto()
+                    }
                 }
-            }
         }
     }
     

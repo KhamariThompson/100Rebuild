@@ -4,6 +4,7 @@ struct MainAppView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @StateObject private var progressViewModel = ProgressDashboardViewModel()
     @State private var selectedTab = 0
     
     var body: some View {
@@ -18,6 +19,7 @@ struct MainAppView: View {
                     .tag(0)
                 
                 ProgressTabView()
+                    .environmentObject(progressViewModel)
                     .tabItem {
                         Label("Progress", systemImage: "chart.bar")
                     }
@@ -43,6 +45,7 @@ struct MainAppView: View {
         .environmentObject(userSession)
         .environmentObject(subscriptionService)
         .environmentObject(notificationService)
+        .environmentObject(progressViewModel)
     }
     
     private func setupTabBarAppearance() {
@@ -86,9 +89,12 @@ struct ChallengesTabView: View {
 }
 
 struct ProgressTabView: View {
+    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
+    
     var body: some View {
         NavigationView {
             ProgressView()
+                .environmentObject(progressViewModel)
                 .navigationTitle("Progress")
         }
         .navigationViewStyle(StackNavigationViewStyle())

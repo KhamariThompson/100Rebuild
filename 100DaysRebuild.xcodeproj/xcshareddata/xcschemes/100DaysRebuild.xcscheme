@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1500"
+   LastUpgradeVersion = "1610"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "D70AB6CC2B2F59B800B531C5"
+               BlueprintIdentifier = "5482AAD92DC25D9600AF37F0"
                BuildableName = "100DaysRebuild.app"
                BlueprintName = "100DaysRebuild"
                ReferencedContainer = "container:100DaysRebuild.xcodeproj">
@@ -43,7 +43,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "D70AB6CC2B2F59B800B531C5"
+            BlueprintIdentifier = "5482AAD92DC25D9600AF37F0"
             BuildableName = "100DaysRebuild.app"
             BlueprintName = "100DaysRebuild"
             ReferencedContainer = "container:100DaysRebuild.xcodeproj">
@@ -60,7 +60,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "D70AB6CC2B2F59B800B531C5"
+            BlueprintIdentifier = "5482AAD92DC25D9600AF37F0"
             BuildableName = "100DaysRebuild.app"
             BlueprintName = "100DaysRebuild"
             ReferencedContainer = "container:100DaysRebuild.xcodeproj">
@@ -74,4 +74,4 @@
       buildConfiguration = "Release"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
-</Scheme> 
+</Scheme>

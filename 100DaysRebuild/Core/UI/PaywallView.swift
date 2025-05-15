@@ -95,7 +95,7 @@ struct PaywallView: View {
                                 .foregroundColor(Color.theme.text)
                         }
                     }
-                    .buttonStyle(.scale)
+                    .buttonStyle(AppScaleButtonStyle())
                     .padding()
                 }
                 
@@ -471,7 +471,7 @@ struct PaywallView: View {
             }
             .foregroundColor(.theme.accent)
         }
-        .buttonStyle(.scale)
+        .buttonStyle(ScaleButtonStyle())
         .padding(.vertical, 8)
         .disabled(isPurchasing)
     }

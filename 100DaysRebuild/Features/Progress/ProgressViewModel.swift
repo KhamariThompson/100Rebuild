@@ -465,8 +465,8 @@ class ProgressDashboardViewModel: ObservableObject {
             
             // First, load centralized stats
             await MainActor.run {
-                Task {
-                    await userStatsService.fetchUserStats()
+                let _ = Task {
+                    await self.userStatsService.fetchUserStats()
                 }
             }
             

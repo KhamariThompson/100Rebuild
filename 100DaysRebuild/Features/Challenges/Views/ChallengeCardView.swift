@@ -244,15 +244,6 @@ struct ChallengeCardView: View {
         }
     }
     
-    // Custom button style with scale animation
-    struct ScaleButtonStyle: ButtonStyle {
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .scaleEffect(configuration.isPressed ? 0.97 : 1)
-                .animation(.easeOut(duration: 0.2), value: configuration.isPressed)
-        }
-    }
-    
     // Helper method to update challenge with new data
     func updateChallenge(_ newChallenge: Challenge) {
         self.challenge = newChallenge

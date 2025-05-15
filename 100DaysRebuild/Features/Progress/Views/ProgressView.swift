@@ -74,6 +74,12 @@ struct ProgressView: View {
                 .background(Color.theme.background.ignoresSafeArea())
                 .navigationTitle("Progress")
         }
+        .onAppear {
+            // Load progress data when the view appears
+            Task {
+                await viewModel.loadData()
+            }
+        }
     }
 }
 
@@ -594,44 +600,42 @@ class UserProgressViewModel: ObservableObject {
                         return
                     }
                     
-                    do {
-                        if let challengeId = UUID(uuidString: document.documentID),
-                           let title = document.data()["title"] as? String,
-                           let ownerId = document.data()["ownerId"] as? String,
-                           let startDateTimestamp = document.data()["startDate"] as? Timestamp,
-                           let streakCount = document.data()["streakCount"] as? Int,
-                           let daysCompleted = document.data()["daysCompleted"] as? Int,
-                           let isArchived = document.data()["isArchived"] as? Bool {
-                            
-                            let startDate = startDateTimestamp.dateValue()
-                            let lastCheckInDate = (document.data()["lastCheckInDate"] as? Timestamp)?.dateValue()
-                            let lastModified = (document.data()["lastModified"] as? Timestamp)?.dateValue() ?? Date()
-                            
-                            // Determine if completed today by checking if lastCheckInDate is today
-                            let isCompletedToday: Bool
-                            if let lastCheckIn = lastCheckInDate {
-                                isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
-                            } else {
-                                isCompletedToday = false
-                            }
-                            
-                            let challenge = try Challenge(
-                                id: challengeId,
-                                title: title,
-                                startDate: startDate,
-                                lastCheckInDate: lastCheckInDate,
-                                streakCount: streakCount,
-                                daysCompleted: daysCompleted,
-                                isCompletedToday: isCompletedToday,
-                                isArchived: isArchived,
-                                ownerId: ownerId,
-                                lastModified: lastModified
-                            )
-                            
-                            challenges.append(challenge)
+                    if let challengeId = UUID(uuidString: document.documentID),
+                       let title = document.data()["title"] as? String,
+                       let ownerId = document.data()["ownerId"] as? String,
+                       let startDateTimestamp = document.data()["startDate"] as? Timestamp,
+                       let streakCount = document.data()["streakCount"] as? Int,
+                       let daysCompleted = document.data()["daysCompleted"] as? Int,
+                       let isArchived = document.data()["isArchived"] as? Bool {
+                        
+                        let startDate = startDateTimestamp.dateValue()
+                        let lastCheckInDate = (document.data()["lastCheckInDate"] as? Timestamp)?.dateValue()
+                        let lastModified = (document.data()["lastModified"] as? Timestamp)?.dateValue() ?? Date()
+                        
+                        // Determine if completed today by checking if lastCheckInDate is today
+                        let isCompletedToday: Bool
+                        if let lastCheckIn = lastCheckInDate {
+                            isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
+                        } else {
+                            isCompletedToday = false
                         }
-                    } catch {
-                        print("Error parsing challenge document: \(error.localizedDescription)")
+                        
+                        let challenge = Challenge(
+                            id: challengeId,
+                            title: title,
+                            startDate: startDate,
+                            lastCheckInDate: lastCheckInDate,
+                            streakCount: streakCount,
+                            daysCompleted: daysCompleted,
+                            isCompletedToday: isCompletedToday,
+                            isArchived: isArchived,
+                            ownerId: ownerId,
+                            lastModified: lastModified
+                        )
+                        
+                        challenges.append(challenge)
+                    } else {
+                        print("Error parsing challenge document: incomplete data")
                         continue
                     }
                 }
@@ -658,9 +662,10 @@ class UserProgressViewModel: ObservableObject {
                     }
                     
                     do {
-                        // Validate the challenge data
+                        // Validate the challenge data using throws
                         try validateChallengeData(challenge)
                         
+                        // This is a throwing operation
                         let checkInsRef = firestore
                             .collection("users")
                             .document(userId)

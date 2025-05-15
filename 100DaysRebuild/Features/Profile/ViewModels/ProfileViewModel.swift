@@ -21,6 +21,10 @@ class ProfileViewModel: ObservableObject {
     @Published var isLoadingImage: Bool = false
     @Published var imageURL: URL?
     
+    // Camera picker support
+    @Published var showCameraPicker: Bool = false
+    @Published var showPhotoSourceOptions: Bool = false
+    
     // UI states
     @Published var isLoading: Bool = false
     @Published var error: String?
@@ -73,6 +77,7 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
+    /// Process and upload an image from PhotosPicker
     func updateProfilePhoto() {
         guard let selectedPhoto = selectedPhoto else { return }
         
@@ -83,59 +88,7 @@ class ProfileViewModel: ObservableObject {
                 // Process selected image
                 if let data = try await selectedPhoto.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
-                    
-                    // Process image using extensions
-                    let processedImage = image.resized(to: CGSize(width: 500, height: 500)).circleCropped()
-                    
-                    // Ensure we're getting valid data back for the processed image
-                    guard let processedImageData = processedImage.compressedJPEG(quality: 0.7) else {
-                        print("Failed to convert processed image to JPEG data")
-                        await MainActor.run {
-                            self.error = "Failed to process the image"
-                            self.isLoadingImage = false
-                        }
-                        return
-                    }
-                    
-                    // Upload to Firebase Storage
-                    if let userId = userSession.currentUser?.uid {
-                        print("Starting upload to Firebase Storage for user: \(userId)")
-                        print("Image data size: \(processedImageData.count) bytes")
-                        
-                        let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
-                        print("Image uploaded successfully to: \(url.absoluteString)")
-                        
-                        // Update Firestore with photoURL and UserSession
-                        try await updatePhotoURL(url)
-                        print("Firestore photoURL updated")
-                        
-                        // Update UserSession to ensure photoURL is accessible app-wide
-                        try await userSession.updateProfilePhoto(url)
-                        print("UserSession photoURL updated")
-                        
-                        // Update UI
-                        await MainActor.run {
-                            self.profileImage = processedImage
-                            self.imageURL = url
-                            self.isLoadingImage = false
-                            self.showSuccessAnimation = true
-                            
-                            // Trigger haptic feedback
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.success)
-                            
-                            // Hide success animation after a delay
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                self.showSuccessAnimation = false
-                            }
-                        }
-                    } else {
-                        print("No user ID available for upload")
-                        await MainActor.run {
-                            self.error = "User not logged in"
-                            self.isLoadingImage = false
-                        }
-                    }
+                    await processAndUploadImage(image)
                 } else {
                     print("Failed to load image data from PhotosPickerItem")
                     await MainActor.run {
@@ -149,6 +102,97 @@ class ProfileViewModel: ObservableObject {
                     self.error = "Failed to upload image: \(error.localizedDescription)"
                     self.isLoadingImage = false
                 }
+            }
+        }
+    }
+    
+    /// Process and upload an image from camera
+    func uploadProfilePhotoFromCamera(_ image: UIImage) {
+        isLoadingImage = true
+        
+        Task {
+            await processAndUploadImage(image)
+        }
+    }
+    
+    /// Common processing and upload logic for all image sources
+    private func processAndUploadImage(_ image: UIImage) async {
+        do {
+            // Process image using extensions
+            let processedImage = image.resized(to: CGSize(width: 500, height: 500)).circleCropped()
+            
+            // Ensure we're getting valid data back for the processed image
+            guard let processedImageData = processedImage.compressedJPEG(quality: 0.7) else {
+                print("Failed to convert processed image to JPEG data")
+                await MainActor.run {
+                    self.error = "Failed to process the image"
+                    self.isLoadingImage = false
+                }
+                return
+            }
+            
+            // Upload to Firebase Storage
+            guard let userId = userSession.currentUser?.uid else { 
+                print("No user ID available for upload")
+                await MainActor.run {
+                    self.error = "User not logged in"
+                    self.isLoadingImage = false
+                }
+                return
+            }
+            
+            print("Starting upload to Firebase Storage for user: \(userId)")
+            print("Image data size: \(processedImageData.count) bytes")
+            
+            // Upload the image to Firebase Storage
+            let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
+            print("Image uploaded successfully to: \(url.absoluteString)")
+            
+            // Update Firestore with photoURL
+            try await updatePhotoURL(url)
+            print("Firestore photoURL updated")
+            
+            // Update UserSession to ensure photoURL is accessible app-wide
+            try await userSession.updateProfilePhoto(url)
+            print("UserSession photoURL updated")
+            
+            // Cache the image for immediate display
+            ImageCacheManager.shared.setImage(processedImage, forKey: url.absoluteString)
+            
+            // Update UI
+            await MainActor.run {
+                self.profileImage = processedImage
+                self.imageURL = url
+                self.isLoadingImage = false
+                self.showSuccessAnimation = true
+                
+                // Trigger haptic feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+                
+                // Hide success animation after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    self.showSuccessAnimation = false
+                }
+            }
+        } catch let firebaseError as FirebaseError {
+            print("Firebase error uploading profile image: \(firebaseError)")
+            await MainActor.run {
+                switch firebaseError {
+                case .storageError(let error):
+                    self.error = "Storage error: \(error.localizedDescription)"
+                case .networkOffline:
+                    self.error = "Network is offline. Please check your connection."
+                default:
+                    self.error = "Error uploading image: \(firebaseError)"
+                }
+                self.isLoadingImage = false
+            }
+        } catch {
+            print("Error uploading profile image: \(error.localizedDescription)")
+            await MainActor.run {
+                self.error = "Failed to upload image: \(error.localizedDescription)"
+                self.isLoadingImage = false
             }
         }
     }
@@ -379,16 +423,21 @@ class ProfileViewModel: ObservableObject {
         let urlString = url.absoluteString // Create a sendable copy of the URL string
         print("Updating Firestore with photoURL: \(urlString)")
         
-        // Attempt to update Firestore directly with error handling
-        do {
-            try await Firestore.firestore()
-                .collection("users")
-                .document(userId)
-                .updateData(["photoURL": urlString])
-            print("Firestore photoURL updated successfully")
-        } catch {
-            print("Error updating Firestore photoURL: \(error.localizedDescription)")
-            throw error
+        // Fix the unused result and sendability issues
+        await MainActor.run {
+            let userData: [String: String] = ["photoURL": urlString]
+            
+            Task {
+                do {
+                    try await Firestore.firestore()
+                        .collection("users")
+                        .document(userId)
+                        .updateData(userData)
+                    print("Firestore photoURL updated successfully")
+                } catch {
+                    print("Error updating Firestore photoURL: \(error.localizedDescription)")
+                }
+            }
         }
     }
     
