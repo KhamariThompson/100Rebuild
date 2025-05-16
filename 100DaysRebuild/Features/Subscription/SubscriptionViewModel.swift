@@ -6,6 +6,7 @@ enum SubscriptionError: Error {
     case purchaseFailed
     case restoreFailed
     case unknown
+    case timeout
 }
 
 enum SubscriptionPlan: String {

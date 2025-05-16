@@ -30,11 +30,13 @@ class CheckInViewModel: ObservableObject {
     @Published var showNotePrompt = false
     @Published var photoURL: URL?
     @Published var selectedImage: UIImage?
+    @Published var timerDuration: TimeInterval = 0
     
     // Milestone tracking
     @Published var isMilestoneDay = false
     @Published var milestoneMessage = ""
     @Published var milestoneEmoji = ""
+    @Published var milestoneDay: Int = 0
     
     // Share card options
     @Published var selectedCardLayout: MilestoneShareCardGenerator.CardLayout = .modern
@@ -159,8 +161,11 @@ class CheckInViewModel: ObservableObject {
             let fileName = "\(UUID().uuidString).jpg"
             let imageRef = storageRef.child("users/\(userId)/check-ins/\(fileName)")
             
-            // Compress the image
-            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+            // Use PhotoTransferable for compression
+            let photoTransferable = PhotoTransferable(image: image)
+            
+            // Get compressed data
+            guard let imageData = photoTransferable.compressedData(quality: 0.7) else {
                 throw NSError(domain: "app", code: 0, userInfo: [NSLocalizedDescriptionKey: "Could not compress image"])
             }
             
@@ -284,6 +289,11 @@ class CheckInViewModel: ObservableObject {
         // Add motivational message
         checkInData["motivationalMessage"] = motivationalMessage
         
+        // Add timer duration if this is a timed challenge
+        if timerDuration > 0 {
+            checkInData["duration"] = timerDuration
+        }
+        
         // Upload photo if selected
         if let image = selectedImage {
             // Create a storage reference
@@ -291,8 +301,11 @@ class CheckInViewModel: ObservableObject {
             let photoId = UUID().uuidString
             let photoRef = storageRef.child("checkInPhotos/\(userId)/\(challengeId)/\(photoId).jpg")
             
-            // Convert image to data
-            guard let imageData = image.jpegData(compressionQuality: 0.6) else {
+            // Use PhotoTransferable for better compression
+            let photoTransferable = PhotoTransferable(image: image)
+            
+            // Get compressed data
+            guard let imageData = photoTransferable.compressedData(quality: 0.6) else {
                 throw NSError(domain: "CheckInViewModel", code: 400, userInfo: [
                     NSLocalizedDescriptionKey: "Failed to process image"
                 ])
@@ -343,5 +356,157 @@ class CheckInViewModel: ObservableObject {
         // Show error UI
         self.error = error
         showError = true
+    }
+    
+    func checkIn(for challenge: Challenge, timedDuration: Int? = nil) async -> Bool {
+        isLoading = true
+        error = nil
+        
+        do {
+            // Use the CheckInService to perform the check-in
+            let success = try await checkInService.checkIn(
+                for: challenge.id.uuidString,
+                durationInMinutes: timedDuration
+            )
+            
+            if success {
+                // Check if this is a day that should trigger a milestone
+                await checkForMilestone(challenge: challenge)
+                
+                // Load a motivational quote for the success view
+                await loadRandomQuote()
+                
+                // Show appropriate success view based on milestone
+                if isMilestoneDay {
+                    showMilestoneView = true
+                } else {
+                    showSuccessView = true
+                }
+            }
+            
+            isLoading = false
+            return success
+        } catch let checkInError as CheckInError {
+            isLoading = false
+            error = checkInError
+            errorMessage = checkInError.localizedDescription
+            showError = true
+            
+            // Special handling for already checked in
+            if case .alreadyCheckedInToday = checkInError {
+                // Nothing special to do, just show the message
+            }
+            
+            // Special handling for offline mode
+            if case .networkUnavailable = checkInError {
+                showSuccessView = true
+                motivationalMessage = "Your check-in has been saved locally and will sync when you're back online."
+            }
+            
+            return false
+        } catch {
+            isLoading = false
+            self.error = error
+            errorMessage = error.localizedDescription
+            showError = true
+            return false
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Check if the current day is a milestone day
+    private func checkForMilestone(challenge: Challenge) async {
+        // Get the current day number from the challenge
+        let currentDayValue = (challenge.daysCompleted ?? 0) + 1 // +1 because we just checked in
+        self.currentDay = currentDayValue
+        
+        // Check if this is a milestone day (7, 10, 21, 30, 50, 75, 90, 100)
+        let milestoneDays = [7, 10, 21, 30, 50, 75, 90, 100]
+        
+        if milestoneDays.contains(self.currentDay) {
+            self.isMilestoneDay = true
+            self.milestoneDay = self.currentDay
+            
+            // Choose a special message for this milestone
+            self.motivationalMessage = getMilestoneMessage(forDay: self.currentDay)
+        } else {
+            self.isMilestoneDay = false
+            
+            // Choose a regular motivational message
+            self.motivationalMessage = getRandomMotivationalMessage()
+        }
+    }
+    
+    /// Load a random inspirational quote for the success view
+    private func loadRandomQuote() async {
+        do {
+            // Try to fetch a quote from the API
+            if let quote = try? await QuoteService.shared.fetchRandomQuote() {
+                self.currentQuote = quote
+                return
+            }
+        }
+        
+        // Fallback to local quotes if the API request fails
+        let fallbackQuotes = [
+            Quote(text: "The secret of getting ahead is getting started.", author: "Mark Twain"),
+            Quote(text: "Small daily improvements over time lead to stunning results.", author: "Robin Sharma"),
+            Quote(text: "Consistency is the key to achieving and maintaining momentum.", author: "Brian Tracy"),
+            Quote(text: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier"),
+            Quote(text: "The only way to do great work is to love what you do.", author: "Steve Jobs"),
+            Quote(text: "Don't count the days, make the days count.", author: "Muhammad Ali"),
+            Quote(text: "Habits are the compound interest of self-improvement.", author: "James Clear"),
+            Quote(text: "Every day may not be good, but there's something good in every day.", author: "Alice Morse Earle")
+        ]
+        
+        // Make sure we don't repeat the last quote if possible
+        if let lastQuote = self.lastQuote, let index = fallbackQuotes.firstIndex(where: { $0.text == lastQuote.text }) {
+            var availableQuotes = fallbackQuotes
+            availableQuotes.remove(at: index)
+            self.currentQuote = availableQuotes.randomElement() ?? fallbackQuotes.randomElement()
+        } else {
+            self.currentQuote = fallbackQuotes.randomElement()
+        }
+    }
+    
+    /// Get a motivational message for a specific milestone
+    private func getMilestoneMessage(forDay day: Int) -> String {
+        switch day {
+        case 7:
+            return "Incredible! You've completed your first week. This is where real progress begins!"
+        case 10:
+            return "Double digits! 10 days shows serious commitment. Keep this momentum going!"
+        case 21:
+            return "21 days - you're building a lasting habit! Research shows this is when habits start to stick."
+        case 30:
+            return "A full month complete! You've shown incredible discipline to make it this far."
+        case 50:
+            return "Halfway to 100! What an achievement. You're proving your dedication every day."
+        case 75:
+            return "75 days - you're in elite territory now! Most people never make it this far."
+        case 90:
+            return "90 days! Research shows it takes about 90 days to establish lasting behavior change. You did it!"
+        case 100:
+            return "100 DAYS COMPLETE! 🎉 You've achieved something truly remarkable. Be proud of yourself!"
+        default:
+            return "Another successful day! Keep it up!"
+        }
+    }
+    
+    /// Get a random motivational message for non-milestone check-ins
+    private func getRandomMotivationalMessage() -> String {
+        let messages = [
+            "Great job! Another day complete.",
+            "You're building momentum! Keep going!",
+            "Consistency is key, and you're crushing it!",
+            "Progress happens one day at a time. Well done!",
+            "Every check-in brings you closer to your goal!",
+            "You showed up today. That's what matters most!",
+            "Small steps lead to big results. Nice work!",
+            "Your future self will thank you for today's effort."
+        ]
+        
+        return messages.randomElement() ?? "Great job today!"
     }
 } 

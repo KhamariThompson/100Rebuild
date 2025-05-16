@@ -268,4 +268,190 @@ struct MilestoneCard: View {
                 .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         )
     }
+}
+
+// MARK: - Journey Card View
+
+struct JourneyCardView: View {
+    let card: JourneyCard
+    
+    var body: some View {
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+            
+            // Card Content
+            VStack(alignment: .leading, spacing: 12) {
+                switch card.type {
+                case .photoNote(_, let note, let dayNumber, let date):
+                    cardHeader(title: "Day \(dayNumber)", date: date)
+                    
+                    Text(note)
+                        .font(.body)
+                        .foregroundColor(.theme.text)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                    
+                case .milestone(let message, let emoji, let dayNumber, let date):
+                    HStack {
+                        if let day = dayNumber {
+                            cardHeader(title: "Day \(day)", date: date)
+                        } else {
+                            cardHeader(title: "Milestone", date: date)
+                        }
+                    }
+                    
+                    HStack(alignment: .center, spacing: 8) {
+                        // Show SF Symbol if it's valid, otherwise show as emoji
+                        if emoji.hasPrefix("sf:") {
+                            let sfName = String(emoji.dropFirst(3))
+                            Image(systemName: sfName)
+                                .font(.largeTitle)
+                                .foregroundColor(.theme.accent)
+                        } else {
+                            Text(emoji)
+                                .font(.largeTitle)
+                        }
+                        
+                        Text(message)
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding()
+            .frame(width: 280, height: 160)
+        }
+    }
+    
+    private func cardHeader(title: String, date: Date) -> some View {
+        HStack {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.theme.accent)
+            
+            Spacer()
+            
+            Text(date, style: .date)
+                .font(.caption)
+                .foregroundColor(.theme.subtext)
+        }
+    }
+}
+
+// MARK: - Journey Card Detail View
+
+struct JourneyCardDetailView: View {
+    let card: JourneyCard
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Card content based on type
+                    switch card.type {
+                    case .photoNote(let photo, let note, let dayNumber, let date):
+                        Text("Day \(dayNumber)")
+                            .font(.title)
+                            .foregroundColor(.theme.accent)
+                        
+                        Text(date, style: .date)
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                        
+                        Divider()
+                        
+                        if let photoURL = photo {
+                            AsyncImage(url: photoURL) { phase in
+                                switch phase {
+                                case .empty:
+                                    ProgressView()
+                                        .frame(height: 300)
+                                        .frame(maxWidth: .infinity)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .scaledToFit()
+                                        .cornerRadius(12)
+                                case .failure:
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 80))
+                                        .foregroundColor(.theme.subtext.opacity(0.5))
+                                        .frame(height: 300)
+                                        .frame(maxWidth: .infinity)
+                                @unknown default:
+                                    EmptyView()
+                                }
+                            }
+                            .padding(.vertical)
+                        }
+                        
+                        Text(note)
+                            .font(.body)
+                            .foregroundColor(.theme.text)
+                            .multilineTextAlignment(.leading)
+                        
+                    case .milestone(let message, let emoji, let dayNumber, let date):
+                        if let day = dayNumber {
+                            Text("Day \(day)")
+                                .font(.title)
+                                .foregroundColor(.theme.accent)
+                        } else {
+                            Text("Milestone")
+                                .font(.title)
+                                .foregroundColor(.theme.accent)
+                        }
+                        
+                        Text(date, style: .date)
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                        
+                        Divider()
+                        
+                        HStack(alignment: .center, spacing: 16) {
+                            // Show SF Symbol if it's valid, otherwise show as emoji
+                            if emoji.hasPrefix("sf:") {
+                                let sfName = String(emoji.dropFirst(3))
+                                Image(systemName: sfName)
+                                    .font(.system(size: 60))
+                                    .foregroundColor(.theme.accent)
+                            } else {
+                                Text(emoji)
+                                    .font(.system(size: 60))
+                            }
+                            
+                            Text(message)
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.vertical)
+                        
+                        Text("This milestone marks an important point in your 100-day journey. Keep up the great work!")
+                            .font(.body)
+                            .foregroundColor(.theme.subtext)
+                            .padding(.top)
+                    }
+                    
+                    Spacer()
+                }
+                .padding()
+            }
+            .navigationBarTitle("Journey Details", displayMode: .inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
 } 

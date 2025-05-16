@@ -10,6 +10,8 @@ struct ChallengesView: View {
     @StateObject private var viewModel = ChallengesViewModel()
     @EnvironmentObject private var subscriptionService: SubscriptionService
     @EnvironmentObject private var notificationService: NotificationService
+    @EnvironmentObject private var router: TabViewRouter
+    @EnvironmentObject private var userStatsService: UserStatsService
     @State private var isShowingEditChallenge = false
     @State private var challengeToEdit: Challenge?
     @State private var isShowingCheckInSheet = false
@@ -22,67 +24,118 @@ struct ChallengesView: View {
     @State private var showErrorAlert = false
     
     var body: some View {
-        contentView
-        .navigationTitle("Challenges")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { viewModel.isShowingNewChallenge = true }) {
-                    Image(systemName: "plus")
+        NavigationView {
+            VStack(spacing: 0) {
+                contentView
+            }
+            .navigationTitle("Challenges")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button(action: { viewModel.isShowingNewChallenge = true }) {
+                            Label("New Challenge", systemImage: "plus")
+                        }
+                        
+                        if !viewModel.challenges.isEmpty {
+                            Button(action: refreshChallenges) {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18, weight: .semibold))
+                    }
                 }
             }
-            
-            if viewModel.isOffline {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Image(systemName: "wifi.slash")
-                        .foregroundColor(.yellow)
+            .sheet(isPresented: $viewModel.isShowingNewChallenge) {
+                NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
+                    Task {
+                        await viewModel.createChallenge(title: title, isTimed: isTimed)
+                        await userStatsService.refreshUserStats()
+                    }
                 }
             }
-        }
-        .sheet(isPresented: $viewModel.isShowingNewChallenge) {
-            NewChallengeSheet(viewModel: viewModel)
-                .environmentObject(subscriptionService)
-                .environmentObject(notificationService)
-        }
-        .sheet(isPresented: $isShowingEditChallenge, onDismiss: {
-            challengeToEdit = nil
-        }) {
-            if let challenge = challengeToEdit {
-                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
+            .sheet(isPresented: $isShowingEditChallenge) {
+                if let challenge = challengeToEdit {
+                    EditChallengeSheet(viewModel: viewModel, challenge: challenge)
+                }
             }
-        }
-        .sheet(isPresented: $isShowingCheckInSheet) {
-            if let challenge = challengeToCheckIn {
-                EnhancedCheckInView(
-                    challengesViewModel: viewModel,
-                    challenge: challenge
+            .sheet(isPresented: $isShowingCheckInSheet) {
+                if let challenge = challengeToCheckIn {
+                    // Assuming a CheckInView exists or create a simple one
+                    VStack {
+                        Text("Check in to: \(challenge.title)")
+                            .font(.headline)
+                            .padding()
+                        
+                        Button("Check In") {
+                            checkInToChallenge(challenge)
+                            isShowingCheckInSheet = false
+                        }
+                        .padding()
+                        .background(Color.theme.accent)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        
+                        Button("Cancel") {
+                            isShowingCheckInSheet = false
+                        }
+                        .padding()
+                    }
+                    .padding()
+                    .frame(width: 300, height: 250)
+                }
+            }
+            .alert(isPresented: $viewModel.showError) {
+                Alert(
+                    title: Text("Oops!"),
+                    message: Text(viewModel.errorMessage),
+                    dismissButton: .default(Text("OK"))
                 )
             }
         }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.errorMessage)
-        }
         .onAppear {
+            // Mark tab as changing when this view appears
+            if router.selectedTab == 0 {
+                router.tabIsChanging = true
+            }
+            
             Task {
                 await viewModel.loadChallenges()
                 await viewModel.loadUserProfile()
+                
+                // After data is loaded, mark tab as not changing
+                if router.selectedTab == 0 {
+                    router.tabIsChanging = false
+                }
             }
         }
+        .refreshable {
+            await viewModel.loadChallenges()
+        }
+        .withDiagnostics()
     }
     
     private var contentView: some View {
-        Group {
-            if viewModel.isLoading {
+        ZStack {
+            if viewModel.isInitialLoad {
                 loadingView
+                    .transition(.opacity)
+            } else if viewModel.isLoading && viewModel.challenges.isEmpty {
+                loadingView
+                    .transition(.opacity)
             } else if viewModel.challenges.isEmpty {
                 emptyStateView
+                    .transition(.opacity)
             } else {
                 challengeListView
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.challenges.isEmpty)
     }
     
     private var loadingView: some View {
@@ -92,8 +145,14 @@ struct ChallengesView: View {
                 .tint(.theme.accent)
             
             Text("Loading challenges...")
+                .font(.headline)
+                .foregroundColor(.theme.text)
+            
+            Text("Hold tight as we fetch your latest data")
                 .font(.subheadline)
                 .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.theme.background)
@@ -144,7 +203,7 @@ struct ChallengesView: View {
     private var challengeListView: some View {
         VStack(spacing: 0) {
             if viewModel.isOffline {
-                OfflineBanner()
+                ChallengesOfflineBanner()
             }
             
             ScrollView {
@@ -195,13 +254,60 @@ struct ChallengesView: View {
                     await viewModel.archiveChallenge(challenge)
                 }
             } label: {
-                Label("Delete Challenge", systemImage: "trash")
+                Label("Archive Challenge", systemImage: "archivebox")
             }
+        }
+    }
+    
+    // MARK: - Check In Functionality
+    
+    func checkInToChallenge(_ challenge: Challenge) {
+        Task {
+            let result = await viewModel.checkInToChallenge(challenge)
+            
+            switch result {
+            case .success(let updatedChallenge):
+                showSuccessToast = true
+                // Refresh user stats after successful check-in
+                await userStatsService.refreshUserStats()
+                
+                // Dismiss the toast after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    showSuccessToast = false
+                }
+            case .failure(let error):
+                checkInError = error.localizedDescription
+                showErrorAlert = true
+            }
+        }
+    }
+    
+    // MARK: - Helper Functions
+    
+    func deleteChallenge(_ challenge: Challenge) {
+        Task {
+            let result = await viewModel.deleteChallenge(challenge)
+            
+            switch result {
+            case .success:
+                // Refresh user stats after successful deletion
+                await userStatsService.refreshUserStats()
+            case .failure(let error):
+                viewModel.showError = true
+                viewModel.errorMessage = "Failed to delete challenge: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    private func refreshChallenges() {
+        Task {
+            await viewModel.loadChallenges()
+            await userStatsService.refreshUserStats()
         }
     }
 }
 
-struct OfflineBanner: View {
+struct ChallengesOfflineBanner: View {
     var body: some View {
         HStack {
             Image(systemName: "wifi.slash")
@@ -224,6 +330,7 @@ struct NewChallengeSheet: View {
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     @FocusState private var isTitleFocused: Bool
+    @State private var isTimed: Bool = false
     
     // Popular challenge suggestions
     private let challengeSuggestions = [
@@ -253,6 +360,24 @@ struct NewChallengeSheet: View {
                 Section(header: Text("Challenge Details")) {
                     TextField("Title", text: $viewModel.challengeTitle)
                         .focused($isTitleFocused)
+                    
+                    Toggle(isOn: $isTimed) {
+                        HStack {
+                            Image(systemName: "timer")
+                                .foregroundColor(.theme.accent)
+                            Text("Require timer to check in")
+                        }
+                    }
+                    .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
+                    
+                    if isTimed {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Timer challenges require you to complete a timed session before checking in.")
+                                .font(.callout)
+                                .foregroundColor(.theme.subtext)
+                                .padding(.vertical, 4)
+                        }
+                    }
                 }
                 
                 Section(header: Text("Popular Challenge Ideas")) {
@@ -283,7 +408,7 @@ struct NewChallengeSheet: View {
                 Section {
                     Button("Create Challenge") {
                         Task {
-                            await viewModel.createChallenge(title: viewModel.challengeTitle)
+                            await viewModel.createChallenge(title: viewModel.challengeTitle, isTimed: isTimed)
                             dismiss()
                         }
                     }

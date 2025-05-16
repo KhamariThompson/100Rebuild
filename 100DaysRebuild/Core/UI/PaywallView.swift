@@ -139,9 +139,29 @@ struct PaywallView: View {
                     return
                 }
                 
-                // Fetch offerings from RevenueCat
-                print("Fetching RevenueCat offerings...")
-                let offerings = try await Purchases.shared.offerings()
+                // Add a timeout to prevent UI from hanging
+                let offeringTask = Task {
+                    do {
+                        // Fetch offerings from RevenueCat
+                        print("Fetching RevenueCat offerings...")
+                        return try await Purchases.shared.offerings()
+                    } catch {
+                        print("Error fetching offerings: \(error.localizedDescription)")
+                        throw error
+                    }
+                }
+                
+                // Wait for result with timeout
+                let offerings: Offerings
+                do {
+                    // Wait up to 3 seconds for offerings
+                    let result = try await withTimeout(seconds: 3.0, task: offeringTask)
+                    offerings = result
+                } catch {
+                    print("Offerings fetch timed out or failed: \(error.localizedDescription)")
+                    await loadFallbackPricing()
+                    return
+                }
                 
                 // Get the default offering
                 if let currentOffering = offerings.current {
@@ -170,51 +190,44 @@ struct PaywallView: View {
                     await MainActor.run {
                         self.offeringsFailedToLoad = true
                     }
-                    errorMessage = "Could not load subscription options. Please try again later."
-                    showError = true
                     
                     // Try fetching StoreKit products as fallback
                     await loadFallbackPricing()
                 }
             } catch {
-                print("Failed to load offerings: \(error.localizedDescription)")
-                await MainActor.run {
-                    self.offeringsFailedToLoad = true
-                }
-                errorMessage = "Failed to load subscription options: \(error.localizedDescription)"
-                showError = true
-                
-                // Try fetching StoreKit products as fallback
+                print("Error in loadOffering: \(error.localizedDescription)")
                 await loadFallbackPricing()
             }
         }
     }
     
     private func loadFallbackPricing() async {
-        // Try fetching StoreKit products directly as fallback
+        await MainActor.run {
+            self.offeringsFailedToLoad = true
+            // Use the fallback price from SubscriptionService instead of hardcoded value
+            self.price = subscriptionService.fallbackPricing
+            print("Using fallback price from subscription service: \(self.price)")
+        }
+    }
+    
+    private func withTimeout<T>(seconds: TimeInterval, task: Task<T, Error>) async throws -> T {
+        let timeoutTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                task.cancel()
+                throw NSError(domain: "PaywallView", code: -1, userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            } catch {
+                throw error
+            }
+        }
+        
         do {
-            let products = try await Product.products(for: ["com.KhamariThompson.100Days.monthly"])
-            if let monthlyProduct = products.first {
-                print("Loaded fallback product from StoreKit: \(monthlyProduct.id) - \(monthlyProduct.displayPrice)")
-                
-                await MainActor.run {
-                    self.price = monthlyProduct.displayPrice
-                }
-            } else {
-                print("No products found in StoreKit fallback")
-                
-                await MainActor.run {
-                    // Use hardcoded fallback price
-                    self.price = "$5.99"
-                }
-            }
+            let result = try await task.value
+            timeoutTask.cancel()
+            return result
         } catch {
-            print("Failed to load StoreKit products as fallback: \(error.localizedDescription)")
-            
-            await MainActor.run {
-                // Use hardcoded fallback price
-                self.price = "$5.99"
-            }
+            timeoutTask.cancel()
+            throw error
         }
     }
     

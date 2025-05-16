@@ -3,12 +3,16 @@ import SwiftUI
 /// A view that allows users to customize their milestone share card
 struct ShareCardCustomizerView: View {
     @ObservedObject var viewModel: CheckInViewModel
-    @Binding var isPresented: Bool
+    @State private var isPresented = false
     @State private var showingShareSheet = false
     @State private var shareImage: UIImage?
     @State private var previewImage: UIImage?
     @State private var selectedTab = 0
     @State private var showPreviewFullScreen = false
+    
+    // Challenge data for sharing
+    let dayNumber: Int
+    let challenge: Challenge
     
     // Background color options
     private let backgroundOptions: [(String, MilestoneShareCardGenerator.BackgroundStyle)] = [
@@ -18,6 +22,13 @@ struct ShareCardCustomizerView: View {
         ("Dark", .gradient([.black, .gray.opacity(0.7)])),
         ("Warm", .gradient([.orange, .red.opacity(0.7)]))
     ]
+    
+    // New initializer
+    init(viewModel: CheckInViewModel, dayNumber: Int, challenge: Challenge) {
+        self.viewModel = viewModel
+        self.dayNumber = dayNumber
+        self.challenge = challenge
+    }
     
     var body: some View {
         NavigationView {
@@ -57,6 +68,7 @@ struct ShareCardCustomizerView: View {
                                 Text("Minimal").tag(2)
                             }
                             .pickerStyle(SegmentedPickerStyle())
+                            .accessibilityLabel("Select layout style")
                             .onChange(of: selectedTab) { oldValue, newValue in
                                 switch newValue {
                                 case 0:
@@ -90,10 +102,13 @@ struct ShareCardCustomizerView: View {
                                             viewModel.setCardBackground(backgroundOptions[index].1)
                                             updatePreview()
                                         }
+                                        .accessibilityLabel("\(backgroundOptions[index].0) background style")
+                                        .accessibilityAddTraits(getIsBackgroundSelected(backgroundOptions[index].1) ? .isSelected : [])
                                     }
                                 }
                                 .padding(.horizontal)
                             }
+                            .accessibilityLabel("Background style options")
                         }
                         .padding(.top, 8)
                         .padding(.horizontal)
@@ -126,6 +141,7 @@ struct ShareCardCustomizerView: View {
                     .padding(.horizontal)
                     .padding(.vertical, 20)
                 }
+                .accessibilityLabel("Share your milestone")
             }
             .navigationTitle("Customize Share Card")
             .navigationBarTitleDisplayMode(.inline)
@@ -134,6 +150,7 @@ struct ShareCardCustomizerView: View {
                     Button("Done") {
                         isPresented = false
                     }
+                    .accessibilityLabel("Done customizing share card")
                 }
             }
             .sheet(isPresented: $showingShareSheet) {
@@ -200,6 +217,15 @@ struct ShareCardCustomizerView: View {
     // MARK: - Helper Methods
     
     private func initializeView() {
+        // Set up the view model with the current challenge info
+        Task {
+            await viewModel.prepareForCheckIn(
+                challengeId: challenge.id.uuidString,
+                currentDay: dayNumber,
+                challengeTitle: challenge.title
+            )
+        }
+        
         // Set initial layout selection based on viewModel
         switch viewModel.selectedCardLayout {
         case .modern:
@@ -224,6 +250,10 @@ struct ShareCardCustomizerView: View {
         if let image = viewModel.createShareCard() {
             shareImage = image
             showingShareSheet = true
+            
+            // Haptic feedback when sharing
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
         }
     }
     
@@ -302,11 +332,26 @@ extension ShapeStyle {
 
 // MARK: - Previews
 
+// Updated Preview provider
 struct ShareCardCustomizerView_Previews: PreviewProvider {
     static var previews: some View {
+        let mockChallenge = Challenge(
+            id: UUID(),
+            title: "Learn SwiftUI",
+            startDate: Date(),
+            lastCheckInDate: Date(),
+            streakCount: 7,
+            daysCompleted: 30,
+            isCompletedToday: true,
+            isArchived: false,
+            ownerId: "preview",
+            lastModified: Date()
+        )
+        
         ShareCardCustomizerView(
             viewModel: CheckInViewModel(),
-            isPresented: .constant(true)
+            dayNumber: 30,
+            challenge: mockChallenge
         )
     }
 } 

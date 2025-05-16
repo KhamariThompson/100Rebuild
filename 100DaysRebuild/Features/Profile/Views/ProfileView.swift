@@ -10,6 +10,7 @@ struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var router: TabViewRouter
     @StateObject private var viewModel = ProfileViewModel()
     
     @State private var isShowingSettings = false
@@ -20,33 +21,121 @@ struct ProfileView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Profile Header
-                    VStack(spacing: 16) {
-                        profileImageSection
+            ZStack {
+                // Background
+                Color.theme.background.ignoresSafeArea()
+                
+                // Full screen loading view when initially loading
+                if viewModel.isInitialLoad {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .padding()
                         
-                        if viewModel.isEditingUsername {
-                            usernameEditSection
-                        } else {
-                            userInfoSection
+                        Text("Loading your profile...")
+                            .foregroundColor(.theme.subtext)
+                            .padding(.top, 8)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity)
+                } 
+                // Main content
+                else {
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Profile Header
+                            VStack(spacing: 16) {
+                                profileImageSection
+                                
+                                if viewModel.isEditingUsername {
+                                    usernameEditSection
+                                } else {
+                                    userInfoSection
+                                }
+                            }
+                            .padding(.vertical, 20)
+                            
+                            // Identity-Focused Stats
+                            identityStatsSection
+                            
+                            // Quick Actions Section
+                            quickActionsSection
+                            
+                            // Last Active Challenge
+                            if let lastActiveChallenge = viewModel.lastActiveChallenge {
+                                lastActiveChallengeSection(challenge: lastActiveChallenge)
+                            } else {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("No Active Challenge")
+                                        .font(.headline)
+                                        .padding(.horizontal)
+                                    
+                                    HStack {
+                                        Spacer()
+                                        
+                                        VStack(spacing: 16) {
+                                            Image(systemName: "flag.slash")
+                                                .font(.system(size: 40))
+                                                .foregroundColor(.theme.subtext)
+                                            
+                                            Text("You don't have any active challenges")
+                                                .font(.subheadline)
+                                                .foregroundColor(.theme.subtext)
+                                                .multilineTextAlignment(.center)
+                                            
+                                            Button(action: {
+                                                // Navigate to Challenges tab
+                                                router.changeTab(to: 0)
+                                                // Delay before showing new challenge sheet
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                                    isShowingNewChallenge = true
+                                                }
+                                            }) {
+                                                Text("Start a Challenge")
+                                                    .font(.headline)
+                                                    .foregroundColor(.white)
+                                                    .padding(.vertical, 12)
+                                                    .padding(.horizontal, 30)
+                                                    .background(
+                                                        RoundedRectangle(cornerRadius: 12)
+                                                            .fill(Color.theme.accent)
+                                                    )
+                                            }
+                                        }
+                                        .padding()
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.vertical)
+                                    .background(Color.theme.surface)
+                                    .cornerRadius(12)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                                    .padding(.horizontal)
+                                }
+                            }
                         }
                     }
-                    .padding(.vertical, 20)
-                    
-                    // Identity-Focused Stats
-                    identityStatsSection
-                    
-                    // Quick Actions Section
-                    quickActionsSection
-                    
-                    // Last Active Challenge
-                    if let lastActiveChallenge = viewModel.lastActiveChallenge {
-                        lastActiveChallengeSection(challenge: lastActiveChallenge)
+                    .transition(.opacity)
+                    .overlay {
+                        if viewModel.isLoading && !viewModel.isInitialLoad {
+                            VStack {
+                                ProgressView()
+                                    .scaleEffect(1.5)
+                                    .padding()
+                            }
+                            .frame(width: 100, height: 100)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.theme.surface.opacity(0.8))
+                                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            )
+                            .transition(.scale.combined(with: .opacity))
+                        }
                     }
                 }
             }
-            .background(Color.theme.background.ignoresSafeArea())
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
             .navigationBarItems(trailing: 
                 Button(action: { isShowingSettings = true }) {
                     Image(systemName: "gear")
@@ -95,7 +184,19 @@ struct ProfileView: View {
                 )
             }
             .onAppear {
+                // Mark tab as changing when this view appears
+                if router.selectedTab == 3 {
+                    router.tabIsChanging = true
+                }
+                
                 viewModel.loadUserProfile()
+                
+                // After a short delay, mark tab as not changing
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    if router.selectedTab == 3 {
+                        router.tabIsChanging = false
+                    }
+                }
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
@@ -319,44 +420,41 @@ struct ProfileView: View {
                 .font(.headline)
                 .padding(.horizontal)
             
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                // View Analytics Button
+            HStack {
                 ActionButton(
-                    title: "View Analytics",
-                    icon: "chart.bar.fill",
-                    action: { isShowingAnalytics = true }
+                    title: "View Analytics", 
+                    icon: "chart.pie.fill", 
+                    action: {
+                        // Navigate to Progress tab and mark for showing analytics
+                        router.changeTab(to: 1)
+                        // Use notification to trigger the action in the target tab
+                        NotificationCenter.default.post(
+                            name: Notification.Name("ShowProgressAnalytics"),
+                            object: nil
+                        )
+                    }
                 )
                 
-                // Start New Challenge Button
                 ActionButton(
-                    title: "New Challenge",
-                    icon: "plus.circle.fill",
-                    action: { isShowingNewChallenge = true }
+                    title: "Create Challenge", 
+                    icon: "flag.fill", 
+                    action: {
+                        // Navigate to Challenges tab and trigger new challenge
+                        router.changeTab(to: 0)
+                        // Allow time for the tab to switch
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            isShowingNewChallenge = true
+                        }
+                    }
                 )
                 
-                // Share Progress Button
                 ActionButton(
-                    title: "Share Progress",
-                    icon: "square.and.arrow.up.fill",
-                    action: { isShowingShareSheet = true }
+                    title: "Settings", 
+                    icon: "gear", 
+                    action: {
+                        isShowingSettings = true
+                    }
                 )
-                
-                // Upgrade to Pro or Pro Features
-                if !subscriptionService.isProUser {
-                    ActionButton(
-                        title: "Upgrade to Pro",
-                        icon: "star.fill",
-                        action: { subscriptionService.showPaywall = true },
-                        color: .yellow
-                    )
-                } else {
-                    ActionButton(
-                        title: "Pro Features",
-                        icon: "crown.fill",
-                        action: { subscriptionService.showPaywall = true },
-                        color: .yellow
-                    )
-                }
             }
             .padding(.horizontal)
         }

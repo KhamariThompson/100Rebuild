@@ -64,9 +64,21 @@ public class CheckInService {
         guard NetworkMonitor.shared.isConnected else { return }
         
         // Get pending check-ins from UserDefaults
-        guard let data = UserDefaults.standard.data(forKey: pendingCheckInsKey),
-              let pendingCheckIns = try? JSONDecoder().decode([PendingCheckIn].self, from: data),
-              !pendingCheckIns.isEmpty else {
+        guard let data = UserDefaults.standard.data(forKey: pendingCheckInsKey) else {
+            return // No data to process
+        }
+        
+        // Decode the data without try? expression
+        let pendingCheckIns: [PendingCheckIn]
+        do {
+            pendingCheckIns = try JSONDecoder().decode([PendingCheckIn].self, from: data)
+        } catch {
+            print("Failed to decode pending check-ins: \(error)")
+            return
+        }
+        
+        // Proceed only if there are check-ins to process
+        guard !pendingCheckIns.isEmpty else {
             return
         }
         
@@ -82,7 +94,8 @@ public class CheckInService {
                     _ = try await performCheckIn(
                         userId: checkIn.userId, 
                         challengeId: checkIn.challengeId,
-                        date: checkIn.date
+                        date: checkIn.date,
+                        durationInMinutes: checkIn.durationInMinutes
                     )
                     remainingCheckIns.removeAll { $0.id == checkIn.id }
                     processedCount += 1
@@ -108,9 +121,13 @@ public class CheckInService {
                 UserDefaults.standard.removeObject(forKey: pendingCheckInsKey)
                 print("All pending check-ins processed successfully")
             } else {
-                if let encoded = try? JSONEncoder().encode(remainingCheckIns) {
+                // Encode without try? expression
+                do {
+                    let encoded = try JSONEncoder().encode(remainingCheckIns)
                     UserDefaults.standard.set(encoded, forKey: pendingCheckInsKey)
                     print("\(processedCount) check-ins processed, \(remainingCheckIns.count) remaining")
+                } catch {
+                    print("Failed to encode remaining check-ins: \(error)")
                 }
             }
             UserDefaults.standard.synchronize()
@@ -118,7 +135,7 @@ public class CheckInService {
     }
     
     // Main check-in function with robust error handling
-    public func checkIn(for challengeId: String) async throws -> Bool {
+    public func checkIn(for challengeId: String, durationInMinutes: Int? = nil) async throws -> Bool {
         // Verify Firebase is initialized
         let firebaseAvailabilityService = FirebaseAvailabilityService.shared
         let firebaseReady = await firebaseAvailabilityService.waitForFirebase()
@@ -154,15 +171,15 @@ public class CheckInService {
         let networkMonitor = NetworkMonitor.shared
         if !networkMonitor.isConnected {
             // Queue check-in for later processing
-            savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date())
+            savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
             throw CheckInError.networkUnavailable
         }
         
-        return try await performCheckIn(userId: userId, challengeId: challengeId, date: Date())
+        return try await performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
     }
     
     // Perform the actual check-in operation
-    private func performCheckIn(userId: String, challengeId: String, date: Date) async throws -> Bool {
+    private func performCheckIn(userId: String, challengeId: String, date: Date, durationInMinutes: Int? = nil) async throws -> Bool {
         // Create transaction with timeout
         return try await withCheckedThrowingContinuation { continuation in
             // Set timeout
@@ -186,7 +203,6 @@ public class CheckInService {
                     // Use calendar's start of day to ensure consistent date comparison
                     let calendar = Calendar.current
                     let today = calendar.startOfDay(for: date)
-                    let timestamp = Timestamp(date: today)
                     
                     // Get last check-in date if available
                     var lastCheckInDate: Date?
@@ -203,71 +219,60 @@ public class CheckInService {
                     // Calculate streak based on date difference
                     var streakCount = (challengeData["streakCount"] as? Int) ?? 0
                     
+                    // Check if the streak is still active (checked in yesterday)
+                    var streakActive = false
+                    
                     if let lastCheckIn = lastCheckInDate {
-                        // Get the normalized dates for comparison (start of day)
-                        let normalizedLastCheckIn = calendar.startOfDay(for: lastCheckIn)
+                        let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
+                        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
                         
-                        // Calculate days between last check-in and today
-                        let daysBetween = calendar.dateComponents([.day], from: normalizedLastCheckIn, to: today).day ?? 0
-                        
-                        // Proper streak calculation:
-                        // - If checked in yesterday (daysBetween == 1), increment streak
-                        // - If checking in today (daysBetween == 0), maintain streak (shouldn't happen due to earlier check)
-                        // - If missed a day or more (daysBetween > 1), reset streak to 1
-                        if daysBetween == 1 {
-                            // Checked in yesterday, continue the streak
-                            streakCount += 1
-                        } else if daysBetween > 1 {
-                            // Streak has been broken (more than 1 day passed)
-                            streakCount = 1
-                        } else if daysBetween == 0 {
-                            // Same day, don't change streak (shouldn't happen due to earlier check)
-                            // If it somehow does, we'll maintain current streak
-                        } else {
-                            // Negative days (future check-in or time zone issue)
-                            // Treat as a new streak
-                            streakCount = 1
-                        }
+                        streakActive = calendar.isDate(lastCheckInDay, inSameDayAs: yesterday)
+                    }
+                    
+                    // Update the streak count
+                    if streakActive {
+                        // Increment streak if checked in yesterday
+                        streakCount += 1
                     } else {
-                        // First check-in ever
+                        // Reset streak if missed a day or first check-in
                         streakCount = 1
                     }
                     
-                    // Update streak count
-                    challengeData["streakCount"] = streakCount
-                    
                     // Update days completed
-                    var daysCompleted = (challengeData["daysCompleted"] as? Int) ?? 0
-                    daysCompleted += 1
-                    challengeData["daysCompleted"] = daysCompleted
+                    let daysCompleted = (challengeData["daysCompleted"] as? Int) ?? 0
                     
-                    // Update last check-in date
-                    challengeData["lastCheckInDate"] = timestamp
+                    // Create check-in document - create a unique ID for this check-in
+                    let checkInId = UUID().uuidString
+                    let checkInRef = challengeRef.collection("checkIns").document(checkInId)
                     
-                    // Mark as completed today
-                    challengeData["isCompletedToday"] = true
+                    // Create check-in data
+                    var checkInData: [String: Any] = [
+                        "date": Timestamp(date: date),
+                        "userId": userId,
+                        "dayNumber": daysCompleted + 1
+                    ]
                     
-                    // Update completion status if reached 100 days
-                    if daysCompleted >= 100 {
-                        challengeData["isCompleted"] = true
+                    // Add duration data if provided (from a timed check-in)
+                    if let duration = durationInMinutes {
+                        checkInData["durationInMinutes"] = duration
                     }
                     
-                    // Update last modified timestamp
-                    challengeData["lastModified"] = Timestamp(date: Date())
+                    // Save check-in document first
+                    try transaction.setData(checkInData, forDocument: checkInRef)
                     
-                    // Save check-in record
-                    let checkInRef = challengeRef.collection("checkIns").document()
-                    transaction.setData([
-                        "date": timestamp,
-                        "userId": userId,
-                        "notes": ""
-                    ], forDocument: checkInRef)
+                    // Update the challenge with streak and completion info
+                    challengeData["streakCount"] = streakCount
+                    challengeData["daysCompleted"] = daysCompleted + 1
+                    challengeData["lastCheckInDate"] = Timestamp(date: date)
+                    challengeData["isCompletedToday"] = true
+                    challengeData["lastModified"] = Timestamp(date: date)
                     
-                    // Update challenge document
-                    transaction.updateData(challengeData, forDocument: challengeRef)
+                    // Set the challenge data
+                    try transaction.setData(challengeData, forDocument: challengeRef)
                     
                     return true
                 } catch {
+                    // If there's an error, set the error pointer
                     errorPointer?.pointee = error as NSError
                     return false
                 }
@@ -297,12 +302,17 @@ public class CheckInService {
     }
     
     // Store pending check-in for offline mode
-    private func savePendingCheckIn(userId: String, challengeId: String, date: Date) {
+    private func savePendingCheckIn(userId: String, challengeId: String, date: Date, durationInMinutes: Int? = nil) {
         // Get existing pending check-ins
         var pendingCheckIns: [PendingCheckIn] = []
-        if let data = UserDefaults.standard.data(forKey: pendingCheckInsKey),
-           let decoded = try? JSONDecoder().decode([PendingCheckIn].self, from: data) {
-            pendingCheckIns = decoded
+        if let data = UserDefaults.standard.data(forKey: pendingCheckInsKey) {
+            // Properly handle the decoding with try-catch
+            do {
+                pendingCheckIns = try JSONDecoder().decode([PendingCheckIn].self, from: data)
+            } catch {
+                print("Failed to decode existing pending check-ins: \(error)")
+                // Continue with empty array if decoding fails
+            }
         }
         
         // Add new check-in
@@ -310,15 +320,19 @@ public class CheckInService {
             id: UUID().uuidString,
             userId: userId,
             challengeId: challengeId,
-            date: date
+            date: date,
+            durationInMinutes: durationInMinutes
         )
         pendingCheckIns.append(newCheckIn)
         
-        // Save back to UserDefaults
-        if let encoded = try? JSONEncoder().encode(pendingCheckIns) {
+        // Save back to UserDefaults with proper try-catch
+        do {
+            let encoded = try JSONEncoder().encode(pendingCheckIns)
             UserDefaults.standard.set(encoded, forKey: pendingCheckInsKey)
             UserDefaults.standard.synchronize()
             print("Saved check-in for offline processing: \(challengeId)")
+        } catch {
+            print("Failed to encode pending check-ins: \(error)")
         }
     }
     
@@ -380,4 +394,5 @@ struct PendingCheckIn: Codable {
     let userId: String
     let challengeId: String
     let date: Date
+    let durationInMinutes: Int?
 } 

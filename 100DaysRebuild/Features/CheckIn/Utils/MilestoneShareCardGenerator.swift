@@ -32,91 +32,69 @@ class MilestoneShareCardGenerator {
         backgroundStyle: BackgroundStyle = .gradient([Color.theme.accent, Color.theme.accent.opacity(0.7)]),
         layout: CardLayout = .modern
     ) -> UIImage {
-        // Choose renderer size based on layout
-        let size: CGSize
-        switch layout {
-        case .modern:
-            size = CGSize(width: 1200, height: 1200)
-        case .classic:
-            size = CGSize(width: 1080, height: 1350)
-        case .minimal:
-            size = CGSize(width: 1080, height: 1080)
-        }
-        
-        // Create the renderer
+        // Create an image renderer with size optimized for social media sharing
+        let size = CGSize(width: 1200, height: 1800)
         let renderer = UIGraphicsImageRenderer(size: size)
         
-        // Generate the image
         return renderer.image { context in
-            // Set up the background
-            let rect = CGRect(origin: .zero, size: size)
+            // Render the background first
+            renderBackground(context: context, size: size, style: backgroundStyle)
             
-            // Apply background style
-            switch backgroundStyle {
-            case .solid(let color):
-                UIColor(color).setFill()
-                context.fill(rect)
-                
-            case .gradient(let colors):
-                let gradient = CGGradient(
-                    colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                    colors: colors.map { UIColor($0).cgColor } as CFArray,
-                    locations: nil
-                )!
-                
-                context.cgContext.drawLinearGradient(
-                    gradient,
-                    start: CGPoint(x: 0, y: 0),
-                    end: CGPoint(x: size.width, y: size.height),
-                    options: []
-                )
-                
-            case .pattern(let imageName):
-                if let image = UIImage(named: imageName) {
-                    image.draw(in: rect)
-                } else {
-                    // Fallback to accent color if image not found
-                    UIColor(Color.theme.accent).setFill()
-                    context.fill(rect)
-                }
-            }
-            
-            // Render content based on layout
+            // Select and render the appropriate layout
             switch layout {
             case .modern:
-                renderModernLayout(
-                    context: context,
-                    size: size,
-                    day: currentDay,
-                    title: challengeTitle,
-                    quote: quote
-                )
-                
+                renderModernLayout(context: context, size: size, day: currentDay, title: challengeTitle, quote: quote)
             case .classic:
-                renderClassicLayout(
-                    context: context,
-                    size: size,
-                    day: currentDay,
-                    title: challengeTitle,
-                    quote: quote
-                )
-                
+                renderClassicLayout(context: context, size: size, day: currentDay, title: challengeTitle, quote: quote)
             case .minimal:
-                renderMinimalLayout(
-                    context: context,
-                    size: size,
-                    day: currentDay,
-                    title: challengeTitle,
-                    quote: quote
-                )
+                renderMinimalLayout(context: context, size: size, day: currentDay, title: challengeTitle, quote: quote)
             }
             
-            // Add app branding/watermark
-            addWatermark(context: context, size: size)
+            // Add app branding
+            drawAppBranding(context: context, size: size)
         }
     }
     
-    // MARK: - Private Layout Methods
+    // MARK: - Background Renderers
+    
+    private static func renderBackground(context: UIGraphicsImageRendererContext, size: CGSize, style: BackgroundStyle) {
+        switch style {
+        case .solid(let color):
+            let uiColor = UIColor(color)
+            uiColor.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            
+        case .gradient(let colors):
+            let uiColors = colors.map { UIColor($0) }
+            
+            // Create a gradient layer
+            let gradientLayer = CAGradientLayer()
+            gradientLayer.frame = CGRect(origin: .zero, size: size)
+            gradientLayer.colors = uiColors.map { $0.cgColor }
+            gradientLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+            gradientLayer.endPoint = CGPoint(x: 1.0, y: 1.0)
+            
+            // Render the gradient layer
+            let context = UIGraphicsGetCurrentContext()!
+            gradientLayer.render(in: context)
+            
+            // Add a subtle pattern overlay for texture
+            if let patternImage = UIImage(named: "subtle_pattern")?.withTintColor(UIColor.white.withAlphaComponent(0.05)) {
+                patternImage.draw(in: CGRect(origin: .zero, size: size), blendMode: .overlay, alpha: 0.2)
+            }
+            
+        case .pattern(let name):
+            if let patternImage = UIImage(named: name) {
+                patternImage.draw(in: CGRect(origin: .zero, size: size))
+            } else {
+                // Fallback to a solid color if pattern not found
+                UIColor.systemBlue.setFill()
+                context.fill(CGRect(origin: .zero, size: size))
+            }
+        }
+    }
+    
+    // MARK: - Layout Renderers
     
     private static func renderModernLayout(
         context: UIGraphicsImageRendererContext,
@@ -125,9 +103,9 @@ class MilestoneShareCardGenerator {
         title: String,
         quote: Quote?
     ) {
-        let padding: CGFloat = 60
+        let padding: CGFloat = 80
         
-        // Create rounded rectangle for content
+        // Create rounded rectangle with blurred backdrop
         let contentRect = CGRect(
             x: padding,
             y: padding,
@@ -135,34 +113,48 @@ class MilestoneShareCardGenerator {
             height: size.height - (padding * 2)
         )
         
+        // Draw a glassy card background
         let roundedPath = UIBezierPath(
             roundedRect: contentRect,
-            cornerRadius: 40
+            cornerRadius: 60
         )
-        UIColor.white.withAlphaComponent(0.15).setFill()
+        UIColor.white.withAlphaComponent(0.1).setFill()
         roundedPath.fill()
         
-        // Draw day number
+        // Draw decorative elements - circles
+        drawDecorativeElements(in: contentRect, context: context.cgContext)
+        
+        // Draw day number with enhanced typography
         let dayString = "\(day)"
         let dayAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 240, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 300, weight: .black),
+            .foregroundColor: UIColor.white.withAlphaComponent(0.95)
         ]
         
         let dayStringSize = dayString.size(withAttributes: dayAttributes)
         let dayX = (size.width - dayStringSize.width) / 2
-        let dayY = contentRect.minY + 150
+        let dayY = contentRect.minY + 120
+        
+        // Draw subtle shadow for depth
+        let shadowAttributes = dayAttributes.merging([
+            .foregroundColor: UIColor.black.withAlphaComponent(0.3)
+        ]) { (_, new) in new }
+        
+        dayString.draw(
+            at: CGPoint(x: dayX + 4, y: dayY + 4),
+            withAttributes: shadowAttributes
+        )
         
         dayString.draw(
             at: CGPoint(x: dayX, y: dayY),
             withAttributes: dayAttributes
         )
         
-        // Draw "Day of 100" text
+        // Draw "DAY OF 100" text with enhanced styling
         let daysText = "DAY OF 100"
         let daysAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 48, weight: .bold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            .foregroundColor: UIColor.white.withAlphaComponent(0.9)
         ]
         
         let daysTextSize = daysText.size(withAttributes: daysAttributes)
@@ -174,18 +166,36 @@ class MilestoneShareCardGenerator {
             withAttributes: daysAttributes
         )
         
-        // Draw challenge title
+        // Draw horizontal accent line
+        let lineY = daysY + daysTextSize.height + 40
+        let lineWidth: CGFloat = 180
+        let lineRect = CGRect(
+            x: (size.width - lineWidth) / 2,
+            y: lineY,
+            width: lineWidth,
+            height: 4
+        )
+        UIColor.white.withAlphaComponent(0.8).setFill()
+        context.fill(lineRect)
+        
+        // Draw challenge title with enhanced typography
         let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 48, weight: .semibold),
-            .foregroundColor: UIColor.white
+            .font: UIFont.systemFont(ofSize: 58, weight: .semibold),
+            .foregroundColor: UIColor.white,
+            .paragraphStyle: {
+                let style = NSMutableParagraphStyle()
+                style.alignment = .center
+                style.lineSpacing = 8
+                return style
+            }()
         ]
         
-        let titleWidth = contentRect.width - 40
+        let titleWidth = contentRect.width - 100
         let titleRect = CGRect(
-            x: contentRect.minX + 20,
-            y: daysY + daysTextSize.height + 60,
+            x: contentRect.minX + 50,
+            y: lineY + 60,
             width: titleWidth,
-            height: 120
+            height: 180
         )
         
         drawMultilineText(
@@ -195,16 +205,41 @@ class MilestoneShareCardGenerator {
             alignment: .center
         )
         
-        // Draw quote if available
+        // Draw quote if available with enhanced styling
         if let quote = quote {
             let quoteRect = CGRect(
-                x: contentRect.minX + 80,
+                x: contentRect.minX + 100,
                 y: titleRect.maxY + 80,
-                width: contentRect.width - 160,
-                height: 200
+                width: contentRect.width - 200,
+                height: 300
             )
             
-            drawQuote(quote, in: quoteRect, textColor: .white)
+            drawQuote(quote, in: quoteRect, textColor: .white, modern: true)
+        }
+    }
+    
+    private static func drawDecorativeElements(in rect: CGRect, context: CGContext) {
+        // Add some decorative elements like circles
+        let circleCount = 8
+        let maxRadius: CGFloat = 40
+        
+        for i in 0..<circleCount {
+            let position = CGPoint(
+                x: CGFloat.random(in: rect.minX...rect.maxX),
+                y: CGFloat.random(in: rect.minY...rect.maxY)
+            )
+            let radius = CGFloat.random(in: 15...maxRadius)
+            let circlePath = UIBezierPath(
+                arcCenter: position,
+                radius: radius,
+                startAngle: 0,
+                endAngle: 2 * .pi,
+                clockwise: true
+            )
+            
+            let opacity = CGFloat.random(in: 0.03...0.08)
+            UIColor.white.withAlphaComponent(opacity).setFill()
+            circlePath.fill()
         }
     }
     
@@ -398,82 +433,71 @@ class MilestoneShareCardGenerator {
         attributedString.draw(in: rect)
     }
     
-    private static func drawQuote(
-        _ quote: Quote,
-        in rect: CGRect,
-        textColor: UIColor
-    ) {
-        // Quote text
-        let quoteTextRect = CGRect(
-            x: rect.minX,
-            y: rect.minY,
-            width: rect.width,
-            height: rect.height - 40
-        )
+    private static func drawQuote(_ quote: Quote, in rect: CGRect, textColor: UIColor, modern: Bool = false) {
+        let quoteText = "\"\(quote.text)\""
         
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = .center
-        paragraphStyle.lineBreakMode = .byWordWrapping
+        paragraphStyle.lineSpacing = 8
         
-        let attributedQuote = NSMutableAttributedString(
-            string: "\"",
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 60, weight: .bold),
-                .foregroundColor: textColor.withAlphaComponent(0.7)
-            ]
-        )
-        
-        attributedQuote.append(NSAttributedString(
-            string: "\(quote.text)",
-            attributes: [
-                .font: UIFont.italicSystemFont(ofSize: 32),
-                .foregroundColor: textColor.withAlphaComponent(0.9),
-                .paragraphStyle: paragraphStyle
-            ]
-        ))
-        
-        attributedQuote.append(NSAttributedString(
-            string: "\"",
-            attributes: [
-                .font: UIFont.systemFont(ofSize: 60, weight: .bold),
-                .foregroundColor: textColor.withAlphaComponent(0.7)
-            ]
-        ))
-        
-        attributedQuote.draw(in: quoteTextRect)
-        
-        // Author
-        let authorText = "—\(quote.author)"
-        let authorAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 24, weight: .medium),
-            .foregroundColor: textColor.withAlphaComponent(0.8)
+        let quoteAttributes: [NSAttributedString.Key: Any] = [
+            .font: modern ? UIFont.systemFont(ofSize: 36, weight: .medium) : UIFont.italicSystemFont(ofSize: 34),
+            .foregroundColor: textColor.withAlphaComponent(0.95),
+            .paragraphStyle: paragraphStyle
         ]
         
-        let authorSize = authorText.size(withAttributes: authorAttributes)
-        let authorX = rect.maxX - authorSize.width
-        let authorY = quoteTextRect.maxY + 12
+        let authorAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 28, weight: .medium),
+            .foregroundColor: textColor.withAlphaComponent(0.8),
+            .paragraphStyle: paragraphStyle
+        ]
         
-        authorText.draw(
-            at: CGPoint(x: authorX, y: authorY),
+        // Calculate text size
+        let quoteSize = (quoteText as NSString).boundingRect(
+            with: CGSize(width: rect.width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: quoteAttributes,
+            context: nil
+        )
+        
+        // Draw quote text
+        (quoteText as NSString).draw(
+            with: CGRect(
+                x: rect.minX,
+                y: rect.minY,
+                width: rect.width,
+                height: quoteSize.height
+            ),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: quoteAttributes,
+            context: nil
+        )
+        
+        // Draw author attribution
+        let authorText = "— \(quote.author)"
+        let authorY = rect.minY + quoteSize.height + 24
+        
+        (authorText as NSString).draw(
+            at: CGPoint(x: rect.midX - authorText.size(withAttributes: authorAttributes).width / 2, y: authorY),
             withAttributes: authorAttributes
         )
     }
     
-    private static func addWatermark(context: UIGraphicsImageRendererContext, size: CGSize) {
-        // Draw app branding
-        let appName = "@100DaysApp"
-        let watermarkAttributes: [NSAttributedString.Key: Any] = [
+    // Add app branding to the image
+    private static func drawAppBranding(context: UIGraphicsImageRendererContext, size: CGSize) {
+        let appNameAttributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.systemFont(ofSize: 24, weight: .semibold),
             .foregroundColor: UIColor.white.withAlphaComponent(0.7)
         ]
         
-        let watermarkSize = appName.size(withAttributes: watermarkAttributes)
-        let watermarkX = size.width - watermarkSize.width - 20
-        let watermarkY = size.height - watermarkSize.height - 20
+        let appName = "100Days App"
+        let appNameSize = appName.size(withAttributes: appNameAttributes)
+        let appNameX = size.width - appNameSize.width - 40
+        let appNameY = size.height - appNameSize.height - 40
         
         appName.draw(
-            at: CGPoint(x: watermarkX, y: watermarkY),
-            withAttributes: watermarkAttributes
+            at: CGPoint(x: appNameX, y: appNameY),
+            withAttributes: appNameAttributes
         )
     }
 } 

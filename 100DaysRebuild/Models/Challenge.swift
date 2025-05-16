@@ -11,6 +11,7 @@ struct Challenge: Identifiable, Codable, Equatable {
     var isArchived: Bool
     let ownerId: String
     var lastModified: Date // Added for syncing and sorting by recent edits
+    var isTimed: Bool // New property for timer-based challenges
     
     // Computed properties
     var hasStreakExpired: Bool {
@@ -126,7 +127,8 @@ struct Challenge: Identifiable, Codable, Equatable {
          isCompletedToday: Bool = false, 
          isArchived: Bool = false, 
          ownerId: String,
-         lastModified: Date = Date()) {
+         lastModified: Date = Date(),
+         isTimed: Bool = false) {
         self.id = id
         self.title = title
         self.startDate = startDate
@@ -144,6 +146,7 @@ struct Challenge: Identifiable, Codable, Equatable {
         self.isArchived = isArchived
         self.ownerId = ownerId
         self.lastModified = lastModified
+        self.isTimed = isTimed
     }
     
     // MARK: - Equatable
@@ -158,6 +161,7 @@ struct Challenge: Identifiable, Codable, Equatable {
                lhs.isCompletedToday == rhs.isCompletedToday &&
                lhs.isArchived == rhs.isArchived &&
                lhs.ownerId == rhs.ownerId &&
-               lhs.lastModified == rhs.lastModified
+               lhs.lastModified == rhs.lastModified &&
+               lhs.isTimed == rhs.isTimed
     }
 } 

@@ -13,6 +13,7 @@ class SubscriptionService: ObservableObject {
     @Published var showPaywall = false
     @Published var errorLoadingOfferings = false
     @Published var offeringsLoaded = false
+    @Published var fallbackPricing: String = "$4.99" // Default fallback price
     
     // Flag to disable purchases during App Review
     // Set to false for release builds when products are in "Waiting for Review" status
@@ -21,6 +22,11 @@ class SubscriptionService: ObservableObject {
     #else
     @Published var isPurchasingEnabled = true // Set to false for App Store submissions until products are approved
     #endif
+    
+    // Cache offerings to avoid multiple requests
+    private var cachedOfferings: Offerings?
+    private var isLoadingOfferings = false
+    private var didAttemptOfferingsLoad = false
     
     // RevenueCat API key
     private var apiKey: String {
@@ -36,10 +42,16 @@ class SubscriptionService: ObservableObject {
         setupRevenueCat()
         
         Task {
+            // Load StoreKit products first
             await loadProducts()
+            
+            // Then check subscription status
             await updateSubscriptionStatus()
-            // Add early check for offerings configuration
-            let _ = await checkOfferingsConfiguration()
+            
+            // Finally check offerings configuration - but only once
+            if !didAttemptOfferingsLoad {
+                await checkOfferingsConfiguration()
+            }
         }
         
         // Listen for StoreKit transactions
@@ -66,6 +78,12 @@ class SubscriptionService: ObservableObject {
     }
     
     private func setupRevenueCat() {
+        // Only configure if not already configured
+        if Purchases.isConfigured {
+            print("RevenueCat is already configured, skipping initialization")
+            return
+        }
+        
         // Configure RevenueCat with API key
         Purchases.configure(withAPIKey: apiKey)
         
@@ -75,6 +93,24 @@ class SubscriptionService: ObservableObject {
         #else
         Purchases.logLevel = .error
         #endif
+        
+        // Setup custom error handling to suppress offerings errors
+        Purchases.logHandler = { level, message in
+            // Filter out the offerings not configured errors that are expected during development
+            if message.contains("There are no products registered in the RevenueCat dashboard for your offerings") {
+                // Just ignore these messages completely
+                return
+            }
+            
+            // Log other messages as usual
+            if level == .debug {
+                #if DEBUG
+                print("RC: \(message)")
+                #endif
+            } else if level == .error || level == .info {
+                print("RevenueCat Error: \(message)")
+            }
+        }
         
         // Ensure entitlements are configured correctly
         print("RevenueCat configured with key: \(apiKey)")
@@ -145,6 +181,11 @@ class SubscriptionService: ObservableObject {
             print("Loading StoreKit products: \(productIDs)")
             availableProducts = try await Product.products(for: productIDs)
             print("Loaded \(availableProducts.count) products from StoreKit")
+            
+            // Load fallback pricing if we have products
+            if !availableProducts.isEmpty {
+                await loadFallbackPricing()
+            }
             
             // Log available products for debug
             for product in availableProducts {
@@ -228,22 +269,123 @@ class SubscriptionService: ObservableObject {
         }
     }
     
+    // Check if offerings are available and properly configured
+    func checkOfferingsConfiguration() async -> Bool {
+        // If we already attempted to load offerings, use cached result
+        if didAttemptOfferingsLoad {
+            return !errorLoadingOfferings
+        }
+        
+        // If we're already loading offerings, wait for it to complete
+        if isLoadingOfferings {
+            for _ in 0..<10 { // Try up to 10 times with short delay
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
+                if didAttemptOfferingsLoad {
+                    return !errorLoadingOfferings
+                }
+            }
+        }
+        
+        // Mark that we're loading offerings
+        isLoadingOfferings = true
+        
+        do {
+            print("Checking RevenueCat offerings configuration...")
+            
+            // Use a timeout to prevent hanging on offering fetch
+            let offerings = try await withThrowingTimeout(seconds: 5.0) {
+                try await Purchases.shared.offerings()
+            }
+            
+            // Cache the offerings for future use
+            self.cachedOfferings = offerings
+            
+            // Check if we have the default offering configured
+            if let current = offerings.current {
+                print("Current offering available: \(current.identifier)")
+                print("Packages in offering: \(current.availablePackages.map { $0.identifier })")
+                
+                let hasMonthlyPackage = current.availablePackages.contains { 
+                    $0.storeProduct.productIdentifier == monthlyProductID 
+                }
+                
+                if hasMonthlyPackage {
+                    print("Monthly package found with correct product ID")
+                    await MainActor.run {
+                        self.offeringsLoaded = true
+                        self.errorLoadingOfferings = false
+                        self.didAttemptOfferingsLoad = true
+                        self.isLoadingOfferings = false
+                    }
+                    return true
+                } else {
+                    print("Monthly package not found or has incorrect product ID")
+                    print("Expected product ID: \(monthlyProductID)")
+                    print("Available product IDs: \(current.availablePackages.map { $0.storeProduct.productIdentifier })")
+                    
+                    // Even if package not found, still mark as loaded to avoid multiple errors
+                    await MainActor.run {
+                        self.offeringsLoaded = true
+                        self.errorLoadingOfferings = true // Mark as error to use fallback
+                        self.didAttemptOfferingsLoad = true
+                        self.isLoadingOfferings = false
+                    }
+                    // Use StoreKit fallback pricing
+                    await loadFallbackPricing()
+                    return false
+                }
+            } else {
+                print("No current offering available - using StoreKit fallback")
+                // Mark as error to use fallback
+                await MainActor.run {
+                    self.offeringsLoaded = true
+                    self.errorLoadingOfferings = true
+                    self.didAttemptOfferingsLoad = true
+                    self.isLoadingOfferings = false
+                }
+                await loadFallbackPricing()
+                return false
+            }
+        } catch {
+            print("Error checking offerings: \(error.localizedDescription)")
+            // Mark as error to use fallback
+            await MainActor.run {
+                self.offeringsLoaded = true
+                self.errorLoadingOfferings = true
+                self.didAttemptOfferingsLoad = true
+                self.isLoadingOfferings = false
+            }
+            await loadFallbackPricing()
+            return false
+        }
+    }
+    
+    // Get cached offerings or load them if needed
+    func getOfferings() async -> Offerings? {
+        if let cached = cachedOfferings {
+            return cached
+        }
+        
+        // If we haven't loaded offerings yet, try to load them
+        if !didAttemptOfferingsLoad {
+            await checkOfferingsConfiguration()
+        }
+        
+        return cachedOfferings
+    }
+    
     func purchaseSubscription(plan: SubscriptionPlan) async throws {
         let productID = plan.rawValue
         print("Attempting to purchase product: \(productID)")
         
-        // Try RevenueCat first
-        do {
-            let offerings = try await Purchases.shared.offerings()
-            print("Successfully retrieved RevenueCat offerings")
+        // Try RevenueCat first if we have offerings
+        if let offerings = await getOfferings(), let offering = offerings.current {
+            print("Using cached RevenueCat offerings")
             
-            if let offering = offerings.current {
-                print("Current offering: \(offering.identifier)")
-                print("Available packages: \(offering.availablePackages.map { $0.identifier })")
+            if let package = offering.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) {
+                print("Found matching package: \(package.identifier) with product ID: \(package.storeProduct.productIdentifier)")
                 
-                if let package = offering.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) {
-                    print("Found matching package: \(package.identifier) with product ID: \(package.storeProduct.productIdentifier)")
-                    
+                do {
                     let result = try await Purchases.shared.purchase(package: package)
                     print("Purchase successful - entitlements: \(result.customerInfo.entitlements.active.keys.joined(separator: ", "))")
                     
@@ -256,15 +398,16 @@ class SubscriptionService: ObservableObject {
                     
                     // Purchase succeeded
                     return
-                } else {
-                    print("No matching package found for product ID: \(productID)")
+                } catch {
+                    print("RevenueCat purchase failed: \(error.localizedDescription)")
+                    // Fall through to StoreKit approach as fallback
                 }
             } else {
-                print("No current offering available")
+                print("No matching package found for product ID: \(productID)")
+                // Fall through to StoreKit approach as fallback
             }
-        } catch {
-            print("RevenueCat purchase failed: \(error.localizedDescription)")
-            // Continue with StoreKit approach as fallback
+        } else {
+            print("No RevenueCat offerings available, using StoreKit directly")
         }
         
         // Fallback to StoreKit 2
@@ -300,6 +443,24 @@ class SubscriptionService: ObservableObject {
         }
     }
     
+    // New function to load fallback pricing from StoreKit directly
+    private func loadFallbackPricing() async {
+        if availableProducts.isEmpty {
+            await loadProducts() // Make sure products are loaded
+        }
+        
+        if let product = availableProducts.first(where: { $0.id == monthlyProductID }) {
+            // Use the StoreKit price
+            await MainActor.run {
+                self.fallbackPricing = product.displayPrice
+            }
+            print("Using StoreKit fallback pricing: \(product.displayPrice)")
+        } else {
+            // Keep default fallback price
+            print("No StoreKit product available either, using hardcoded fallback price")
+        }
+    }
+    
     func restorePurchases() async throws {
         print("Restoring purchases via RevenueCat")
         // Try to restore via RevenueCat
@@ -326,53 +487,30 @@ class SubscriptionService: ObservableObject {
         await updateSubscriptionStatus()
     }
     
-    // Check if offerings are available and properly configured
-    func checkOfferingsConfiguration() async -> Bool {
-        do {
-            print("Checking RevenueCat offerings configuration...")
-            let offerings = try await Purchases.shared.offerings()
-            
-            if let current = offerings.current {
-                print("Current offering available: \(current.identifier)")
-                print("Packages in offering: \(current.availablePackages.map { $0.identifier })")
-                
-                let hasMonthlyPackage = current.availablePackages.contains { 
-                    $0.storeProduct.productIdentifier == monthlyProductID 
-                }
-                
-                if hasMonthlyPackage {
-                    print("Monthly package found with correct product ID")
-                    await MainActor.run {
-                        self.offeringsLoaded = true
-                        self.errorLoadingOfferings = false
-                    }
-                    return true
-                } else {
-                    print("Monthly package not found or has incorrect product ID")
-                    print("Expected product ID: \(monthlyProductID)")
-                    print("Available product IDs: \(current.availablePackages.map { $0.storeProduct.productIdentifier })")
-                    
-                    await MainActor.run {
-                        self.offeringsLoaded = false
-                        self.errorLoadingOfferings = true
-                    }
-                    return false
-                }
-            } else {
-                print("No current offering available")
-                await MainActor.run {
-                    self.offeringsLoaded = false
-                    self.errorLoadingOfferings = true
-                }
-                return false
-            }
-        } catch {
-            print("Error checking offerings: \(error.localizedDescription)")
-            await MainActor.run {
-                self.offeringsLoaded = false
-                self.errorLoadingOfferings = true
-            }
-            return false
+    // Helper function to add timeout to RevenueCat operations
+    private func withTimeout<T>(seconds: TimeInterval, task: Task<T, Error>) async throws -> T {
+        let timeoutTask = Task {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            task.cancel()
+            throw SubscriptionError.timeout
         }
+        
+        do {
+            let result = try await task.value
+            timeoutTask.cancel()
+            return result
+        } catch {
+            timeoutTask.cancel()
+            throw error
+        }
+    }
+    
+    // Add a timeout to any throwing async call
+    private func withThrowingTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        let task = Task {
+            try await operation()
+        }
+        
+        return try await withTimeout(seconds: seconds, task: task)
     }
 } 

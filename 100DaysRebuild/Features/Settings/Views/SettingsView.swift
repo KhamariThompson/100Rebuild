@@ -10,11 +10,12 @@ struct SettingsView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var themeManager: ThemeManager
     
     // State
-    @AppStorage("AppTheme") private var appTheme: String = "system"
     @State private var showingChangeEmail = false
     @State private var showingChangePassword = false
+    @State private var showingChangeUsername = false
     @State private var isRestoringPurchases = false
     @State private var isPerformingAction = false
     @State private var showingShareSheet = false
@@ -26,6 +27,7 @@ struct SettingsView: View {
     @State private var isNotificationsEnabled = false
     @State private var showSuccessMessage = false
     @State private var successMessage = ""
+    @State private var selectedTheme: AppThemeMode = .system // Local state for theme selection
     
     // Notification Settings
     @State private var isDailyReminderEnabled: Bool = true
@@ -34,9 +36,6 @@ struct SettingsView: View {
     @State private var isSoundEnabled: Bool = true
     @State private var isVibrationEnabled: Bool = true
     @State private var showingPermissionAlert = false
-    
-    // Theme options
-    private let themeOptions = ["light", "dark", "system"]
     
     var body: some View {
         NavigationView {
@@ -55,6 +54,10 @@ struct SettingsView: View {
                 }
                 .sheet(isPresented: $showingChangePassword) {
                     ChangePasswordView()
+                }
+                .sheet(isPresented: $showingChangeUsername) {
+                    ChangeUsernameView()
+                        .environmentObject(userSession)
                 }
                 .sheet(isPresented: $subscriptionService.showPaywall) {
                     PaywallView()
@@ -117,6 +120,7 @@ struct SettingsView: View {
                 }
                 .onAppear {
                     syncWithNotificationService()
+                    selectedTheme = themeManager.currentTheme
                 }
         }
         .accentColor(.theme.accent)
@@ -151,25 +155,29 @@ struct SettingsView: View {
         SettingsSection(title: "Account", icon: "person.crop.circle.fill") {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let email = userSession.currentUser?.email {
+                    if let username = userSession.username {
                         HStack {
-                            Image(systemName: "envelope.fill")
+                            Text("@\(username)")
+                                .font(.system(.subheadline, design: .monospaced))
                                 .foregroundColor(.theme.accent)
-                            Text(email)
-                                .foregroundColor(.theme.text)
+                                .fontWeight(.medium)
+                            
                             Spacer()
+                            
+                            Button("Change") {
+                                showingChangeUsername = true
+                            }
+                            .font(.footnote)
+                            .foregroundColor(.theme.accent)
                         }
-                        .padding(.vertical, 4)
                     }
                     
-                    Divider()
-                    
                     Button(action: { showingChangeEmail = true }) {
-                        SettingsRow(icon: "pencil", title: "Change Email", showChevron: true)
+                        SettingsRow(icon: "envelope.fill", title: "Change Email", showChevron: true)
                     }
                     
                     Button(action: { showingChangePassword = true }) {
-                        SettingsRow(icon: "lock", title: "Change Password", showChevron: true)
+                        SettingsRow(icon: "lock.fill", title: "Change Password", showChevron: true)
                     }
                     
                     Button(action: { 
@@ -389,15 +397,20 @@ struct SettingsView: View {
                         .foregroundColor(.theme.subtext)
                         .padding(.bottom, 4)
                     
-                    // Simplified Picker to avoid type-checking complexity
-                    Picker("Theme", selection: $appTheme) {
-                        Text("Light").tag("light")
-                        Text("Dark").tag("dark")
-                        Text("System").tag("system")
+                    // Updated theme picker using ThemeManager
+                    Picker("Theme", selection: $selectedTheme) {
+                        ForEach(AppThemeMode.allCases) { theme in
+                            HStack {
+                                Image(systemName: theme.iconName)
+                                Text(theme.displayName)
+                            }
+                            .tag(theme)
+                        }
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: appTheme) { oldValue, newValue in
+                    .onChange(of: selectedTheme) { oldValue, newValue in
                         hapticFeedback()
+                        themeManager.setTheme(newValue)
                     }
                 }
                 .padding(.vertical, 8)

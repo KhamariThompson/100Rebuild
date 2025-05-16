@@ -4,6 +4,7 @@ import FirebaseStorage
 import PhotosUI
 import FirebaseFirestore
 import FirebaseAuth
+import Combine
 
 // Using canonical Challenge model
 // (No import needed as it will be accessed directly)
@@ -27,6 +28,7 @@ class ProfileViewModel: ObservableObject {
     
     // UI states
     @Published var isLoading: Bool = false
+    @Published var isInitialLoad: Bool = true
     @Published var error: String?
     @Published var showUsernameError: Bool = false
     @Published var usernameError: String = ""
@@ -36,6 +38,7 @@ class ProfileViewModel: ObservableObject {
     private let firebaseService = FirebaseService.shared
     private let userSession = UserSession.shared
     private let subscriptionService = SubscriptionService.shared
+    private let challengeStore = ChallengeStore.shared
     
     // User stats
     @Published var totalChallenges: Int = 0
@@ -48,8 +51,56 @@ class ProfileViewModel: ObservableObject {
     @Published var lastActiveChallenge: Challenge?
     @Published var isSocialFeatureEnabled: Bool = false // For controlling social coming soon features
     
+    // Challenge store observer
+    private var cancellables = Set<AnyCancellable>()
+    
     init() {
+        // Setup observers for challenge store
+        setupChallengeStoreObservers()
+        
+        // Load initial profile data
         loadUserProfile()
+    }
+    
+    deinit {
+        cancellables.removeAll()
+    }
+    
+    private func setupChallengeStoreObservers() {
+        // Observe challenge updates from the store
+        NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)
+            .sink { [weak self] _ in
+                self?.syncWithChallengeStore()
+            }
+            .store(in: &cancellables)
+        
+        // Also observe relevant properties directly
+        challengeStore.$totalChallenges
+            .combineLatest(challengeStore.$completedChallenges, challengeStore.$currentStreak)
+            .sink { [weak self] (total, completed, streak) in
+                guard let self = self else { return }
+                self.totalChallenges = total
+                self.completedChallenges = completed
+                self.currentStreak = streak
+            }
+            .store(in: &cancellables)
+        
+        // Observe active challenge
+        challengeStore.$activeChallenge
+            .sink { [weak self] challenge in
+                self?.lastActiveChallenge = challenge
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func syncWithChallengeStore() {
+        // Update stats from the challenge store
+        self.totalChallenges = challengeStore.totalChallenges
+        self.completedChallenges = challengeStore.completedChallenges
+        self.currentStreak = challengeStore.currentStreak
+        
+        // Update active challenge
+        self.lastActiveChallenge = challengeStore.activeChallenge
     }
     
     // MARK: - Public methods
@@ -58,23 +109,52 @@ class ProfileViewModel: ObservableObject {
         isLoading = true
         
         Task {
-            // Load initial username
-            if let username = userSession.username {
-                self.username = username
-                self.newUsername = username
+            guard let userId = userSession.currentUser?.uid else {
+                isInitialLoad = false
+                isLoading = false
+                return
             }
             
-            // Load profile photo if exists
-            await loadProfilePhoto()
+            // Load basic profile data
+            do {
+                let profile = try await getUserProfileFromFirestore(userId: userId)
+                
+                await MainActor.run {
+                    self.username = profile.username ?? ""
+                    
+                    if let photoURLString = profile.photoURL?.absoluteString {
+                        self.imageURL = URL(string: photoURLString)
+                    }
+                    
+                    // Set member since date
+                    self.memberSinceDate = profile.joinedDate
+                }
+            } catch {
+                print("Error loading user profile: \(error.localizedDescription)")
+            }
             
-            // Load user stats
-            await loadUserStats()
+            // Ensure challenges are refreshed in the store
+            await challengeStore.refreshChallenges()
             
-            // Load identity-focused stats
+            // Sync with challenge store for stats
+            syncWithChallengeStore()
+            
+            // Load user identity info
             await loadUserIdentityInfo()
             
+            // Update profile image if URL is available
+            if let imageURL = self.imageURL {
+                await loadImageFromURL(imageURL)
+            }
+            
+            // Finish loading
+            isInitialLoad = false
             isLoading = false
         }
+    }
+    
+    private func getUserProfileFromFirestore(userId: String) async throws -> UserProfile {
+        return try await firebaseService.fetchUserProfile(userId: userId) ?? UserProfile()
     }
     
     /// Process and upload an image from PhotosPicker
@@ -307,138 +387,43 @@ class ProfileViewModel: ObservableObject {
         }
     }
     
-    private func loadUserStats() async {
-        guard let userId = userSession.currentUser?.uid else { return }
-        
-        do {
-            // Query only active (non-archived) challenges for accurate counting
-            let challenges = try await Firestore.firestore()
-                .collection("users")
-                .document(userId)
-                .collection("challenges")
-                .whereField("isArchived", isEqualTo: false)
-                .getDocuments()
-                .documents
-            
-            // Process the data on the main actor to avoid data races
-            await MainActor.run {
-                // For display purposes, respect the free user limit of 2 active challenges
-                // This ensures consistency with the Challenges screen
-                let allChallenges = challenges.count
-                let isProUser = subscriptionService.isProUser
-                
-                // Limit total challenges shown for free users
-                if !isProUser && allChallenges > 2 {
-                    self.totalChallenges = 2 // Free users can only have 2 active challenges
-                } else {
-                    self.totalChallenges = allChallenges
-                }
-                
-                self.completedChallenges = challenges.filter { doc in
-                    (doc.data()["isCompleted"] as? Bool) == true
-                }.count
-                self.currentStreak = challenges.compactMap { doc in
-                    doc.data()["streakCount"] as? Int
-                }.max() ?? 0
-            }
-        } catch {
-            print("Error loading user stats: \(error.localizedDescription)")
-        }
-    }
-    
     private func loadUserIdentityInfo() async {
         guard let userId = userSession.currentUser?.uid else { return }
         
-        do {
-            // Fetch user document for creation date
-            let userDoc = try await Firestore.firestore()
-                .collection("users")
-                .document(userId)
-                .getDocument()
-            
-            if let userData = userDoc.data() {
-                // Copy needed values to local sendable variables
-                let createdAtTimestamp = userData["createdAt"] as? Timestamp
-                
-                // Process the data on the main actor to avoid data races
-                await MainActor.run {
-                    // Get account creation date
-                    if let timestamp = createdAtTimestamp {
-                        self.memberSinceDate = timestamp.dateValue()
-                    } else {
-                        // Fallback to Firebase auth creation date
-                        self.memberSinceDate = Auth.auth().currentUser?.metadata.creationDate
-                    }
-                }
-            } else {
-                // If no user document exists, use Firebase Auth creation date
-                await MainActor.run {
-                    self.memberSinceDate = Auth.auth().currentUser?.metadata.creationDate
-                }
-            }
-            
-            // Fetch the most recent/active challenge
-            let challengesQuery = try await Firestore.firestore()
-                .collection("users")
-                .document(userId)
-                .collection("challenges")
-                .whereField("isArchived", isEqualTo: false)
-                .order(by: "lastModified", descending: true)
-                .limit(to: 1)
-                .getDocuments()
-            
-            if let mostRecentDoc = challengesQuery.documents.first {
-                // Process the challenge data on the main actor
-                await MainActor.run {
-                    if let challenge = try? mostRecentDoc.data(as: Challenge.self) {
-                        self.lastActiveChallenge = challenge
-                    }
-                }
-            }
-            
-        } catch {
-            print("Error loading user identity info: \(error.localizedDescription)")
-        }
+        // Load friends count (placeholder for now)
+        friendsCount = 0
+        
+        // Social features flag - placeholder for now
+        isSocialFeatureEnabled = false
     }
     
     private func loadImageFromURL(_ url: URL) async {
+        // Check cache first
+        if let cachedImage = ImageCacheManager.shared.image(forKey: url.absoluteString) {
+            profileImage = cachedImage
+            return
+        }
+        
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let image = UIImage(data: data) {
-                await MainActor.run {
-                    self.profileImage = image
-                }
+                profileImage = image
+                ImageCacheManager.shared.setImage(image, forKey: url.absoluteString)
             }
         } catch {
-            print("Error loading image from URL: \(error.localizedDescription)")
+            print("Error loading profile image: \(error.localizedDescription)")
         }
     }
     
     private func updatePhotoURL(_ url: URL) async throws {
-        guard let userId = userSession.currentUser?.uid else { 
-            print("No user ID available for updatePhotoURL")
-            throw NSError(domain: "ProfileViewModel", code: 1) 
+        guard let userId = userSession.currentUser?.uid else {
+            throw NSError(domain: "ProfileViewModel", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
         }
         
-        let urlString = url.absoluteString // Create a sendable copy of the URL string
-        print("Updating Firestore with photoURL: \(urlString)")
-        
-        // Fix the unused result and sendability issues
-        await MainActor.run {
-            let userData: [String: String] = ["photoURL": urlString]
-            
-            Task {
-                do {
-                    try await Firestore.firestore()
-                        .collection("users")
-                        .document(userId)
-                        .updateData(userData)
-                    print("Firestore photoURL updated successfully")
-                } catch {
-                    print("Error updating Firestore photoURL: \(error.localizedDescription)")
-                }
-            }
-        }
+        try await Firestore.firestore()
+            .collection("users")
+            .document(userId)
+            .setData(["photoURL": url.absoluteString], merge: true)
     }
     
     private func isUsernameAvailable(_ username: String) async throws -> Bool {

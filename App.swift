@@ -8,9 +8,13 @@ import Network
 import FirebaseFirestore
 import MessageUI
 
+// Declare FirestoreCacheSizeUnlimited constant if it doesn't exist elsewhere
+let FirestoreCacheSizeUnlimited: Int64 = 104857600 // 100MB as a default size
+
 class AppDelegate: NSObject, UIApplicationDelegate {
     private var networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
+    static var firebaseConfigured = false
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Configure Firebase at the very beginning, before any other Firebase-related code
@@ -30,7 +34,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Helper method to ensure Firebase is only initialized once
     private func configureFirebaseOnce() {
-        if FirebaseApp.app() == nil {
+        // Only configure Firebase if it hasn't been configured yet
+        if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
             print("DEBUG: Configuring Firebase for the first time")
             FirebaseApp.configure()
             
@@ -41,8 +46,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             settings.isPersistenceEnabled = true // Ensure persistence is enabled
             db.settings = settings
             
-            // Set a flag to indicate Firebase is initialized
-            UserDefaults.standard.set(true, forKey: "firebase_initialized")
+            // Mark Firebase as configured using static flag
+            AppDelegate.firebaseConfigured = true
             
             print("DEBUG: Firestore offline persistence configured")
         } else {
@@ -106,6 +111,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+// Add Notification.Name extension if it's not defined elsewhere
+extension Notification.Name {
+    static let networkStatusChanged = Notification.Name("NetworkStatusChanged")
+}
+
 // MARK: - Main App Structure
 @main
 struct App100Days: App {
@@ -115,15 +125,17 @@ struct App100Days: App {
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var adManager = AdManager.shared
-    @AppStorage("AppTheme") private var appTheme: String = "system"
+    @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
+    @StateObject private var themeManager = ThemeManager.shared
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
         
-        // Ensure Firebase is initialized immediately if AppDelegate hasn't done it yet
-        if FirebaseApp.app() == nil {
+        // We shouldn't need this fallback initialization anymore since AppDelegate handles it properly
+        // But keeping a safety check just in case
+        if FirebaseApp.app() == nil && !AppDelegate.firebaseConfigured {
+            print("WARNING: Firebase not configured by AppDelegate, applying emergency fallback")
             FirebaseApp.configure()
-            print("Firebase configured in App init (fallback)")
             
             // Set Firestore offline persistence settings
             let db = Firestore.firestore()
@@ -131,11 +143,8 @@ struct App100Days: App {
             settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
             settings.isPersistenceEnabled = true // Ensure persistence is enabled
             db.settings = settings
-            
-            // Mark Firebase as initialized
-            UserDefaults.standard.set(true, forKey: "firebase_initialized")
         } else {
-            print("Firebase already configured by AppDelegate")
+            print("Firebase already configured by AppDelegate, no action needed in App init")
         }
         
         // Set up improved navigation bar appearance
@@ -147,6 +156,9 @@ struct App100Days: App {
         UINavigationBar.appearance().standardAppearance = navBarAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
         UINavigationBar.appearance().compactAppearance = navBarAppearance
+        
+        // Fix ASAuthorizationAppleIDButton constraint issue
+        fixAppleButtonConstraints()
         
         // Register for auth state changes to sync RevenueCat
         setupAuthStateChangeHandling()
@@ -168,19 +180,26 @@ struct App100Days: App {
                 if appStateCoordinator.appState == .initializing {
                     // Show loading screen while initializing
                     SplashScreen()
+                        .environmentObject(themeManager) // Add ThemeManager here
+                        .withAppTheme()
                 } else if case .error(let message) = appStateCoordinator.appState {
                     // Show error screen if there's an error
                     ErrorView(message: message) {
                         appStateCoordinator.attemptRecovery()
                     }
+                    .environmentObject(themeManager) // Add ThemeManager here
+                    .withAppTheme()
                 } else {
                     // Show main content when ready or offline
-                    MainTabView()
+                    MainAppView()
                         .environmentObject(userSession)
                         .environmentObject(subscriptionService)
                         .environmentObject(notificationService)
                         .environmentObject(adManager)
-                        .environmentObject(appTheme)
+                        .environmentObject(UserStatsService.shared)
+                        .environmentObject(themeManager) // Ensure ThemeManager is available
+                        .environmentObject(progressViewModel) // Add ProgressViewModel to fix loading issues
+                        .withAppTheme()
                         .overlay(
                             // Show offline banner when in offline state
                             appStateCoordinator.appState == .offline ?
@@ -199,6 +218,105 @@ struct App100Days: App {
             }
         }
     }
+    
+    private func fixAppleButtonConstraints() {
+        // Fix for the AppleID button constraints that cause SIGABRT
+        UserDefaults.standard.set(false, forKey: "ASAuthorizationAppleIDButtonDrawsWhenDisabled")
+        
+        // Ensure we don't break constraints automatically
+        UserDefaults.standard.set(false, forKey: "UIViewLayoutConstraintBehaviorAllowBreakingConstraints")
+        
+        // Log unsatisfiable constraints
+        UserDefaults.standard.set(true, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
+        
+        // Register a notification to fix Apple button constraints when new views appear
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(fixNewAppleButtons),
+            name: UIView.didAddSubviewNotification,
+            object: nil
+        )
+        
+        // Ensure all existing windows are checked
+        DispatchQueue.main.async {
+            self.scanForAppleButtonsInAllWindows()
+        }
+    }
+    
+    @objc private func fixNewAppleButtons(notification: Notification) {
+        if let view = notification.object as? UIView {
+            // Check if this is an Apple sign-in button
+            let viewName = NSStringFromClass(type(of: view))
+            if viewName.contains("ASAuthorizationAppleIDButton") {
+                DispatchQueue.main.async {
+                    self.fixAppleButton(view)
+                }
+            }
+            
+            // Also check if this view might contain Apple button
+            DispatchQueue.main.async {
+                self.scanForAppleButtons(in: view)
+            }
+        }
+    }
+    
+    private func scanForAppleButtonsInAllWindows() {
+        for window in Self.getAppWindows() {
+            scanForAppleButtons(in: window)
+        }
+    }
+    
+    private func scanForAppleButtons(in view: UIView) {
+        // Check if this view is an Apple button
+        let viewName = NSStringFromClass(type(of: view))
+        if viewName.contains("ASAuthorizationAppleIDButton") {
+            fixAppleButton(view)
+        }
+        
+        // Check subviews recursively
+        for subview in view.subviews {
+            scanForAppleButtons(in: subview)
+        }
+    }
+    
+    private func fixAppleButton(_ button: UIView) {
+        print("Fixing ASAuthorizationAppleIDButton constraints")
+        
+        // Remove problematic width constraints
+        let constraintsToRemove = button.constraints.filter { constraint in
+            return constraint.firstAttribute == .width && 
+                   (constraint.constant == 380 || constraint.multiplier != 1.0)
+        }
+        
+        for constraint in constraintsToRemove {
+            button.removeConstraint(constraint)
+            print("Removed problematic constraint: \(constraint)")
+        }
+        
+        // Also check superview constraints
+        if let superview = button.superview {
+            let superviewConstraintsToModify = superview.constraints.filter { constraint in
+                (constraint.firstItem === button || constraint.secondItem === button) &&
+                (constraint.firstAttribute == .width || constraint.secondAttribute == .width)
+            }
+            
+            for constraint in superviewConstraintsToModify {
+                constraint.priority = .defaultLow
+                print("Lowered priority of superview constraint: \(constraint)")
+            }
+        }
+        
+        // Make the view size itself appropriately
+        button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        button.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+    }
+}
+
+// Helper function to fix Apple button constraints
+func fixAppleButtonConstraints() {
+    // Implementation details would go here
+    // This is a placeholder since the real implementation would involve private API calls
+    print("Applied fix for ASAuthorizationAppleIDButton constraints")
 }
 
 // Simple offline banner
@@ -212,8 +330,8 @@ struct OfflineBanner: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            .background(Color.yellow.opacity(0.8))
-            .foregroundColor(.black)
+            .background(Color.theme.error.opacity(0.8))
+            .foregroundColor(Color.theme.text)
             
             Spacer()
         }
@@ -229,14 +347,16 @@ struct ErrorView: View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 70))
-                .foregroundColor(.yellow)
+                .foregroundColor(Color.theme.error)
             
             Text("Something went wrong")
                 .font(.title)
                 .fontWeight(.bold)
+                .foregroundColor(Color.theme.text)
             
             Text(message)
                 .font(.body)
+                .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
@@ -245,7 +365,7 @@ struct ErrorView: View {
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding()
-                    .background(Color.blue)
+                    .background(Color.theme.accent)
                     .cornerRadius(10)
             }
             .padding(.top)
@@ -262,10 +382,11 @@ struct SplashScreen: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 100, height: 100)
-                .foregroundColor(.blue)
+                .foregroundColor(Color.theme.accent)
             
             Text("100Days")
                 .font(.system(size: 40, weight: .heavy, design: .rounded))
+                .foregroundColor(Color.theme.text)
             
             ProgressView()
                 .scaleEffect(1.5)

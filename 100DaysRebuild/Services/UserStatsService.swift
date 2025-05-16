@@ -2,6 +2,7 @@ import Foundation
 import FirebaseFirestore
 import FirebaseAuth
 import SwiftUI
+import Combine
 
 /// Centralized service to track user statistics across the app
 @MainActor
@@ -11,130 +12,81 @@ class UserStatsService: ObservableObject {
     @Published private(set) var userStats: UserStats = UserStats()
     @Published private(set) var isLoading = false
     @Published var error: Error?
+    @Published private(set) var activeChallenge: Challenge?
     
-    private let firestore = Firestore.firestore()
-    private var fetchTask: Task<Void, Never>?
+    // Notification for when stats are updated
+    static let userStatsDidUpdateNotification = Notification.Name("userStatsDidUpdate")
     
-    private init() {}
+    private var cancellables = Set<AnyCancellable>()
+    private let challengeStore = ChallengeStore.shared
     
-    deinit {
-        fetchTask?.cancel()
+    private init() {
+        // Listen to challenge updates from ChallengeStore
+        setupChallengeStoreObserver()
     }
     
+    private func setupChallengeStoreObserver() {
+        // Observe challenge updates via notification
+        NotificationCenter.default
+            .publisher(for: ChallengeStore.challengesDidUpdateNotification)
+            .sink { [weak self] _ in
+                self?.syncWithChallengeStore()
+            }
+            .store(in: &cancellables)
+        
+        // Also observe relevant published properties
+        challengeStore.$challenges
+            .dropFirst() // Skip initial empty value
+            .sink { [weak self] _ in
+                self?.syncWithChallengeStore()
+            }
+            .store(in: &cancellables)
+    }
+    
+    private func syncWithChallengeStore() {
+        // Get challenge metrics from the store
+        let totalChallenges = challengeStore.totalChallenges
+        let completedChallenges = challengeStore.completedChallenges
+        let currentStreak = challengeStore.currentStreak
+        let longestStreak = challengeStore.longestStreak
+        let overallCompletionPercentage = challengeStore.overallCompletionPercentage
+        let lastCheckInDate = challengeStore.lastCheckInDate
+        
+        // Create new UserStats with values from ChallengeStore
+        let newStats = UserStats(
+            totalChallenges: totalChallenges,
+            completedChallenges: completedChallenges,
+            currentStreak: currentStreak, 
+            longestStreak: longestStreak,
+            overallCompletionPercentage: overallCompletionPercentage,
+            lastCheckInDate: lastCheckInDate
+        )
+        
+        // Update the published userStats
+        self.userStats = newStats
+        self.activeChallenge = challengeStore.activeChallenge
+        
+        // Notify observers of the updated stats
+        NotificationCenter.default.post(name: Self.userStatsDidUpdateNotification, object: nil)
+    }
+    
+    /// Manually fetches user stats - now uses ChallengeStore instead of direct Firestore calls
     func fetchUserStats() async {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            self.userStats = UserStats()
-            return
-        }
-        
-        // Cancel any previous task
-        fetchTask?.cancel()
-        
         isLoading = true
         error = nil
         
-        fetchTask = Task { [weak self] in
-            guard let self = self else { return }
-            
-            do {
-                // First fetch user-level stats - assign to _ since we're not using it yet
-                _ = try await firestore
-                    .collection("users")
-                    .document(userId)
-                    .getDocument()
-                
-                // Then fetch all challenges for this user
-                let challengesSnapshot = try await firestore
-                    .collection("users")
-                    .document(userId)
-                    .collection("challenges")
-                    .getDocuments()
-                
-                if Task.isCancelled { return }
-                
-                // Parse the challenges into our model
-                let challenges = challengesSnapshot.documents.compactMap { doc -> ChallengeStats? in
-                    guard 
-                        let title = doc.data()["title"] as? String,
-                        let daysCompleted = doc.data()["daysCompleted"] as? Int,
-                        let streakCount = doc.data()["streakCount"] as? Int,
-                        let lastCheckInDate = (doc.data()["lastCheckInDate"] as? Timestamp)?.dateValue()
-                    else { return nil }
-                    
-                    return ChallengeStats(
-                        id: doc.documentID,
-                        title: title,
-                        daysCompleted: daysCompleted,
-                        streakCount: streakCount,
-                        lastCheckInDate: lastCheckInDate
-                    )
-                }
-                
-                if Task.isCancelled { return }
-                
-                // Calculate aggregate stats
-                let totalChallenges = challenges.count
-                let currentStreak = self.calculateCurrentStreak(challenges)
-                let longestStreak = challenges.map(\.streakCount).max() ?? 0
-                let completedChallenges = challenges.filter { $0.daysCompleted >= 100 }.count
-                
-                // Calculate overall completion percentage
-                let overallCompletionPercentage: Double
-                if totalChallenges > 0 {
-                    let totalCompletedDays = challenges.reduce(0) { $0 + $1.daysCompleted }
-                    let totalPossibleDays = totalChallenges * 100
-                    overallCompletionPercentage = min(1.0, Double(totalCompletedDays) / Double(totalPossibleDays))
-                } else {
-                    overallCompletionPercentage = 0.0
-                }
-                
-                // Get most recent check-in date
-                let lastCheckInDate = challenges
-                    .compactMap(\.lastCheckInDate)
-                    .max()
-                
-                // Assemble the final stats object
-                let newStats = UserStats(
-                    totalChallenges: totalChallenges,
-                    completedChallenges: completedChallenges,
-                    currentStreak: currentStreak,
-                    longestStreak: longestStreak,
-                    overallCompletionPercentage: overallCompletionPercentage,
-                    lastCheckInDate: lastCheckInDate
-                )
-                
-                if Task.isCancelled { return }
-                
-                await MainActor.run {
-                    self.userStats = newStats
-                    self.isLoading = false
-                }
-                
-            } catch {
-                if !Task.isCancelled {
-                    await MainActor.run {
-                        self.error = error
-                        self.isLoading = false
-                        print("Error fetching user stats: \(error.localizedDescription)")
-                    }
-                }
-            }
-        }
+        // Use the ChallengeStore to refresh all challenge data
+        await challengeStore.refreshChallenges()
+        
+        // After the refresh completes, sync with the updated data
+        syncWithChallengeStore()
+        
+        isLoading = false
     }
     
-    private func calculateCurrentStreak(_ challenges: [ChallengeStats]) -> Int {
-        // Find the most recent streak that's still active
-        let activeStreaks = challenges.compactMap { challenge -> Int? in
-            guard let lastCheckIn = challenge.lastCheckInDate else { return nil }
-            
-            let calendar = Calendar.current
-            let daysSinceLastCheckIn = calendar.dateComponents([.day], from: lastCheckIn, to: Date()).day ?? 0
-            
-            // A streak is only active if the user checked in today or yesterday
-            return daysSinceLastCheckIn <= 1 ? challenge.streakCount : nil
-        }
-        
-        return activeStreaks.max() ?? 0
+    /// Manually triggers a refresh of the stats
+    func refreshUserStats() async {
+        await fetchUserStats()
     }
 }
 

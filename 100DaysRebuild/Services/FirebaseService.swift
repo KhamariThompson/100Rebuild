@@ -17,6 +17,8 @@ enum FirebaseError: Error, LocalizedError {
     case documentNotFound
     case unauthorized
     case networkOffline
+    case cooldownPeriod(hoursRemaining: Int)
+    case usernameAlreadyExists
     
     var errorDescription: String? {
         switch self {
@@ -36,6 +38,10 @@ enum FirebaseError: Error, LocalizedError {
             return "You are not authorized to perform this action"
         case .networkOffline:
             return "No internet connection. Some features may be limited."
+        case .cooldownPeriod(let hoursRemaining):
+            return "Username change cooldown period: \(hoursRemaining) hours remaining"
+        case .usernameAlreadyExists:
+            return "Username already exists"
         }
     }
 }
@@ -560,44 +566,73 @@ class FirebaseService {
         }
         
         do {
-            // Check if new username is available
-            let usernameSnapshot = try await firestore
-                .collection(CollectionPath.usernames)
-                .document(username)
-                .getDocument()
-            
-            if usernameSnapshot.exists {
-                throw FirebaseError.invalidData
-            }
-            
-            // Get current username
+            // Get current user document to check cooldown period
             let userDoc = try await firestore
                 .collection(CollectionPath.users)
                 .document(userId)
                 .getDocument()
             
+            // Check 48-hour cooldown period
+            if let lastChangeTimestamp = userDoc.data()?["lastUsernameChangeAt"] as? Timestamp {
+                let lastChangeDate = lastChangeTimestamp.dateValue()
+                let now = Date()
+                let timeSinceLastChange = now.timeIntervalSince(lastChangeDate)
+                
+                // 48 hours = 172800 seconds
+                if timeSinceLastChange < 172800 {
+                    let hoursRemaining = Int((172800 - timeSinceLastChange) / 3600)
+                    throw FirebaseError.cooldownPeriod(hoursRemaining: hoursRemaining)
+                }
+            }
+            
+            // Check if new username is available
+            let usernameSnapshot = try await firestore
+                .collection(CollectionPath.usernames)
+                .document(username.lowercased())
+                .getDocument()
+            
+            if usernameSnapshot.exists {
+                throw FirebaseError.usernameAlreadyExists
+            }
+            
+            // Get current username
             guard let currentUsername = userDoc.data()?["username"] as? String else {
                 throw FirebaseError.documentNotFound
             }
             
-            // Update username in users collection
-            try await firestore
-                .collection(CollectionPath.users)
-                .document(userId)
-                .updateData(["username": username])
+            // Run as a transaction to ensure atomicity
+            try await firestore.runTransaction { transaction, errorPointer in
+                // 1. Delete old username reservation
+                let oldUsernameRef = firestore
+                    .collection(CollectionPath.usernames)
+                    .document(currentUsername.lowercased())
+                transaction.deleteDocument(oldUsernameRef)
+                
+                // 2. Create new username reservation
+                let newUsernameRef = firestore
+                    .collection(CollectionPath.usernames)
+                    .document(username.lowercased())
+                transaction.setData(["userId": userId], forDocument: newUsernameRef)
+                
+                // 3. Update user document with new username and timestamp
+                let userRef = firestore
+                    .collection(CollectionPath.users)
+                    .document(userId)
+                transaction.updateData([
+                    "username": username.lowercased(),
+                    "lastUsernameChangeAt": FieldValue.serverTimestamp()
+                ], forDocument: userRef)
+                
+                return nil
+            }
             
-            // Update username reservation
-            try await firestore
-                .collection(CollectionPath.usernames)
-                .document(currentUsername)
-                .delete()
-            
-            try await firestore
-                .collection(CollectionPath.usernames)
-                .document(username)
-                .setData(["userId": userId])
         } catch {
-            throw FirebaseError.firestoreError(error)
+            // Rethrow as our custom error type
+            if let firebaseError = error as? FirebaseError {
+                throw firebaseError
+            } else {
+                throw FirebaseError.firestoreError(error)
+            }
         }
     }
     

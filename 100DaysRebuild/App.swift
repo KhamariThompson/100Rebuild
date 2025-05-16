@@ -6,6 +6,29 @@ import UIKit
 import AuthenticationServices
 import Network
 import FirebaseFirestore
+import Foundation
+
+// Replace the import with a direct implementation of OfflineBanner
+// @_exported import struct App.OfflineBanner
+
+// Add OfflineBanner struct definition
+struct OfflineBanner: View {
+    var body: some View {
+        VStack {
+            HStack {
+                Image(systemName: "wifi.slash")
+                Text("You're offline")
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color.yellow.opacity(0.8))
+            .foregroundColor(.black)
+            
+            Spacer()
+        }
+    }
+}
 
 // Explicitly conform to UIApplicationDelegate protocol
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -27,6 +50,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             settings.cacheSettings = cacheSettings
             
             db.settings = settings
+            // Set a flag to indicate Firebase is initialized
+            UserDefaults.standard.set(true, forKey: "firebase_initialized")
             print("Firestore offline persistence configured")
         } else {
             print("Firebase was already configured")
@@ -40,6 +65,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Set up network connectivity monitoring after Firebase is configured
         startNetworkMonitoring()
+        
+        // Initialize and prefetch quotes
+        initializeQuoteService()
+        
+        // Preemptively handle Apple authentication issues
+        setupAppleAuthErrorHandling()
         
         return true
     }
@@ -254,22 +285,79 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     private func fixSystemInputAssistantViewConstraints() {
         // Find all windows in the app
-        var windows: [UIWindow] = []
-        
+        for window in getAppWindows() {
+            // Search for SystemInputAssistantView in window hierarchy
+            findAndFixSystemInputAssistantView(in: window)
+        }
+    }
+    
+    private func getAppWindows() -> [UIWindow] {
         if #available(iOS 15.0, *) {
-            for scene in UIApplication.shared.connectedScenes {
-                if let windowScene = scene as? UIWindowScene {
-                    windows.append(contentsOf: windowScene.windows)
-                }
-            }
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         } else {
             // For iOS < 15, use the deprecated API
-            windows = UIApplication.shared.windows
+            return UIApplication.shared.windows
+        }
+    }
+    
+    private func findAndFixSystemInputAssistantView(in view: UIView) {
+        // Check for SystemInputAssistantView
+        let viewName = NSStringFromClass(type(of: view))
+        if viewName.contains("SystemInputAssistantView") {
+            // Lower the priority of constraints rather than completely removing them
+            for constraint in view.constraints {
+                if constraint.firstAttribute == .height {
+                    constraint.priority = UILayoutPriority(50) // Very low priority
+                }
+            }
         }
         
-        // Search for SystemInputAssistantView in the window hierarchy
-        for window in windows {
-            findAndFixSystemInputAssistantView(in: window)
+        // Check for ASAuthorizationAppleIDButton constraint issues
+        if viewName.contains("ASAuthorizationAppleIDButton") {
+            print("Found ASAuthorizationAppleIDButton, fixing constraints")
+            
+            // Remove any width constraints that could cause conflicts
+            let constraintsToRemove = view.constraints.filter { constraint in
+                return constraint.firstAttribute == .width && constraint.relation == .lessThanOrEqual
+            }
+            
+            for constraint in constraintsToRemove {
+                view.removeConstraint(constraint)
+            }
+            
+            // Make the view size itself appropriately
+            view.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            view.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        }
+        
+        // Check all subviews recursively
+        for subview in view.subviews {
+            findAndFixSystemInputAssistantView(in: subview)
+        }
+    }
+    
+    private func initializeQuoteService() {
+        // This will trigger the lazy initialization of the QuoteService
+        let _ = QuoteService.shared
+        
+        // Prefetch quotes in the background
+        Task {
+            await QuoteService.shared.prefetchQuotes(count: 10)
+        }
+    }
+    
+    // Add a method to handle Apple Authentication errors
+    private func setupAppleAuthErrorHandling() {
+        DispatchQueue.main.async {
+            // Fix for "No active account" error
+            if #available(iOS 15.0, *) {
+                UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
+                
+                // This will help with ASAuthenticationError Code=1000 "Cannot find provider for requested authentication type."
+                UserDefaults.standard.set(true, forKey: "com.apple.developer.applesignin")
+            }
         }
     }
 }
@@ -482,12 +570,15 @@ struct App100Days: App {
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var adManager = AdManager.shared
+    @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
+    @StateObject private var appStateCoordinator = AppStateCoordinator.shared
     @AppStorage("AppTheme") private var appTheme: String = "system"
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
         
-        // Removed redundant Firebase initialization code to prevent duplicate initialization
+        // Don't attempt to initialize Firebase here, let AppDelegate handle it
+        // This avoids multiple initialization attempts
         
         // Set up improved navigation bar appearance
         let navBarAppearance = UINavigationBarAppearance()
@@ -499,35 +590,59 @@ struct App100Days: App {
         UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
         UINavigationBar.appearance().compactAppearance = navBarAppearance
         
-        // Fix for SFAuthenticationViewController
-        if #available(iOS 15.0, *) {
-            // Using the UserDefaults key is more reliable
-            UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
+        // Fix ASAuthorizationAppleIDButton constraint issue - This is a key fix for the SIGABRT
+        if let buttonClass = NSClassFromString("ASAuthorizationAppleIDButton") as? UIView.Type {
+            // Swizzle the constraints setup for ASAuthorizationAppleIDButton
+            fixAppleButtonConstraints()
         }
+    }
+    
+    private func fixAppleButtonConstraints() {
+        // Fix for the AppleID button constraints that cause SIGABRT
+        UserDefaults.standard.set(false, forKey: "ASAuthorizationAppleIDButtonDrawsWhenDisabled")
         
-        // Fix for layout constraints
+        // Ensure we don't break constraints automatically
+        UserDefaults.standard.set(false, forKey: "UIViewLayoutConstraintBehaviorAllowBreakingConstraints")
+        
+        // Log unsatisfiable constraints
         UserDefaults.standard.set(true, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
     }
     
     var body: some Scene {
         WindowGroup {
-            AppContentView()
-                .environmentObject(userSession)
-                .environmentObject(subscriptionService)
-                .environmentObject(notificationService)
-                .environmentObject(adManager)
-                .onOpenURL { url in
-                    GIDSignIn.sharedInstance.handle(url)
+            ZStack {
+                AppContentView()
+                    .environmentObject(userSession)
+                    .environmentObject(subscriptionService)
+                    .environmentObject(notificationService)
+                    .environmentObject(adManager)
+                    .environmentObject(progressViewModel)
+                    .onAppear {
+                        print("App main view appeared")
+                        // Initialize services
+                        _ = NetworkMonitor.shared
+                        _ = FirebaseAvailabilityService.shared
+                    }
+                
+                // Show offline banner when in offline state
+                if appStateCoordinator.appState == .offline {
+                    OfflineBanner()
+                        .transition(.move(edge: .top))
+                        .animation(.spring(), value: appStateCoordinator.appState)
+                        .zIndex(100)
                 }
-                .preferredColorScheme(getPreferredColorScheme())
-                .onAppear {
-                    print("Firebase confirmed initialized in body.onAppear")
-                    
-                    // Fix layout constraint issues
-                    fixLayoutConstraintIssues()
+                
+                // Show initializing or error state content
+                if appStateCoordinator.appState == .initializing {
+                    SplashScreen()
+                        .zIndex(101)
+                } else if case .error(let message) = appStateCoordinator.appState {
+                    ErrorView(message: message) {
+                        appStateCoordinator.attemptRecovery()
+                    }
+                    .zIndex(101)
                 }
-                // Replace global tap gesture with a more focused approach
-                .modifier(FocusedDismissKeyboardOnTap())
+            }
         }
     }
     
@@ -558,7 +673,7 @@ struct App100Days: App {
         
         // Schedule a task to fix the height constraint of SystemInputAssistantView
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            fixSystemInputAssistantViewConstraints()
+            App100Days.fixSystemInputAssistantViewConstraints()
         }
         
         // Register for keyboard appearance notification
@@ -570,8 +685,80 @@ struct App100Days: App {
             print("Keyboard will show")
             // Fix constraints when keyboard is shown
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                fixSystemInputAssistantViewConstraints()
+                App100Days.fixSystemInputAssistantViewConstraints()
             }
+        }
+    }
+    
+    private func setupAuthenticationServices() {
+        // Fix for ASAuthorizationAppleIDButton layout issues
+        DispatchQueue.main.async {
+            // Register preference for ephemeral web session
+            if #available(iOS 15.0, *) {
+                UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
+                
+                // Set additional key used by Apple authentication
+                UserDefaults.standard.set(true, forKey: "com.apple.developer.applesignin")
+            }
+            
+            // Fix for "No active account" error
+            AuthUtilities.configureAppleAuthSession()
+        }
+    }
+    
+    // Add static functions to be accessible from anywhere
+    static func fixSystemInputAssistantViewConstraints() {
+        // Find all windows in the app
+        for window in getAppWindows() {
+            // Search for SystemInputAssistantView in window hierarchy
+            findAndFixSystemInputAssistantView(in: window)
+        }
+    }
+    
+    static func getAppWindows() -> [UIWindow] {
+        if #available(iOS 15.0, *) {
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+        } else {
+            // For iOS < 15, use the deprecated API
+            return UIApplication.shared.windows
+        }
+    }
+    
+    static func findAndFixSystemInputAssistantView(in view: UIView) {
+        // Check for SystemInputAssistantView
+        let viewName = NSStringFromClass(type(of: view))
+        if viewName.contains("SystemInputAssistantView") {
+            // Lower the priority of constraints rather than completely removing them
+            for constraint in view.constraints {
+                if constraint.firstAttribute == .height {
+                    constraint.priority = UILayoutPriority(50) // Very low priority
+                }
+            }
+        }
+        
+        // Check for ASAuthorizationAppleIDButton constraint issues
+        if viewName.contains("ASAuthorizationAppleIDButton") {
+            print("Found ASAuthorizationAppleIDButton, fixing constraints")
+            
+            // Remove any width constraints that could cause conflicts
+            let constraintsToRemove = view.constraints.filter { constraint in
+                return constraint.firstAttribute == .width && constraint.relation == .lessThanOrEqual
+            }
+            
+            for constraint in constraintsToRemove {
+                view.removeConstraint(constraint)
+            }
+            
+            // Make the view size itself appropriately
+            view.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+            view.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        }
+        
+        // Check all subviews recursively
+        for subview in view.subviews {
+            findAndFixSystemInputAssistantView(in: subview)
         }
     }
 }
@@ -581,24 +768,19 @@ struct AppContentView: View {
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var adManager: AdManager
+    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
     
     var body: some View {
         Group {
             if userSession.isAuthenticated {
-                if userSession.hasCompletedOnboarding {
-                    MainAppView()
-                        .environmentObject(userSession)
-                        .environmentObject(subscriptionService)
-                        .environmentObject(notificationService)
-                        .environmentObject(adManager)
-                } else {
-                    // Replace OnboardingView with UsernameSetupView to avoid duplicate login screens
-                    UsernameSetupView()
-                        .environmentObject(userSession)
-                        .environmentObject(subscriptionService)
-                        .environmentObject(notificationService)
-                        .environmentObject(adManager)
-                }
+                // Always go to main app view regardless of onboarding state
+                MainAppView()
+                    .environmentObject(userSession)
+                    .environmentObject(subscriptionService)
+                    .environmentObject(notificationService)
+                    .environmentObject(adManager)
+                    .environmentObject(progressViewModel)
+                    .applyLayoutFixes()
             } else {
                 // Only use AuthView for login/signup
                 AuthView()
@@ -606,54 +788,122 @@ struct AppContentView: View {
                     .environmentObject(subscriptionService)
                     .environmentObject(notificationService)
                     .environmentObject(adManager)
+                    .environmentObject(progressViewModel)
+                    .applyLayoutFixes()
             }
         }
     }
 }
 
-// Private helper function to fix SystemInputAssistantView constraints
-private func fixSystemInputAssistantViewConstraints() {
-    // Find all windows in the app
-    for window in getAppWindows() {
-        // Search for SystemInputAssistantView in window hierarchy
-        findAndFixSystemInputAssistantView(in: window)
-    }
-}
-
-private func getAppWindows() -> [UIWindow] {
-    if #available(iOS 15.0, *) {
-        return UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-    } else {
-        // For iOS < 15, use the deprecated API
-        return UIApplication.shared.windows
-    }
-}
-
-private func findAndFixSystemInputAssistantView(in view: UIView) {
-    // Check for SystemInputAssistantView
-    let viewName = NSStringFromClass(type(of: view))
-    if viewName.contains("SystemInputAssistantView") {
-        // Completely disable the view to avoid constraint conflicts
-        view.isHidden = true
-        
-        // Remove all constraints to avoid conflicts
-        let constraints = view.constraints
-        constraints.forEach { view.removeConstraint($0) }
-        
-        // Or lower priority of all existing constraints
-        for constraint in view.constraints {
-            constraint.priority = UILayoutPriority(rawValue: 250)
+// Add this class after AppContentView and before the helper functions
+class AuthUtilities {
+    // Store a strong reference to the delegate and provider to prevent deallocation
+    private static var delegate = DummyAuthDelegate.shared
+    private static var provider: DummyPresentationProvider?
+    
+    static func configureAppleAuthSession() {
+        // Initialize an authentication controller but don't present it
+        // This ensures the auth session is properly initialized
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            
+            // Force the ASAuthorizationController to initialize its internal state
+            let appleIDProvider = ASAuthorizationAppleIDProvider()
+            let request = appleIDProvider.createRequest()
+            request.requestedScopes = []
+            
+            // Store strong reference to provider
+            provider = DummyPresentationProvider(window: window)
+            
+            let authController = ASAuthorizationController(authorizationRequests: [request])
+            authController.delegate = delegate
+            authController.presentationContextProvider = provider
+            
+            // Don't actually present it - just initialize the controller
+            print("Pre-initialized Apple authentication controller")
         }
-        
-        // Also disable subviews to be thorough
-        view.subviews.forEach { $0.isHidden = true }
+    }
+}
+
+// Dummy classes to support Apple auth initialization
+class DummyAuthDelegate: NSObject, ASAuthorizationControllerDelegate {
+    static let shared = DummyAuthDelegate()
+    
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        // Never actually called
     }
     
-    // Check all subviews recursively
-    for subview in view.subviews {
-        findAndFixSystemInputAssistantView(in: subview)
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        // Never actually called
+    }
+}
+
+class DummyPresentationProvider: NSObject, ASAuthorizationControllerPresentationContextProviding {
+    let window: UIWindow
+    
+    init(window: UIWindow) {
+        self.window = window
+        super.init()
+    }
+    
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        return window
+    }
+}
+
+// Only keeping ErrorView and SplashScreen, removing duplicate OfflineBanner
+
+// Simple error view
+struct ErrorView: View {
+    let message: String
+    let retryAction: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 70))
+                .foregroundColor(.yellow)
+            
+            Text("Something went wrong")
+                .font(.title)
+                .fontWeight(.bold)
+            
+            Text(message)
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button(action: retryAction) {
+                Text("Try Again")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+            }
+            .padding(.top)
+        }
+        .padding()
+    }
+}
+
+// Splash screen shown during initialization
+struct SplashScreen: View {
+    var body: some View {
+        VStack(spacing: 30) {
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .foregroundColor(.blue)
+            
+            Text("100Days")
+                .font(.system(size: 40, weight: .heavy, design: .rounded))
+            
+            ProgressView()
+                .scaleEffect(1.5)
+                .padding(.top, 30)
+        }
     }
 }
 

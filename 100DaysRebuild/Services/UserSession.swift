@@ -490,17 +490,95 @@ class UserSession: ObservableObject {
         }
         
         do {
-            try await firestore
+            // Check if username is in the proper format
+            if !isValidUsername(newUsername) {
+                throw NSError(domain: "UserSession", code: 102,
+                             userInfo: [NSLocalizedDescriptionKey: "Invalid username format. Username must be 3-20 characters and can only contain letters and numbers."])
+            }
+            
+            // Get the user document to check for cooldown period
+            let userDoc = try await firestore
                 .collection("users")
                 .document(userId)
-                .setData(["username": newUsername], merge: true)
+                .getDocument()
             
-            self.username = newUsername
+            // Check for 48-hour cooldown period
+            if let lastChangeTimestamp = userDoc.data()?["lastUsernameChangeAt"] as? Timestamp {
+                let lastChangeDate = lastChangeTimestamp.dateValue()
+                let now = Date()
+                let timeSinceLastChange = now.timeIntervalSince(lastChangeDate)
+                
+                // 48 hours = 172800 seconds
+                if timeSinceLastChange < 172800 {
+                    let hoursRemaining = Int((172800 - timeSinceLastChange) / 3600)
+                    throw NSError(domain: "UserSession", code: 103,
+                                 userInfo: [NSLocalizedDescriptionKey: "You can change your username again in \(hoursRemaining) hours."])
+                }
+            }
+            
+            // Check if the username is available
+            let usernameDoc = try await firestore
+                .collection("usernames")
+                .document(newUsername.lowercased())
+                .getDocument()
+            
+            if usernameDoc.exists {
+                // Check if the username belongs to this user
+                if let ownerId = usernameDoc.data()?["userId"] as? String, ownerId == userId {
+                    // Username already belongs to this user, so we can skip the update
+                    self.username = newUsername.lowercased()
+                    return
+                }
+                
+                throw NSError(domain: "UserSession", code: 104,
+                             userInfo: [NSLocalizedDescriptionKey: "Username is already taken."])
+            }
+            
+            // Get current username for reservation update
+            guard let currentUsername = userDoc.data()?["username"] as? String else {
+                throw NSError(domain: "UserSession", code: 105,
+                             userInfo: [NSLocalizedDescriptionKey: "Couldn't retrieve current username."])
+            }
+            
+            // Run transaction to update username and reservation atomically
+            try await firestore.runTransaction { [self] transaction, errorPointer in
+                // Update username in users collection
+                let userRef = firestore.collection("users").document(userId)
+                transaction.updateData([
+                    "username": newUsername.lowercased(),
+                    "lastUsernameChangeAt": FieldValue.serverTimestamp()
+                ], forDocument: userRef)
+                
+                // Delete old username reservation
+                let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
+                transaction.deleteDocument(oldUsernameRef)
+                
+                // Create new username reservation
+                let newUsernameRef = firestore.collection("usernames").document(newUsername.lowercased())
+                transaction.setData(["userId": userId], forDocument: newUsernameRef)
+                
+                return nil
+            }
+            
+            // Update local state
+            self.username = newUsername.lowercased()
             self.hasCompletedOnboarding = true
+            
         } catch {
             errorMessage = "Error updating username: \(error.localizedDescription)"
             throw error
         }
+    }
+    
+    private func isValidUsername(_ username: String) -> Bool {
+        // Check length
+        if username.count < 3 || username.count > 20 {
+            return false
+        }
+        
+        // Check for alphanumeric characters only
+        let allowedCharacterSet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        return username.rangeOfCharacter(from: allowedCharacterSet.inverted) == nil
     }
     
     func updateProfilePhoto(_ url: URL) async throws {

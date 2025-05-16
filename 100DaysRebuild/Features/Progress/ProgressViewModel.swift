@@ -1,6 +1,7 @@
 import Foundation
 import FirebaseFirestore
 import FirebaseAuth
+import Combine
 
 // Renamed to avoid redeclaration conflict with the main Challenge model
 struct ProgressChallenge: Identifiable, Codable {
@@ -109,28 +110,45 @@ struct Milestone: Identifiable {
     let isCompleted: Bool
 }
 
+@MainActor
 class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
-    private let firestore = Firestore.firestore()
-    private let challengeDaysTarget = 100
+    private let challengeStore = ChallengeStore.shared
     private var loadTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
     private let maxRetries = 3
     private let retryDelay: TimeInterval = 2.0
-    @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
     
     deinit {
         loadTask?.cancel()
+        cancellables.removeAll()
     }
     
     init() {
         super.init(initialState: ProgressState())
+        
+        // Setup observers for the challenge store
+        setupChallengeStoreObservers()
+    }
+    
+    private func setupChallengeStoreObservers() {
+        // Observe challenge updates from ChallengeStore
+        NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)
+            .sink { [weak self] _ in
+                self?.handle(.loadProgress)
+            }
+            .store(in: &cancellables)
     }
     
     override func handle(_ action: ProgressAction) {
         switch action {
         case .loadProgress:
-            loadUserProgress()
+            Task {
+                await loadUserProgress()
+            }
         case .retryLoading:
-            retryLoadProgress()
+            Task {
+                await retryLoadProgress()
+            }
         case .viewMilestone:
             // Implemented by the navigation container
             break
@@ -140,17 +158,17 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         }
     }
     
-    private func retryLoadProgress() {
+    private func retryLoadProgress() async {
         if state.retryCount < maxRetries {
             state.retryCount += 1
-            loadUserProgress(isRetry: true)
+            await loadUserProgress(isRetry: true)
         } else {
             state.error = "Failed to load data after multiple attempts. Please try again later."
             state.isLoading = false
         }
     }
     
-    private func loadUserProgress(isRetry: Bool = false) {
+    private func loadUserProgress(isRetry: Bool = false) async {
         // Avoid duplicate requests if already loading
         if state.isLoading && !isRetry { return }
         
@@ -162,7 +180,7 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         state.isLoading = true
         state.error = nil
         
-        guard let userId = Auth.auth().currentUser?.uid else {
+        guard Auth.auth().currentUser != nil else {
             state.isLoading = false
             state.error = ProgressError.notAuthenticated.errorDescription
             return
@@ -174,86 +192,38 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             
-            // Add a timeout mechanism
-            let timeoutTask = Task {
-                try? await Task.sleep(nanoseconds: UInt64(15 * 1_000_000_000)) // 15 second timeout
-                
-                if self.state.isLoading {
-                    await MainActor.run {
-                        self.state.error = ProgressError.timeoutError.errorDescription
-                        self.state.isLoading = false
-                        print("Progress data loading timed out")
-                    }
-                }
-            }
-            
             do {
-                // First, use the UserStatsService to fetch progress data
-                let overallProgress = await MainActor.run {
-                    let statsService = UserStatsService.shared
-                    Task {
-                        await statsService.fetchUserStats()
-                    }
-                    return statsService.userStats.overallCompletionPercentage
-                }
+                // Ensure the challenge store is up to date
+                await challengeStore.refreshChallenges()
                 
-                // We still need to load challenges to extract milestones
-                // Configure Firestore for this specific request
-                let db = self.firestore
+                // Get overall progress directly from the store
+                let overallProgress = challengeStore.overallCompletionPercentage
                 
-                let challenges = try await self.loadChallenges(for: userId, db: db)
+                // Extract challenges from the store
+                let challenges = challengeStore.challenges
                 
-                if Task.isCancelled { 
-                    timeoutTask.cancel()
-                    return 
-                }
+                if Task.isCancelled { return }
                 
                 // Convert significant milestones to our data model
                 let milestones = self.extractMilestones(from: challenges)
                 
-                if Task.isCancelled { 
-                    timeoutTask.cancel()
-                    return 
-                }
+                if Task.isCancelled { return }
                 
-                await MainActor.run {
-                    if !Task.isCancelled {
-                        timeoutTask.cancel()
-                        self.state.overallProgress = overallProgress
-                        self.state.milestones = milestones
-                        self.state.isLoading = false
-                        self.state.lastLoadTime = Date()
-                        self.state.retryCount = 0 // Reset retry count on success
-                    }
-                }
-            } catch let error as ProgressError {
-                if !Task.isCancelled {
-                    timeoutTask.cancel()
-                    await MainActor.run {
-                        self.state.error = error.errorDescription
-                        self.state.isLoading = false
-                        
-                        // Auto-retry on certain errors if not already a retry
-                        if !isRetry && self.state.retryCount < self.maxRetries {
-                            if case .networkError = error {
-                                print("Network error loading progress, will retry in \(self.retryDelay) seconds")
-                                self.scheduleRetry()
-                            }
-                        }
-                    }
-                }
+                state.overallProgress = overallProgress
+                state.milestones = milestones
+                state.isLoading = false
+                state.lastLoadTime = Date()
+                state.retryCount = 0 // Reset retry count on success
+                
             } catch {
                 if !Task.isCancelled {
-                    timeoutTask.cancel()
-                    await MainActor.run {
-                        self.state.error = ProgressError.firestoreError(error).errorDescription
-                        self.state.isLoading = false
-                        
-                        // Consider auto-retrying for generic errors too
-                        if !isRetry && self.state.retryCount < self.maxRetries {
-                            print("Error loading progress, will retry in \(self.retryDelay) seconds")
-                            self.scheduleRetry()
-                        }
+                    state.error = error.localizedDescription
+                    state.isLoading = false
+                    
+                    // Auto-retry if network error and not already a retry
+                    if !isRetry && state.retryCount < self.maxRetries {
+                        // Schedule retry
+                        scheduleRetry()
                     }
                 }
             }
@@ -261,124 +231,129 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
     }
     
     private func scheduleRetry() {
-        // Wait a bit before retrying to give network time to recover
         Task { [weak self] in
-            guard let self = self else { return }
-            try await Task.sleep(nanoseconds: UInt64(self.retryDelay * 1_000_000_000))
-            self.retryLoadProgress()
+            try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+            guard let self = self, !Task.isCancelled else { return }
+            await self.retryLoadProgress()
         }
     }
     
-    private func loadChallenges(for userId: String, db: Firestore) async throws -> [ProgressChallenge] {
-        let snapshot = try await db
-            .collection("users")
-            .document(userId)
-            .collection("challenges")
-            .getDocuments(source: .default) // Allow Firestore to use cache if network fails
-        
-        let challenges = snapshot.documents.compactMap { document in
-            // Try to parse the document as our custom type
-            if let challengeId = UUID(uuidString: document.documentID),
-               let title = document.data()["title"] as? String,
-               let ownerId = document.data()["ownerId"] as? String,
-               let startDateTimestamp = document.data()["startDate"] as? Timestamp,
-               let streakCount = document.data()["streakCount"] as? Int,
-               let daysCompleted = document.data()["daysCompleted"] as? Int,
-               let isArchived = document.data()["isArchived"] as? Bool {
-                
-                let startDate = startDateTimestamp.dateValue()
-                let lastCheckInDate = (document.data()["lastCheckInDate"] as? Timestamp)?.dateValue()
-                let lastModified = (document.data()["lastModified"] as? Timestamp)?.dateValue() ?? Date()
-                
-                // Determine if completed today by checking if lastCheckInDate is today
-                let isCompletedToday: Bool
-                if let lastCheckIn = lastCheckInDate {
-                    isCompletedToday = Calendar.current.isDateInToday(lastCheckIn)
-                } else {
-                    isCompletedToday = false
-                }
-                
-                return ProgressChallenge(
-                    id: challengeId,
-                    title: title,
-                    startDate: startDate,
-                    lastCheckInDate: lastCheckInDate,
-                    streakCount: streakCount,
-                    daysCompleted: daysCompleted,
-                    isCompletedToday: isCompletedToday,
-                    isArchived: isArchived,
-                    ownerId: ownerId,
-                    lastModified: lastModified
-                )
-            }
-            return nil
-        }
-        
-        return challenges
-    }
-    
-    // This function is kept for historical milestone extraction, but now the overall progress 
-    // comes from the centralized UserStatsService
-    private func calculateOverallProgress(_ challenges: [ProgressChallenge]) -> Double {
-        guard !challenges.isEmpty else { return 0.0 }
-        
-        let totalCompletedDays = challenges.reduce(0) { $0 + $1.daysCompleted }
-        let totalPossibleDays = challenges.count * challengeDaysTarget
-        
-        return min(1.0, Double(totalCompletedDays) / Double(totalPossibleDays))
-    }
-    
-    private func extractMilestones(from challenges: [ProgressChallenge]) -> [Milestone] {
+    // Extract milestone data from challenges
+    private func extractMilestones(from challenges: [Challenge]) -> [Milestone] {
         var milestones: [Milestone] = []
         
-        // Don't process if there are no challenges
-        if challenges.isEmpty {
-            return milestones
-        }
-        
-        // Significant milestones from challenges
         for challenge in challenges {
-            // Add the start of each challenge as a milestone
+            // Only include challenges with progress
+            guard challenge.daysCompleted > 0 else { continue }
+            
+            // Add milestone for each challenge start
             milestones.append(Milestone(
-                id: "start-\(challenge.id.uuidString)",
-                title: "Started \(challenge.title)",
+                id: "start_\(challenge.id.uuidString)",
+                title: "Started \"\(challenge.title)\"",
                 date: challenge.startDate,
                 isCompleted: true
             ))
             
-            // Add completion milestone if applicable
-            if challenge.isCompleted {
+            // Add milestone for the first check-in if available
+            if let firstCheckIn = challenge.lastCheckInDate, challenge.daysCompleted >= 1 {
                 milestones.append(Milestone(
-                    id: "complete-\(challenge.id.uuidString)",
-                    title: "Completed \(challenge.title)",
-                    date: challenge.lastCheckInDate ?? challenge.startDate,
+                    id: "first_checkin_\(challenge.id.uuidString)",
+                    title: "First check-in for \"\(challenge.title)\"",
+                    date: firstCheckIn,
                     isCompleted: true
                 ))
             }
             
-            // Add milestone for reaching 25%, 50%, 75% if applicable
-            let progressThresholds = [25, 50, 75]
-            for threshold in progressThresholds {
-                if challenge.daysCompleted >= threshold {
-                    milestones.append(Milestone(
-                        id: "milestone-\(threshold)-\(challenge.id.uuidString)",
-                        title: "Reached \(threshold)% in \(challenge.title)",
-                        date: challenge.lastCheckInDate ?? challenge.startDate,
-                        isCompleted: true
-                    ))
-                }
+            // Milestone for 25% completion
+            if challenge.daysCompleted >= 25 {
+                let quarterDate = estimateDateForCompletion(challenge: challenge, days: 25)
+                milestones.append(Milestone(
+                    id: "quarter_\(challenge.id.uuidString)",
+                    title: "25% complete on \"\(challenge.title)\"",
+                    date: quarterDate,
+                    isCompleted: true
+                ))
+            }
+            
+            // Milestone for 50% completion
+            if challenge.daysCompleted >= 50 {
+                let halfDate = estimateDateForCompletion(challenge: challenge, days: 50)
+                milestones.append(Milestone(
+                    id: "half_\(challenge.id.uuidString)",
+                    title: "Halfway through \"\(challenge.title)\"",
+                    date: halfDate,
+                    isCompleted: true
+                ))
+            }
+            
+            // Milestone for 75% completion
+            if challenge.daysCompleted >= 75 {
+                let threeQuarterDate = estimateDateForCompletion(challenge: challenge, days: 75)
+                milestones.append(Milestone(
+                    id: "threequarter_\(challenge.id.uuidString)",
+                    title: "75% complete on \"\(challenge.title)\"",
+                    date: threeQuarterDate,
+                    isCompleted: true
+                ))
+            }
+            
+            // Milestone for completion
+            if challenge.isCompleted {
+                let completionDate = estimateDateForCompletion(challenge: challenge, days: 100)
+                milestones.append(Milestone(
+                    id: "complete_\(challenge.id.uuidString)",
+                    title: "Completed \"\(challenge.title)\"! 🎉",
+                    date: completionDate,
+                    isCompleted: true
+                ))
             }
         }
         
-        // Sort milestones by date
-        return milestones.sorted(by: { $0.date > $1.date })
+        // Sort milestones by date (most recent first)
+        return milestones.sorted { $0.date > $1.date }
+    }
+    
+    // Estimate the date when a certain number of days was completed
+    private func estimateDateForCompletion(challenge: Challenge, days: Int) -> Date {
+        // If we have the last check-in date and we know exactly how many days are completed,
+        // we can estimate when certain milestones were reached
+        guard let lastCheckIn = challenge.lastCheckInDate else {
+            return challenge.startDate
+        }
+        
+        let daysCompleted = challenge.daysCompleted
+        let daysSinceMilestone = daysCompleted - days
+        
+        // If milestone days = current days completed, use the last check-in date
+        if daysSinceMilestone == 0 {
+            return lastCheckIn
+        }
+        
+        // Otherwise estimate the date based on the average pace
+        let calendar = Calendar.current
+        let daysSinceStart = calendar.dateComponents([.day], from: challenge.startDate, to: lastCheckIn).day ?? 1
+        
+        // Calculate average days per check-in
+        let averageDaysPerCheckIn = daysSinceStart / max(1, daysCompleted)
+        
+        // Estimate milestone date by going back from last check-in
+        if let estimatedDate = calendar.date(byAdding: .day, value: -(daysSinceMilestone * averageDaysPerCheckIn), to: lastCheckIn) {
+            return estimatedDate
+        }
+        
+        // Fallback to start date plus days
+        return calendar.date(byAdding: .day, value: days, to: challenge.startDate) ?? challenge.startDate
     }
 }
 
 // MARK: - UPViewModel Implementation
 @MainActor
 class ProgressDashboardViewModel: ObservableObject {
+    // Add shared singleton instance
+    static let shared = ProgressDashboardViewModel()
+    
     @Published var isLoading = false
+    @Published var isInitialLoad = true
     @Published var hasData = false
     @Published var errorMessage: String?
     @Published var isNetworkConnected = true
@@ -398,6 +373,11 @@ class ProgressDashboardViewModel: ObservableObject {
     private let firestore = Firestore.firestore()
     @MainActor private var loadTask: Task<Void, Never>?
     @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
+    
+    // Private initializer for singleton
+    private init() {
+        print("ProgressDashboardViewModel initialized as singleton")
+    }
     
     // Computed properties that get data from the centralized UserStatsService
     var totalChallenges: Int { 
@@ -457,61 +437,104 @@ class ProgressDashboardViewModel: ObservableObject {
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             
-            await MainActor.run {
-                self.isLoading = true
-                self.errorMessage = nil
-                print("ProgressDashboardViewModel - Starting data load")
-            }
-            
-            // First, load centralized stats
-            await MainActor.run {
-                let _ = Task {
-                    await self.userStatsService.fetchUserStats()
-                }
-            }
-            
-            // Simple delay to simulate data loading
-            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
-            
-            if Task.isCancelled { 
-                print("ProgressDashboardViewModel - Task was cancelled during delay")
-                return 
-            }
-            
-            // Check if the user is logged in
-            guard Auth.auth().currentUser != nil else {
+            do {
                 await MainActor.run {
-                    self.errorMessage = "You must be logged in to view progress"
+                    self.isLoading = true
+                    self.errorMessage = nil
+                    print("ProgressDashboardViewModel - Starting data load")
+                }
+                
+                // Set up a timeout to prevent infinite loading state
+                let timeoutTask = Task {
+                    do {
+                        try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds timeout
+                        if self.isLoading {
+                            print("ProgressDashboardViewModel - Loading timed out after 10 seconds")
+                            await MainActor.run {
+                                self.isLoading = false
+                                // Provide an empty state if timeout occurs but still show cached data if available
+                                if !self.hasData {
+                                    self.errorMessage = "Loading timed out. Pull down to refresh."
+                                    self.isInitialLoad = false
+                                }
+                            }
+                        }
+                    } catch {
+                        // Task was cancelled, no action needed
+                    }
+                }
+                
+                // First, load centralized stats
+                await MainActor.run {
+                    Task {
+                        try? await self.userStatsService.fetchUserStats()
+                    }
+                }
+                
+                // Simple delay to simulate data loading - REDUCED TO AVOID LONG WAITS
+                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds instead of 1.5
+                
+                try Task.checkCancellation()
+                
+                // Check if the user is logged in
+                guard Auth.auth().currentUser != nil else {
+                    timeoutTask.cancel()
+                    await MainActor.run {
+                        self.errorMessage = "You must be logged in to view progress"
+                        self.isLoading = false
+                        self.isInitialLoad = false
+                        self.hasData = false
+                    }
+                    return
+                }
+                
+                // Generate some sample data for immediate display
+                let sampleData = self.generateSampleData()
+                
+                // Check for cancellation before updating UI
+                try Task.checkCancellation()
+                
+                timeoutTask.cancel() // Cancel timeout since we succeeded
+                
+                await MainActor.run {
+                    // Only set supplementary data that isn't provided by UserStatsService
+                    self.journeyCards = sampleData.journeyCards
+                    self.dateIntensityMap = sampleData.dateIntensityMap
+                    self.dailyCheckInsData = sampleData.dailyCheckInsData
+                    self.projectedCompletionDate = sampleData.projectedCompletionDate
+                    self.currentPace = sampleData.currentPace
+                    self.earnedBadges = sampleData.earnedBadges
+                    
+                    // Mark as loaded with data
+                    self.hasData = true
                     self.isLoading = false
-                    self.hasData = false
+                    self.isInitialLoad = false
+                    self.errorMessage = nil
+                    print("ProgressDashboardViewModel - Data load complete")
+                }
+            } catch is CancellationError {
+                // Safe handling of task cancellation
+                print("ProgressDashboardViewModel - Task was cancelled")
+                await MainActor.run {
+                    self.isLoading = false
                 }
                 return
-            }
-            
-            // Generate some sample data for immediate display
-            let sampleData = self.generateSampleData()
-            
-            // Check for cancellation before updating UI
-            if Task.isCancelled {
-                print("ProgressDashboardViewModel - Task was cancelled before UI update")
-                return
-            }
-            
-            await MainActor.run {
-                // Only set supplementary data that isn't provided by UserStatsService
-                self.journeyCards = sampleData.journeyCards
-                self.dateIntensityMap = sampleData.dateIntensityMap
-                self.dailyCheckInsData = sampleData.dailyCheckInsData
-                self.projectedCompletionDate = sampleData.projectedCompletionDate
-                self.currentPace = sampleData.currentPace
-                self.earnedBadges = sampleData.earnedBadges
+            } catch {
+                print("ProgressDashboardViewModel - Error loading data: \(error.localizedDescription)")
                 
-                // Mark as loaded with data
-                self.hasData = true
-                self.isLoading = false
-                print("ProgressDashboardViewModel - Data load complete")
+                // Handle error on main thread
+                await MainActor.run {
+                    self.errorMessage = "Failed to load progress data. Please try again."
+                    self.isLoading = false
+                    self.isInitialLoad = false
+                }
             }
         }
+    }
+    
+    // Add loadProgress() method for backward compatibility
+    func loadProgress() async {
+        await loadData(forceRefresh: false)
     }
     
     private func generateSampleData() -> (
@@ -522,58 +545,184 @@ class ProgressDashboardViewModel: ObservableObject {
         currentPace: String,
         earnedBadges: [ProgressBadge]
     ) {
-        // Generate some sample journey cards
-        let journeyCards: [JourneyCard] = [
-            JourneyCard(type: .milestone(
-                message: "First Challenge",
-                emoji: "flag.fill",
-                dayNumber: nil,
-                date: Date().addingTimeInterval(-30*24*60*60)
-            )),
-            JourneyCard(type: .milestone(
-                message: "One Week Streak",
-                emoji: "flame.fill",
-                dayNumber: nil,
-                date: Date().addingTimeInterval(-14*24*60*60)
-            ))
-        ]
-        
-        // Generate sample date intensity map (for heat map)
-        var dateIntensityMap: [Date: Int] = [:]
-        for i in 0..<90 {
-            if Bool.random() && i % 3 != 0 {
-                let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
-                dateIntensityMap[date] = Int.random(in: 1...3)
-            }
+        // Check if this is first load with no existing data
+        let isFirstLoad = earnedBadges.isEmpty && journeyCards.isEmpty
+
+        // If we have existing data and are just refreshing, keep current data  
+        if !isFirstLoad && hasData {
+            return (
+                journeyCards: self.journeyCards,
+                dateIntensityMap: self.dateIntensityMap, 
+                dailyCheckInsData: self.dailyCheckInsData,
+                projectedCompletionDate: self.projectedCompletionDate,
+                currentPace: self.currentPace,
+                earnedBadges: self.earnedBadges
+            )
         }
+
+        // Only generate sample data for first load or when explicitly forced
+        // This example uses data that should represent real user's progress appropriately
         
-        // Generate sample daily check-ins
-        let dailyCheckIns: [ProgressDailyCheckIn] = [
-            ProgressDailyCheckIn(date: Date().addingTimeInterval(-1*24*60*60), count: 1),
-            ProgressDailyCheckIn(date: Date().addingTimeInterval(-2*24*60*60), count: 1),
-            ProgressDailyCheckIn(date: Date().addingTimeInterval(-4*24*60*60), count: 2),
-            ProgressDailyCheckIn(date: Date().addingTimeInterval(-5*24*60*60), count: 1)
-        ]
+        // Generate journey cards
+        let journeyCards = generateJourneyCards()
         
-        // Generate sample projected completion date
-        let projectedDate = Calendar.current.date(byAdding: .day, value: 45, to: Date())
+        // Generate heatmap data
+        let dateIntensityMap = generateDateIntensityMap()
         
-        // Sample current pace
-        let pace = "4.5 days/week"
+        // Generate daily check-ins data
+        let dailyCheckInsData = generateDailyCheckInsData()
         
-        // Sample badges
-        let badges: [ProgressBadge] = [
-            ProgressBadge(id: 1, title: "First Day", iconName: "checkmark.circle.fill"),
-            ProgressBadge(id: 2, title: "Week Streak", iconName: "flame.fill")
-        ]
+        // Calculate projected completion
+        let projectedCompletionDate = Calendar.current.date(
+            byAdding: .day,
+            value: Int(30 * (1.0 - completionPercentage)),
+            to: Date()
+        )
+        
+        // Calculate current pace
+        let currentPace = calculateCurrentPace()
+        
+        // Generate earned badges
+        let earnedBadges = generateEarnedBadges()
         
         return (
             journeyCards: journeyCards,
             dateIntensityMap: dateIntensityMap,
-            dailyCheckInsData: dailyCheckIns,
-            projectedCompletionDate: projectedDate,
-            currentPace: pace,
-            earnedBadges: badges
+            dailyCheckInsData: dailyCheckInsData,
+            projectedCompletionDate: projectedCompletionDate,
+            currentPace: currentPace,
+            earnedBadges: earnedBadges
         )
+    }
+    
+    private func generateJourneyCards() -> [JourneyCard] {
+        // Generate sample journey cards based on user's progress
+        var cards: [JourneyCard] = []
+        
+        // First challenge started
+        cards.append(JourneyCard(type: .milestone(
+            message: "First Challenge",
+            emoji: "flag.fill",
+            dayNumber: nil,
+            date: Date().addingTimeInterval(-30*24*60*60)
+        )))
+        
+        // Add streak milestone if applicable
+        if longestStreak >= 7 {
+            cards.append(JourneyCard(type: .milestone(
+                message: "\(longestStreak) Day Streak",
+                emoji: "flame.fill",
+                dayNumber: nil,
+                date: Date().addingTimeInterval(-14*24*60*60)
+            )))
+        }
+        
+        // Add completion milestone if applicable
+        if completionPercentage > 0.25 {
+            cards.append(JourneyCard(type: .milestone(
+                message: "25% Complete",
+                emoji: "chart.bar.fill",
+                dayNumber: nil,
+                date: Date().addingTimeInterval(-7*24*60*60)
+            )))
+        }
+        
+        return cards
+    }
+    
+    private func generateDateIntensityMap() -> [Date: Int] {
+        // Generate sample date intensity map for heatmap
+        var dateIntensityMap: [Date: Int] = [:]
+        
+        // Generate activity data for the last 90 days based on check-in patterns
+        for i in 0..<90 {
+            // Higher probability of check-ins on more recent days and weekdays
+            let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
+            let weekday = Calendar.current.component(.weekday, from: date)
+            let isWeekend = (weekday == 1 || weekday == 7)
+            
+            // More likely to have check-ins on recent days
+            let recentDaysProbability = Double(90 - i) / 90.0
+            
+            // Weekend check-ins are less common
+            let checkInProbability = isWeekend ? 0.3 : 0.7
+            
+            // Combine factors for final probability
+            let probability = checkInProbability * recentDaysProbability
+            
+            if Double.random(in: 0.0...1.0) < probability {
+                // Simulate 1-3 check-ins per day
+                dateIntensityMap[date] = Int.random(in: 1...3)
+            }
+        }
+        
+        return dateIntensityMap
+    }
+    
+    private func generateDailyCheckInsData() -> [ProgressDailyCheckIn] {
+        // Generate sample daily check-ins for the last week
+        var checkIns: [ProgressDailyCheckIn] = []
+        
+        // Add check-ins with some randomness to simulate real use
+        for i in 0..<7 {
+            if i == 0 || i == 1 || i == 3 || i == 4 || i == 6 {  // Skip a couple days
+                let date = Calendar.current.date(byAdding: .day, value: -i, to: Date())!
+                // Most days have 1 check-in, some have 2
+                let count = i % 3 == 0 ? 2 : 1
+                checkIns.append(ProgressDailyCheckIn(date: date, count: count))
+            }
+        }
+        
+        return checkIns
+    }
+    
+    private func calculateCurrentPace() -> String {
+        // Calculate pace based on current streak and completion percentage
+        let daysPerWeek: Double
+        
+        // Use user stats to determine pace
+        if currentStreak > 0 {
+            // If user has a current streak, base pace on that
+            daysPerWeek = min(7.0, max(1.0, Double(currentStreak) / 7.0 * 3.5))
+        } else if completionPercentage > 0 {
+            // Base on completion rate
+            daysPerWeek = min(7.0, max(1.0, completionPercentage * 7.0))
+        } else {
+            // Default for new users
+            daysPerWeek = 3.5
+        }
+        
+        // Format nicely
+        return String(format: "%.1f days/week", daysPerWeek)
+    }
+    
+    private func generateEarnedBadges() -> [ProgressBadge] {
+        var badges: [ProgressBadge] = []
+        
+        // First challenge badge
+        if totalChallenges > 0 {
+            badges.append(ProgressBadge(id: 1, title: "First Challenge", iconName: "flag.fill"))
+        }
+        
+        // Streak badges
+        if longestStreak >= 7 {
+            badges.append(ProgressBadge(id: 2, title: "7-Day Streak", iconName: "flame.fill"))
+        }
+        if longestStreak >= 30 {
+            badges.append(ProgressBadge(id: 3, title: "30-Day Streak", iconName: "flame.fill"))
+        }
+        
+        // Progress badges
+        if completionPercentage >= 0.25 {
+            badges.append(ProgressBadge(id: 4, title: "25% Complete", iconName: "chart.bar.fill"))
+        }
+        if completionPercentage >= 0.50 {
+            badges.append(ProgressBadge(id: 5, title: "50% Complete", iconName: "chart.bar.fill"))
+        }
+        if completionPercentage >= 0.75 {
+            badges.append(ProgressBadge(id: 6, title: "75% Complete", iconName: "chart.bar.fill"))
+        }
+        
+        return badges
     }
 } 

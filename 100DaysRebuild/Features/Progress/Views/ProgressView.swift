@@ -67,18 +67,82 @@ struct ProgressView: View {
     @EnvironmentObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var router: TabViewRouter
+    @EnvironmentObject var userStatsService: UserStatsService
+    
+    @State private var showAnalytics = false
+    @State private var loadTask: Task<Void, Never>? = nil
+    @State private var hasLoadedOnce = false
     
     var body: some View {
         NavigationView {
-            ProgressContentView(viewModel: viewModel)
+            ProgressContentView(viewModel: viewModel, showAnalytics: $showAnalytics)
                 .background(Color.theme.background.ignoresSafeArea())
                 .navigationTitle("Progress")
         }
         .onAppear {
-            // Load progress data when the view appears
-            Task {
-                await viewModel.loadData()
+            // Cancel any existing task first to prevent multiple concurrent tasks
+            loadTask?.cancel()
+            loadTask = nil
+            
+            // Mark tab as changing when this view appears
+            if router.selectedTab == 1 {
+                router.tabIsChanging = true
+                
+                // Only load once unless forced refresh
+                if !hasLoadedOnce {
+                    // Load progress data when the view appears, but only if this tab is selected
+                    loadTask = Task {
+                        do {
+                            // Add a small delay to prevent rapid reloading during tab switching
+                            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 second delay
+                            
+                            if !Task.isCancelled {
+                                await viewModel.loadData(forceRefresh: false)
+                                
+                                if !Task.isCancelled {
+                                    hasLoadedOnce = true
+                                    
+                                    // After data is loaded, mark tab as not changing
+                                    if router.selectedTab == 1 {
+                                        router.tabIsChanging = false
+                                    }
+                                }
+                            }
+                        } catch is CancellationError {
+                            // Safely handle task cancellation - just ignore it
+                            print("Progress loading task was cancelled")
+                        } catch {
+                            print("Error loading progress: \(error.localizedDescription)")
+                            // Don't reset hasLoadedOnce on error to prevent repeated attempts
+                        }
+                    }
+                } else {
+                    // If already loaded once, just mark tab as not changing
+                    router.tabIsChanging = false
+                }
             }
+        }
+        .onDisappear {
+            // When view disappears, cancel any loading tasks
+            // Use async cancellation to avoid immediate termination
+            Task {
+                loadTask?.cancel()
+                loadTask = nil
+            }
+            
+            // If this tab is still selected but view is disappearing, 
+            // make sure we cancel any ongoing view model tasks too
+            if router.selectedTab == 1 {
+                viewModel.cancelTasks()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowProgressAnalytics"))) { _ in
+            showAnalytics = true
+        }
+        .sheet(isPresented: $showAnalytics) {
+            ProgressAnalyticsView()
+                .environmentObject(viewModel)
         }
     }
 }
@@ -88,58 +152,67 @@ struct ProgressContentView: View {
     @ObservedObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @Binding var showAnalytics: Bool
     
     var body: some View {
         ZStack {
             // Background
             Color.theme.background.ignoresSafeArea()
             
+            // Full screen loading view when initially loading
+            if viewModel.isInitialLoad {
+                fullScreenLoadingView
+                    .transition(.opacity)
+            } 
             // Main content
-            ScrollView {
-                VStack(spacing: 24) {
-                    if viewModel.isLoading && !viewModel.hasData {
-                        loadingView
-                    } else if viewModel.hasData {
-                        VStack(spacing: 24) {
-                            // Stats Section
-                            statsSection
-                            
-                            // Journey Carousel (Your Journey So Far)
-                            JourneyCarouselView(viewModel: viewModel)
+            else {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if viewModel.hasData {
+                            VStack(spacing: 24) {
+                                // Stats Section
+                                statsSection
+                                
+                                // Journey Carousel (Your Journey So Far)
+                                JourneyCarouselView(viewModel: viewModel)
 
-                            // Daily Spark
-                            dailySparkSection
-                            
-                            // Projected Completion (Your Pace) - Pro Feature
-                            projectedCompletionSection
-                            
-                            // Consistency Graph - Pro Feature
-                            consistencyGraphSection
-                            
-                            // Activity Heatmap (Pro Feature)
-                            heatmapSection
-                            
-                            // Badges Section
-                            badgesSection
-                            
-                            // Add padding at the bottom for better scrolling
-                            Spacer().frame(height: 20)
+                                // Daily Spark
+                                dailySparkSection
+                                
+                                // Projected Completion (Your Pace) - Pro Feature
+                                projectedCompletionSection
+                                
+                                // Consistency Graph - Pro Feature
+                                consistencyGraphSection
+                                
+                                // Activity Heatmap (Pro Feature)
+                                heatmapSection
+                                
+                                // Badges Section
+                                badgesSection
+                                
+                                // Add padding at the bottom for better scrolling
+                                Spacer().frame(height: 20)
+                            }
+                            .transition(.opacity)
+                        } else if let error = viewModel.errorMessage {
+                            errorState(message: error)
+                                .transition(.opacity)
+                        } else {
+                            emptyState
+                                .transition(.opacity)
                         }
-                        .transition(.opacity)
-                    } else if let error = viewModel.errorMessage {
-                        errorState(message: error)
-                    } else {
-                        emptyState
                     }
+                    .padding(.vertical)
                 }
-                .padding(.vertical)
-            }
-            .refreshable {
-                await viewModel.loadData(forceRefresh: true)
+                .refreshable {
+                    await viewModel.loadData(forceRefresh: true)
+                }
+                .transition(.opacity)
             }
             
             // Overlay loading indicator when refreshing with existing data
-            if viewModel.isLoading && viewModel.hasData {
+            if viewModel.isLoading && viewModel.hasData && !viewModel.isInitialLoad {
                 VStack {
                     SwiftUI.ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
@@ -155,9 +228,13 @@ struct ProgressContentView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad) 
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.hasData)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage != nil)
     }
     
-    private var loadingView: some View {
+    private var fullScreenLoadingView: some View {
         VStack {
             SwiftUI.ProgressView()
                 .progressViewStyle(CircularProgressViewStyle())
@@ -865,4 +942,128 @@ struct ProgressView_Previews: PreviewProvider {
             .environmentObject(SubscriptionService.shared)
             .environmentObject(NotificationService.shared)
     }
-} 
+}
+
+// Add this at the bottom of the file
+struct ProgressAnalyticsView: View {
+    @EnvironmentObject var viewModel: UPViewModel
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Progress Summary Card
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Progress Analytics")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        // Basic stats in horizontal layout
+                        HStack(spacing: 16) {
+                            StatCard(title: "Challenges", value: "\(viewModel.totalChallenges)")
+                            StatCard(title: "Current Streak", value: "\(viewModel.currentStreak)")
+                            StatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%")
+                        }
+                        
+                        // Circular progress indicator
+                        HStack {
+                            Spacer()
+                            ProgressCircleView(progress: viewModel.completionPercentage, size: 200, lineWidth: 20)
+                            Spacer()
+                        }
+                        .padding(.top, 8)
+                    }
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                    
+                    // Activity Chart
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Activity Heatmap")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        
+                        // Placeholder for heatmap
+                        HStack {
+                            Spacer()
+                            Text("Activity visualization available in a future update")
+                                .font(.subheadline)
+                                .foregroundColor(.theme.subtext)
+                                .multilineTextAlignment(.center)
+                                .padding(.vertical, 60)
+                            Spacer()
+                        }
+                    }
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                }
+                .padding()
+            }
+            .navigationTitle("Analytics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Helper views for the analytics screen
+struct StatCard: View {
+    var title: String
+    var value: String
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(value)
+                .font(.title)
+                .fontWeight(.bold)
+                .foregroundColor(.theme.accent)
+            
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.theme.subtext)
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+        .background(Color.theme.surface.opacity(0.5))
+        .cornerRadius(8)
+    }
+}
+
+struct ProgressCircleView: View {
+    var progress: Double
+    var size: CGFloat
+    var lineWidth: CGFloat
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(lineWidth: lineWidth)
+                .opacity(0.3)
+                .foregroundColor(.theme.accent.opacity(0.3))
+            
+            Circle()
+                .trim(from: 0.0, to: CGFloat(min(progress, 1.0)))
+                .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                .foregroundColor(.theme.accent)
+                .rotationEffect(Angle(degrees: 270.0))
+                .animation(.linear, value: progress)
+            
+            VStack {
+                Text("\(Int(progress * 100))%")
+                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+}

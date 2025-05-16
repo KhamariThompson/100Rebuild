@@ -3,593 +3,538 @@ import FirebaseFirestore
 import FirebaseAuth
 
 struct SocialView: View {
-    @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
-    @State private var isLoading = false
-    @State private var errorMessage: String? = nil
-    @State private var username = ""
-    @State private var usernameAvailable = false
-    @State private var isCheckingUsername = false
-    @State private var usernameValidationMessage = ""
-    @State private var showingSuccessToast = false
-    
-    // Function to filter username to alphanumeric only
-    private func filterUsername(_ input: String) -> String {
-        return input.replacingOccurrences(of: "[^a-zA-Z0-9]", with: "", options: .regularExpression)
-    }
+    @StateObject private var viewModel = SocialViewModel()
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        ZStack {
-            Color.theme.background.ignoresSafeArea()
-            
         ScrollView {
-                VStack(spacing: 24) {
-                // Header
-                    communityHeader
-                    
-                    // Username reservation
-                    usernameReservationSection
-                    
-                    // Community leaderboard
-                    leaderboardSection
-                    
-                    // Friend Activity
-                    friendActivitySection
-                    
-                    // Connect section
-                    connectSection
-                    
-                    // Coming soon (placeholder)
-                    VStack(spacing: 8) {
-                        Text("More exciting features coming soon!")
-                            .font(.headline)
-                            .foregroundColor(.theme.subtext)
-                            .padding(.top, 20)
-                        
-                        Text("We're building an entire social ecosystem for habit-builders! Stay tuned for daily visual logs, friend activity feeds, group challenges, and personalized insights — all designed to keep you motivated on your 100-day journey.")
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 30)
+            VStack(spacing: 24) {
+                // Social coming soon header
+                socialComingSoonHeader
+                
+                // Username claim card
+                usernameClaimCard
+                
+                // Social links section
+                socialLinksSection
+                    .padding(.top)
             }
-            
-            // Success Toast
-            if showingSuccessToast {
-                VStack {
-                    Spacer()
-                    Text("Username reserved for future social features!")
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(Color.theme.accent)
-                                .shadow(radius: 5)
-                        )
-                        .foregroundColor(.white)
-                        .padding(.horizontal)
-                        .padding(.bottom, 30)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                .zIndex(100)
-                .onAppear {
-                    // Dismiss toast after 3 seconds
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                        withAnimation {
-                            showingSuccessToast = false
-                        }
-                    }
-                }
+            .padding(.horizontal)
+            .padding(.vertical, 16)
+        }
+        .background(Color.theme.background.ignoresSafeArea())
+        .overlay {
+            if viewModel.isLoading {
+                LoadingOverlay()
             }
         }
-        .overlay(
-            Group {
-                if isLoading {
-                    LoadingView()
-                }
-            }
-        )
         .alert(isPresented: Binding<Bool>(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.errorMessage = nil } }
         )) {
             Alert(
                 title: Text("Error"),
-                message: Text(errorMessage ?? "Unknown error"),
+                message: Text(viewModel.errorMessage ?? "Unknown error"),
                 dismissButton: .default(Text("OK"))
             )
         }
-        .onAppear {
-            loadUserUsername()
+        .overlay {
+            if viewModel.showSuccessToast {
+                VStack {
+                    Spacer()
+                    SuccessToast()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.spring(), value: viewModel.showSuccessToast)
+                .zIndex(100)
+            }
         }
     }
     
-    private var communityHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    // MARK: - View Components
+    
+    private var socialComingSoonHeader: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text("Social is Coming to 100Days!")
                 .font(.largeTitle)
                 .fontWeight(.bold)
-                .foregroundColor(.theme.text)
+                .foregroundColor(Color.theme.text)
             
-            Text("Connect with others on their 100-day journey")
-                .font(.subheadline)
-                .foregroundColor(.theme.subtext)
+            Text("Connect with others on their 100-day journey – friends, group challenges, and leaderboards are on the way.")
+                .font(.body)
+                .foregroundColor(Color.theme.subtext)
+                .lineSpacing(4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top)
     }
     
-    private var usernameReservationSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Claim Your Username")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Text("Social features are coming in our next major update! In the meantime, reserve your username now to secure your identity before others claim it. Soon you'll be able to add friends, join group challenges, track streaks together, and see public leaderboards.")
-                .font(.subheadline)
-                .foregroundColor(.theme.subtext)
-                .padding(.bottom, 4)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                if !username.isEmpty && userSession.username != nil {
-                    Text("Your username: @\(username)")
-                        .font(.body)
-                        .foregroundColor(.theme.accent)
-                        .padding(.bottom, 8)
-                    
-                    Text("Great! Your username is reserved for when social features launch. We'll notify you when they're available.")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                } else {
-                    Text("Be among the first to claim your preferred username:")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                    
-                    TextField("Choose a username", text: $username)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.theme.surface)
-                                .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
-                        )
-                        .onChange(of: username) {
-                            // Filter out non-alphanumeric characters
-                            username = filterUsername(username)
-                            
-                            // Validate username
-                            validateUsername()
-                        }
-                    
-                    if !usernameValidationMessage.isEmpty {
-                        Text(usernameValidationMessage)
-                            .font(.caption)
-                            .foregroundColor(usernameAvailable ? .green : .red)
-                            .padding(.horizontal, 4)
-                    }
-                    
-                    Button(action: reserveUsername) {
-                        HStack {
-                            Text("Reserve Username")
-                                .fontWeight(.semibold)
-                            
-                            if isCheckingUsername {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle())
-                                    .scaleEffect(0.7)
-                                    .padding(.leading, 4)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(
-                                    usernameAvailable ? Color.theme.accent : Color.gray.opacity(0.5)
-                                )
-                        )
-                        .foregroundColor(.white)
-                    }
-                    .disabled(!usernameAvailable || isCheckingUsername)
-                    .padding(.top, 8)
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-    }
-    
-    private var leaderboardSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Leaderboard")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            if subscriptionService.isProUser {
-                // Pro users see the actual leaderboard
-                ForEach(1...5, id: \.self) { index in
-                    HStack {
-                        Text("\(index)")
-                            .font(.headline)
-                            .foregroundColor(.theme.accent)
-                            .frame(width: 30)
-                        
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.theme.accent)
-                        
-                        Text("User \(index)")
-                            .font(.body)
-                            .foregroundColor(.theme.text)
-                        
-                        Spacer()
-                        
-                        Text("\(100 - index * 5) Days")
-                            .font(.callout)
-                            .foregroundColor(.theme.accent)
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                    )
-                }
+    private var usernameClaimCard: some View {
+        VStack(spacing: 0) {
+            if case .claimed(let username) = viewModel.usernameStatus {
+                // User has already claimed a username
+                ClaimedUsernameView(username: username)
             } else {
-                // Free users see blurred content with upgrade prompt
-                ProLockedView {
-                VStack(spacing: 16) {
-                        ForEach(1...5, id: \.self) { index in
-                            HStack {
-                                Text("\(index)")
-                                    .font(.headline)
-                                    .foregroundColor(.theme.accent)
-                                    .frame(width: 30)
-                                
-                                Image(systemName: "person.crop.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.theme.accent)
-                                
-                                Text("User \(index)")
-                                    .font(.body)
-                                    .foregroundColor(.theme.text)
-                                
-                                Spacer()
-                                
-                                Text("\(100 - index * 5) Days")
-                                    .font(.callout)
-                                    .foregroundColor(.theme.accent)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.theme.surface)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                            )
-                        }
-                    }
-                }
+                // User has not claimed a username yet
+                UsernameClaimFormView(viewModel: viewModel)
             }
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
+                       radius: 8, x: 0, y: 4)
         )
     }
     
-    private var friendActivitySection: some View {
+    private var socialLinksSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Friend Activity")
-                                .font(.headline)
-                .foregroundColor(.theme.text)
+            Text("Follow Us for Launch Updates")
+                .font(.headline)
+                .foregroundColor(Color.theme.text)
             
-            if subscriptionService.isProUser {
-                VStack(spacing: 12) {
-                    ForEach(1...3, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "person.crop.circle.fill")
-                                    .font(.headline)
-                                    .foregroundColor(.theme.accent)
-                                
-                                Text("Friend \(index)")
-                                    .font(.body)
-                                .foregroundColor(.theme.text)
-                            
-                            Spacer()
-                                
-                                Text("\(index) hour\(index == 1 ? "" : "s") ago")
-                                    .font(.caption)
-                                    .foregroundColor(.theme.subtext)
-                            }
-                            
-                            Text("Completed day \(index * 15) of their challenge!")
-                                .font(.subheadline)
-                                .foregroundColor(.theme.text)
-                        }
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.theme.surface)
-                                .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                        )
-                    }
-                }
-            } else {
-                // Free users see blurred content with upgrade prompt
-                ProLockedView {
-                    VStack(spacing: 12) {
-                        ForEach(1...3, id: \.self) { index in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Image(systemName: "person.crop.circle.fill")
-                                        .font(.headline)
-                                        .foregroundColor(.theme.accent)
-                                    
-                                    Text("Friend \(index)")
-                                        .font(.body)
-                                        .foregroundColor(.theme.text)
-                                    
-                                    Spacer()
-                                    
-                                    Text("\(index) hour\(index == 1 ? "" : "s") ago")
-                                        .font(.caption)
-                                        .foregroundColor(.theme.subtext)
-                                }
-                                
-                                Text("Completed day \(index * 15) of their challenge!")
-                                    .font(.subheadline)
-                                    .foregroundColor(.theme.text)
-                            }
-                            .padding()
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.theme.surface)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-    }
-    
-    private var connectSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Connect")
-                    .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Button(action: {
-                if let url = URL(string: "https://twitter.com/100daysapp") {
-                    UIApplication.shared.open(url)
-                }
-            }) {
-                HStack {
-                    Image(systemName: "bird.fill")
-                        .foregroundColor(.theme.accent)
-                    
-                    Text("Follow us on Twitter")
-                        .font(.body)
-                        .foregroundColor(.theme.text)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.theme.subtext)
-                }
-                .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            // Social media buttons
+            HStack(spacing: 20) {
+                SocialLinkButton(
+                    platform: "TikTok", 
+                    username: "@100Days.site",
+                    sfSymbol: "play.rectangle.fill",
+                    color: .black
+                )
+                
+                SocialLinkButton(
+                    platform: "X", 
+                    username: "@100DaysHQ",
+                    sfSymbol: "message.fill",
+                    color: .black
+                )
+                
+                SocialLinkButton(
+                    platform: "Instagram", 
+                    username: "@100Days.site",
+                    sfSymbol: "camera.fill",
+                    color: .purple
                 )
             }
-            
-            Button(action: {
-                if let url = URL(string: "mailto:support@100days.site") {
-                    UIApplication.shared.open(url)
-                }
-            }) {
-                HStack {
-                    Image(systemName: "envelope.fill")
-                        .foregroundColor(.theme.accent)
-                    
-                    Text("Contact Support")
-                        .font(.body)
-                        .foregroundColor(.theme.text)
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
+                       radius: 8, x: 0, y: 4)
+        )
+    }
+}
+
+// MARK: - Supporting Views
+
+/// View for displaying when username has been claimed
+struct ClaimedUsernameView: View {
+    let username: String
+    @State private var animateCheckmark = false
+    @State private var animateUsername = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Your username is ")
+                    .foregroundColor(Color.theme.text) +
+                Text("@\(username)")
+                    .foregroundColor(Color.theme.accent)
+                    .fontWeight(.semibold)
                 
                 Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.theme.subtext)
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                )
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-    }
-    
-    // MARK: - Username Functions
-    
-    private func loadUserUsername() {
-        if let existingUsername = userSession.username {
-            self.username = existingUsername
-        }
-    }
-    
-    private func validateUsername() {
-        // Reset validation state
-        usernameAvailable = false
-        
-        // Check length
-        if username.count < 3 {
-            usernameValidationMessage = "Username must be at least 3 characters"
-            return
-        }
-        
-        if username.count > 20 {
-            usernameValidationMessage = "Username must be at most 20 characters"
-            return
-        }
-        
-        // Check for alphanumeric characters
-        let allowedCharacterSet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-        if username.rangeOfCharacter(from: allowedCharacterSet.inverted) != nil {
-            usernameValidationMessage = "Username can only contain letters and numbers"
-            return
-        }
-        
-        // Check availability in Firestore
-        isCheckingUsername = true
-        usernameValidationMessage = "Checking availability..."
-        
-        let db = Firestore.firestore()
-        db.collection("usernames")
-            .document(username.lowercased())
-            .getDocument { (snapshot, error) in
-                DispatchQueue.main.async {
-                    self.isCheckingUsername = false
-                    
-                    if let error = error {
-                        self.usernameValidationMessage = "Error checking username: \(error.localizedDescription)"
-                        self.usernameAvailable = false
-                        return
-                    }
-                    
-                    // If document exists and doesn't belong to current user, username is taken
-                    if let snapshot = snapshot, snapshot.exists {
-                        if let userId = snapshot.data()?["userId"] as? String,
-                           userId == Auth.auth().currentUser?.uid {
-                            // User already owns this username
-                            self.usernameValidationMessage = "This is your current username"
-                            self.usernameAvailable = false
-                        } else {
-                            self.usernameValidationMessage = "Username already taken"
-                            self.usernameAvailable = false
-                        }
-                    } else {
-                        // Username is available
-                        self.usernameValidationMessage = "Username available!"
-                        self.usernameAvailable = true
-                    }
-                }
-            }
-    }
-    
-    private func reserveUsername() {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            errorMessage = "You must be logged in to reserve a username"
-            return
-        }
-        
-        isLoading = true
-        
-        let db = Firestore.firestore()
-        let usernameDoc = db.collection("usernames").document(username.lowercased())
-        let userDoc = db.collection("users").document(userId)
-        
-        db.runTransaction({ (transaction, errorPointer) -> Any? in
-            // Check if username is already taken
-            let usernameSnapshot: DocumentSnapshot
-            do {
-                try usernameSnapshot = transaction.getDocument(usernameDoc)
-            } catch let fetchError as NSError {
-                errorPointer?.pointee = fetchError
-                return nil
-            }
-            
-            // If username exists and belongs to someone else, fail
-            if let usernameSnapshot = usernameSnapshot as DocumentSnapshot?, usernameSnapshot.exists {
-                if let existingUserId = usernameSnapshot.data()?["userId"] as? String,
-                   existingUserId != userId {
-                    errorPointer?.pointee = NSError(
-                        domain: "AppErrorDomain",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Username already taken"]
-                    )
-                    return nil
-                }
-            }
-            
-            // Set the username document
-            transaction.setData([
-                "userId": userId,
-                "username": username.lowercased(),
-                "createdAt": FieldValue.serverTimestamp()
-            ], forDocument: usernameDoc)
-            
-            // Update the user's profile with the username
-            transaction.updateData([
-                "username": username.lowercased()
-            ], forDocument: userDoc)
-            
-            return true
-        }) { (result, error) in
-            DispatchQueue.main.async {
-                self.isLoading = false
                 
-                if let error = error {
-                    self.errorMessage = "Failed to reserve username: \(error.localizedDescription)"
-                } else {
-                    // Update local state - use the updateUsername method
-                    Task {
-                        do {
-                            try await self.userSession.updateUsername(self.username.lowercased())
-                            
-                            // Show success message
-                            withAnimation {
-                                self.showingSuccessToast = true
-                            }
-                        } catch {
-                            self.errorMessage = "Failed to update username: \(error.localizedDescription)"
-                        }
-                    }
-                }
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(Color.theme.success)
+                    .font(.title2)
+                    .scaleEffect(animateCheckmark ? 1.0 : 0.8)
+                    .opacity(animateCheckmark ? 1.0 : 0.7)
+            }
+            
+            Text("You'll use this to join groups, appear on leaderboards, and tag friends in the future.")
+                .font(.subheadline)
+                .foregroundColor(Color.theme.subtext)
+                .lineSpacing(4)
+                .opacity(animateUsername ? 1.0 : 0.8)
+        }
+        .onAppear {
+            // Small subtle animation when the view appears
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+                animateCheckmark = true
+            }
+            
+            withAnimation(.easeInOut(duration: 0.6)) {
+                animateUsername = true
             }
         }
     }
 }
 
-// Loading view for when data is being fetched
-struct LoadingView: View {
+/// View for username claim form
+struct UsernameClaimFormView: View {
+    @ObservedObject var viewModel: SocialViewModel
+    @FocusState private var isUsernameFocused: Bool
+    @State private var animateCheckmark = false
+    @State private var animateUsername = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Claim Your Username")
+                .font(.headline)
+                .foregroundColor(Color.theme.text)
+            
+            Text("Reserve your username now to secure your identity before others claim it.")
+                .font(.subheadline)
+                .foregroundColor(Color.theme.subtext)
+                .padding(.bottom, 4)
+            
+            // Username text field
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("@")
+                        .foregroundColor(Color.theme.accent)
+                        .font(.headline)
+                    
+                    TextField("Choose a username", text: Binding(
+                        get: { viewModel.username },
+                        set: { newValue in
+                            let filtered = viewModel.filterUsername(newValue)
+                            viewModel.validateUsername(username: filtered)
+                        }
+                    ))
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .focused($isUsernameFocused)
+                    .textInputAutocapitalization(.never)
+                    .textContentType(.username)
+                    .submitLabel(.done)
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(validationBorderColor, lineWidth: 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.theme.background)
+                        )
+                )
+                
+                // Validation message
+                if !viewModel.validationMessage.isEmpty {
+                    HStack {
+                        if viewModel.isCheckingUsername {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 16, height: 16)
+                                .padding(.trailing, 4)
+                        } else if isInvalidStatus {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                                .font(.system(size: 12))
+                        } else if viewModel.validationMessage == "Username available!" {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                                .font(.system(size: 12))
+                        }
+                        
+                        Text(viewModel.validationMessage)
+                            .font(.caption)
+                            .foregroundColor(validationMessageColor)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+            
+            // Claim button
+            Button {
+                Task {
+                    // Trigger haptic feedback
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.prepare()
+                    
+                    await viewModel.claimUsername()
+                }
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Claim Username")
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+                .foregroundColor(.white)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.5))
+                )
+            }
+            .disabled(!canClaimUsername)
+            .padding(.top, 8)
+            
+            // Success animation overlay
+            if animateCheckmark {
+                SuccessAnimationView(username: viewModel.username, animateCheckmark: $animateCheckmark, animateUsername: $animateUsername)
+                    .padding(.top, 16)
+            }
+        }
+        // Observe the usernameJustClaimed property to trigger animations
+        .onChange(of: viewModel.usernameJustClaimed) { justClaimed in
+            if justClaimed {
+                // Trigger haptic feedback
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+                
+                // Trigger animations
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                    animateUsername = true
+                }
+                
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    animateCheckmark = true
+                }
+                
+                // Reset animations after delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    withAnimation {
+                        animateCheckmark = false
+                        animateUsername = false
+                    }
+                }
+            }
+        }
+    }
+    
+    // Helper computed properties
+    private var canClaimUsername: Bool {
+        if viewModel.isCheckingUsername { return false }
+        if isInvalidStatus { return false }
+        if viewModel.username.isEmpty { return false }
+        return viewModel.validationMessage == "Username available!"
+    }
+    
+    // Helper property to check for invalid or error status
+    private var isInvalidStatus: Bool {
+        switch viewModel.usernameStatus {
+        case .invalid, .error:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    private var validationBorderColor: Color {
+        if viewModel.isCheckingUsername {
+            return Color.gray.opacity(0.5)
+        } else if isInvalidStatus {
+            return Color.red.opacity(0.7)
+        } else if viewModel.validationMessage == "Username available!" {
+            return Color.green.opacity(0.7)
+        } else {
+            return Color.gray.opacity(0.3)
+        }
+    }
+    
+    private var validationMessageColor: Color {
+        if isInvalidStatus {
+            return .red
+        } else if viewModel.validationMessage == "Username available!" {
+            return .green
+        } else {
+            return Color.theme.subtext
+        }
+    }
+}
+
+/// Success Animation View
+struct SuccessAnimationView: View {
+    let username: String
+    @Binding var animateCheckmark: Bool
+    @Binding var animateUsername: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("@\(username)")
+                .foregroundColor(Color.theme.accent)
+                .fontWeight(.semibold)
+                .scaleEffect(animateUsername ? 1.1 : 1.0)
+                .modifier(ShimmerEffect(isActive: animateUsername))
+            
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(Color.theme.success)
+                .font(.title3)
+                .scaleEffect(animateCheckmark ? 1.0 : 0.01)
+                .opacity(animateCheckmark ? 1 : 0)
+                .rotationEffect(animateCheckmark ? .degrees(0) : .degrees(-90))
+                .animation(.spring(response: 0.35, dampingFraction: 0.7, blendDuration: 0.5), value: animateCheckmark)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .overlay(
+            SocialConfettiView()
+                .opacity(animateUsername ? 1 : 0)
+        )
+    }
+}
+
+/// A shimmer effect modifier for text
+struct ShimmerEffect: ViewModifier {
+    let isActive: Bool
+    @State private var phase: CGFloat = 0
+    
+    func body(content: Content) -> some View {
+        if isActive {
+            content
+                .overlay(
+                    GeometryReader { geometry in
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                .clear,
+                                Color.white.opacity(0.5),
+                                .clear
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: geometry.size.width * 3)
+                        .offset(x: -geometry.size.width + (phase * geometry.size.width * 3))
+                        .blendMode(.screen)
+                        .animation(
+                            Animation.linear(duration: 1.5)
+                                .repeatForever(autoreverses: false),
+                            value: phase
+                        )
+                        .onAppear {
+                            phase = 1.0
+                        }
+                    }
+                )
+                .clipShape(Rectangle())
+        } else {
+            content
+        }
+    }
+}
+
+/// Improved Confetti View using SwiftUI
+struct SocialConfettiView: View {
+    @State private var isAnimating = false
+    
+    private let confettiCount = 30
+    private let symbols = ["star.fill", "sparkle", "circle.fill", "largecircle.fill.circle"]
+    
     var body: some View {
         ZStack {
-            Color.black.opacity(0.2)
+            // Particle confetti
+            ForEach(0..<confettiCount, id: \.self) { index in
+                confettiParticle(for: index)
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 1.0)) {
+                isAnimating = true
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func confettiParticle(for index: Int) -> some View {
+        let size = CGFloat.random(in: 5...12)
+        let useSymbol = Bool.random()
+        let position = CGPoint(
+            x: CGFloat.random(in: 50...300),
+            y: CGFloat.random(in: -50...10)
+        )
+        let finalYPosition = CGFloat.random(in: 100...400)
+        let duration = Double.random(in: 0.8...1.5)
+        let rotation = Double.random(in: 0...360)
+        let finalRotation = Double.random(in: 0...360)
+        
+        Group {
+            if useSymbol {
+                Image(systemName: symbols.randomElement()!)
+                    .foregroundColor(confettiColor(index: index))
+                    .font(.system(size: size))
+            } else {
+                Circle()
+                    .fill(confettiColor(index: index))
+                    .frame(width: size, height: size)
+            }
+        }
+        .position(position)
+        .offset(y: isAnimating ? finalYPosition : 0)
+        .rotationEffect(.degrees(isAnimating ? finalRotation : rotation))
+        .opacity(isAnimating ? 0 : 1)
+        .animation(
+            .easeOut(duration: duration)
+                .delay(Double.random(in: 0...0.3)),
+            value: isAnimating
+        )
+    }
+    
+    private func confettiColor(index: Int) -> Color {
+        let colors: [Color] = [
+            .blue, .green, .yellow, .pink, .purple, 
+            .orange, .red, .theme.accent, .theme.success
+        ]
+        return colors[index % colors.count]
+    }
+}
+
+// Helper extension for random colors
+extension Color {
+    static var random: Color {
+        let colors: [Color] = [.blue, .green, .yellow, .pink, .purple, .orange, .red]
+        return colors.randomElement()!
+    }
+}
+
+/// Social media link button
+struct SocialLinkButton: View {
+    let platform: String
+    let username: String
+    let sfSymbol: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.1))
+                    .frame(width: 48, height: 48)
+                
+                Image(systemName: sfSymbol)
+                    .font(.system(size: 20))
+                    .foregroundColor(color)
+            }
+            
+            VStack(spacing: 2) {
+                Text(platform)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(Color.theme.text)
+                
+                Text(username)
+                    .font(.caption2)
+                    .foregroundColor(Color.theme.subtext)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// Loading overlay view
+struct LoadingOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.3)
                 .ignoresSafeArea()
             
             VStack(spacing: 16) {
-                SwiftUI.ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: Color.white))
+                ProgressView()
                     .scaleEffect(1.5)
                 
                 Text("Loading...")
@@ -599,16 +544,41 @@ struct LoadingView: View {
             .padding(24)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.theme.accent.opacity(0.8))
+                    .fill(Color.theme.surface.opacity(0.9))
             )
         }
     }
 }
 
+/// Success toast view
+struct SuccessToast: View {
+    var body: some View {
+        HStack {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.white)
+                .font(.headline)
+            
+            Text("Username reserved for future social features!")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.white)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.theme.accent)
+                .shadow(radius: 5)
+        )
+        .padding(.horizontal)
+        .padding(.bottom, 30)
+    }
+}
+
 struct SocialView_Previews: PreviewProvider {
     static var previews: some View {
-        SocialView()
-            .environmentObject(UserSession.shared)
-            .environmentObject(SubscriptionService.shared)
+        NavigationView {
+            SocialView()
+                .navigationTitle("Social")
+        }
     }
 } 

@@ -488,15 +488,18 @@ private extension AuthView {
             .disabled(!viewModel.networkConnected)
             
             // Apple Sign In - Replace with Apple's official SignInWithAppleButton
-            SignInWithAppleButton(
-                onRequest: configureAppleRequest,
-                onCompletion: handleAppleSignIn
-            )
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .disabled(!viewModel.networkConnected)
+            SignInWithAppleButton(text: .signUp, onRequest: configureAppleRequest, onCompletion: handleAppleSignIn)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .padding(.horizontal)
+                .contentShape(Rectangle()) // Ensure tap area matches visible area
+                .id("appleSignInButton") // Ensure SwiftUI doesn't reuse the view
+                .accessibility(identifier: "appleSignInButton") // For testing and debugging
+                .onAppear {
+                    // Fix Apple button constraints on appear
+                    DispatchQueue.main.async {
+                        AppFixes.shared.applyAllFixes()
+                    }
+                }
         }
     }
     
@@ -630,4 +633,62 @@ private extension AuthView {
             Spacer()
         }
     }
+}
+
+// Helper to create a better Apple Sign In button that avoids constraint issues
+struct SignInWithAppleButton: UIViewRepresentable {
+    enum ButtonText {
+        case signIn
+        case signUp
+        case continueWith
+        
+        var localizedText: String {
+            switch self {
+            case .signIn: return "Sign in with Apple"
+            case .signUp: return "Sign up with Apple"
+            case .continueWith: return "Continue with Apple"
+            }
+        }
+    }
+    
+    let text: ButtonText
+    let onRequest: (ASAuthorizationAppleIDRequest) -> Void
+    let onCompletion: (Result<ASAuthorization, Error>) -> Void
+    
+    func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
+        let style: ASAuthorizationAppleIDButton.Style = colorScheme == .dark ? .white : .black
+        let type: ASAuthorizationAppleIDButton.ButtonType
+        
+        switch text {
+        case .signIn:
+            type = .signIn
+        case .signUp:
+            type = .signUp
+        case .continueWith:
+            type = .continue
+        }
+        
+        let button = ASAuthorizationAppleIDButton(authorizationButtonType: type, authorizationButtonStyle: style)
+        
+        // Remove fixed width constraints that cause conflicts
+        button.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Set up the content hugging and compression resistance
+        button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        button.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        
+        return button
+    }
+    
+    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
+        // Configuration happens in makeUIView, nothing to update
+        // Ensure any current fixed width constraints are removed
+        for constraint in uiView.constraints {
+            if constraint.firstAttribute == .width && constraint.constant == 380 {
+                uiView.removeConstraint(constraint)
+            }
+        }
+    }
+    
+    @Environment(\.colorScheme) private var colorScheme
 } 

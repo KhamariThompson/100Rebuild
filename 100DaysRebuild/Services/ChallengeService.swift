@@ -45,7 +45,7 @@ enum ChallengeError: Error, LocalizedError {
 class ChallengeService: ObservableObject {
     static let shared = ChallengeService()
     
-    private let firebaseService = FirebaseService.shared
+    private let challengeStore = ChallengeStore.shared
     private let subscriptionService = SubscriptionService.shared
     private let maxChallengesForFreeUsers = 2
     
@@ -64,8 +64,8 @@ class ChallengeService: ObservableObject {
             }
         }
         
-        // Save to Firestore
-        try await firebaseService.saveChallenge(challenge)
+        // Save challenge through the centralized store
+        try await challengeStore.saveChallenge(challenge)
     }
     
     /// Delete all challenges for the current user
@@ -79,12 +79,12 @@ class ChallengeService: ObservableObject {
         deletionError = nil
         
         do {
-            // Fetch all challenges first
-            let challenges = try await firebaseService.getChallengesFor(userId: userId)
+            // Fetch all challenges first from the store
+            let challenges = challengeStore.challenges
             
-            // Delete each challenge
+            // Delete each challenge through the store
             for challenge in challenges {
-                try await firebaseService.deleteChallenge(id: challenge.id, userId: userId)
+                try await challengeStore.deleteChallenge(id: challenge.id)
             }
             
             isDeleting = false
@@ -98,12 +98,8 @@ class ChallengeService: ObservableObject {
     
     /// Get current challenge count for a user
     private func getChallengeCount() async throws -> Int {
-        guard let userId = Auth.auth().currentUser?.uid else {
-            throw ChallengeError.userNotAuthenticated
-        }
-        
-        let challenges = try await firebaseService.getChallengesFor(userId: userId)
-        return challenges.count
+        // Use the store to get the active challenges count
+        return challengeStore.activeChallenges
     }
     
     // MARK: - CRUD Operations
@@ -111,7 +107,7 @@ class ChallengeService: ObservableObject {
     func createChallenge(title: String, userId: String) async throws -> Challenge {
         // Check free user limit
         if !subscriptionService.isProUser {
-            let activeChallenges = try await loadChallenges(for: userId)
+            let activeChallenges = challengeStore.getActiveChallenges()
             if activeChallenges.count >= maxChallengesForFreeUsers {
                 // Show paywall
                 subscriptionService.showPaywall = true
@@ -132,7 +128,8 @@ class ChallengeService: ObservableObject {
             lastModified: Date()
         )
         
-        _ = try await firebaseService.saveChallenge(challenge)
+        // Save through the centralized store
+        try await challengeStore.saveChallenge(challenge)
         return challenge
     }
     
@@ -142,29 +139,16 @@ class ChallengeService: ObservableObject {
             return false
         }
         
-        do {
-            let activeChallenges = try await loadChallenges(for: userId)
-            return activeChallenges.count >= maxChallengesForFreeUsers
-        } catch {
-            return false
-        }
+        // Use the store to check active challenges count
+        return challengeStore.activeChallenges >= maxChallengesForFreeUsers
     }
     
     func loadChallenges(for userId: String) async throws -> [Challenge] {
-        do {
-            let snapshot = try await Firestore.firestore()
-                .collection("users")
-                .document(userId)
-                .collection("challenges")
-                .whereField("isArchived", isEqualTo: false)
-                .getDocuments()
-            
-            return try snapshot.documents.compactMap { document in
-                try document.data(as: Challenge.self)
-            }
-        } catch {
-            throw ChallengeError.networkError
-        }
+        // First ensure challenges are refreshed in the store
+        await challengeStore.refreshChallenges()
+        
+        // Then return active challenges from the store
+        return challengeStore.getActiveChallenges()
     }
     
     // MARK: - Check-in Validation
@@ -196,47 +180,16 @@ class ChallengeService: ObservableObject {
     }
     
     func checkIn(to challenge: Challenge) async throws -> Challenge {
-        // Prevent check-in if challenge is completed
-        guard !challenge.isCompleted else {
-            throw ChallengeError.challengeCompleted
-        }
-        
-        let effectiveDate = effectiveCheckInDate()
-        
-        // Prevent multiple check-ins per day
-        if let lastCheckIn = challenge.lastCheckInDate,
-           Calendar.current.isDate(lastCheckIn, inSameDayAs: effectiveDate) {
-            throw ChallengeError.alreadyCheckedIn
-        }
-        
-        var updatedChallenge = challenge
-        
-        // Reset streak if more than 1 day has passed
-        if challenge.hasStreakExpired {
-            updatedChallenge.streakCount = 0
-        }
-        
-        // Update challenge
-        updatedChallenge.lastCheckInDate = effectiveDate
-        updatedChallenge.isCompletedToday = true
-        updatedChallenge.streakCount += 1
-        updatedChallenge.daysCompleted += 1
-        
-        // Auto-archive if completed
-        if updatedChallenge.isCompleted {
-            updatedChallenge.isArchived = true
-        }
-        
-        try await firebaseService.saveChallenge(updatedChallenge)
-        
-        return updatedChallenge
+        // Use the centralized store's check-in functionality
+        return try await challengeStore.checkIn(to: challenge.id)
     }
     
     func archiveChallenge(_ challenge: Challenge) async throws {
         var updatedChallenge = challenge
         updatedChallenge.isArchived = true
         
-        try await firebaseService.saveChallenge(updatedChallenge)
+        // Save the updated challenge through the store
+        try await challengeStore.saveChallenge(updatedChallenge)
     }
     
     // MARK: - Streak Management
@@ -248,11 +201,13 @@ class ChallengeService: ObservableObject {
         updatedChallenge.streakCount = 0
         updatedChallenge.isCompletedToday = false
         
-        try await firebaseService.saveChallenge(updatedChallenge)
+        // Save the updated challenge through the store
+        try await challengeStore.saveChallenge(updatedChallenge)
     }
     
     func validateAndUpdateStreaks(for userId: String) async throws {
-        let challenges = try await loadChallenges(for: userId)
+        // Get active challenges from the store
+        let challenges = challengeStore.getActiveChallenges()
         
         for challenge in challenges {
             try await resetStreakIfMissed(for: challenge)
@@ -261,17 +216,26 @@ class ChallengeService: ObservableObject {
     
     /// Fetch all challenges for a user - renamed to avoid conflict
     func getUserChallenges(userId: String) async throws -> [Challenge] {
-        return try await loadChallenges(for: userId)
+        // Refresh and get challenges from the store
+        await challengeStore.refreshChallenges()
+        return challengeStore.challenges
     }
     
     /// Update an existing challenge
     func updateChallenge(_ challenge: Challenge) async throws {
-        try await firebaseService.saveChallenge(challenge)
+        // Save through the centralized store
+        try await challengeStore.saveChallenge(challenge)
     }
     
     /// Delete a specific challenge
-    func deleteChallenge(_ challengeId: String, userId: String) async throws {
-        try await firebaseService.deleteChallenge(id: UUID(uuidString: challengeId) ?? UUID(), userId: userId)
+    func deleteChallenge(id: UUID, userId: String) async throws {
+        guard !userId.isEmpty else {
+            throw NSError(domain: "ChallengeService", code: 1001, 
+                         userInfo: [NSLocalizedDescriptionKey: "User ID is required to delete a challenge"])
+        }
+        
+        // Delete through the centralized store
+        try await challengeStore.deleteChallenge(id: id)
     }
 }
 
@@ -337,7 +301,8 @@ extension Challenge {
             "isCompletedToday": isCompletedToday,
             "isArchived": isArchived,
             "ownerId": ownerId,
-            "lastModified": lastModified
+            "lastModified": lastModified,
+            "isTimed": isTimed
         ]
     }
 } 
