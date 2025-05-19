@@ -10,6 +10,14 @@ struct EnhancedCheckInHistoryView: View {
     @State private var showDetailView = false
     @State private var selectedDate: Date?
     @State private var selectedCheckIns: [Models_CheckInRecord] = []
+    @State private var scrollOffset: CGFloat = 0
+    
+    // Custom gradient for check-in history header
+    private let historyGradient = LinearGradient(
+        gradient: Gradient(colors: [Color.theme.accent, Color.orange]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
     
     // View mode options
     enum ViewMode {
@@ -23,44 +31,79 @@ struct EnhancedCheckInHistoryView: View {
     }
     
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
+            // Background
             Color.theme.background
                 .ignoresSafeArea()
             
-            VStack(spacing: 0) {
-                // Header and challenge info
-                headerSection
-                
-                // Mode Toggle
-                Picker("View Mode", selection: $viewMode) {
-                    Text("Timeline").tag(ViewMode.timeline)
-                    Text("Calendar").tag(ViewMode.calendar)
+            // Content with scroll tracking
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Spacer to push content below the header
+                    Color.clear
+                        .frame(height: 110)
+                    
+                    // Mode Toggle
+                    Picker("View Mode", selection: $viewMode) {
+                        Text("Timeline").tag(ViewMode.timeline)
+                        Text("Calendar").tag(ViewMode.calendar)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    
+                    // Main content
+                    if viewModel.isLoading && viewModel.checkIns.isEmpty {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .frame(maxHeight: .infinity)
+                    } else if viewModel.checkIns.isEmpty {
+                        emptyStateView
+                    } else {
+                        Group {
+                            switch viewMode {
+                            case .timeline:
+                                timelineView
+                            case .calendar:
+                                calendarView
+                            }
+                        }
+                    }
                 }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                
-                // Main content
-                if viewModel.isLoading && viewModel.checkIns.isEmpty {
-                    ProgressView()
-                        .scaleEffect(1.2)
-                        .frame(maxHeight: .infinity)
-                } else if viewModel.checkIns.isEmpty {
-                    emptyStateView
-                } else {
-                    Group {
-                        switch viewMode {
-                        case .timeline:
-                            timelineView
-                        case .calendar:
-                            calendarView
+                .trackScrollOffset($scrollOffset)
+            }
+            
+            // Overlay the dynamic header
+            ScrollAwareHeaderView(
+                title: "Check-In History",
+                scrollOffset: $scrollOffset,
+                subtitle: challenge.title,
+                accentGradient: historyGradient
+            ) {
+                // Display stats about this challenge's check-ins
+                if !viewModel.checkIns.isEmpty {
+                    HStack(spacing: 16) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.green)
+                            Text("\(challenge.daysCompleted) days")
+                                .font(.caption)
+                                .foregroundColor(.theme.subtext)
+                        }
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "flame.fill")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Text("Streak: \(challenge.streakCount)")
+                                .font(.caption)
+                                .foregroundColor(.theme.subtext)
                         }
                     }
                 }
             }
         }
-        .navigationTitle("Check-In History")
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
@@ -90,53 +133,6 @@ struct EnhancedCheckInHistoryView: View {
             Task {
                 await viewModel.loadInitialCheckIns()
             }
-        }
-    }
-    
-    // MARK: - Header Section
-    
-    private var headerSection: some View {
-        VStack(spacing: 0) {
-            // Challenge Title
-            Text(challenge.title)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.theme.text)
-                .padding(.top, 16)
-                .padding(.horizontal, 20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            // Progress summary
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Days completed")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                    
-                    Text("\(challenge.daysCompleted)")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundColor(.theme.accent)
-                }
-                
-                Divider()
-                    .frame(height: 40)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Current streak")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                    
-                    Text("\(challenge.streakCount)")
-                        .font(.title)
-                        .fontWeight(.bold)
-                        .foregroundColor(.theme.accent)
-                }
-                
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
     }
     

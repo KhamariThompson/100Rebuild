@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Helper view to share items
-public struct Utilities_ShareSheet: UIViewControllerRepresentable {
+public struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
     
     public func makeUIViewController(context: Context) -> UIActivityViewController {

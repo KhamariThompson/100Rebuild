@@ -546,16 +546,5 @@ struct NavigationDebounceModifier: ViewModifier {
 
 // MARK: - Button Styles
 
-/// Simple scale effect button style for interactive feedback
-public struct ScaleButtonStyle: ButtonStyle {
-    public func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
-    }
-}
-
-// Extension to make it accessible via .buttonStyle(.scale)
-public extension ButtonStyle where Self == ScaleButtonStyle {
-    static var scale: ScaleButtonStyle { ScaleButtonStyle() }
-} 
+// NOTE: ScaleButtonStyle has been moved to Core/DesignSystem/Buttons.swift
+// Please use AppScaleButtonStyle from there instead. 

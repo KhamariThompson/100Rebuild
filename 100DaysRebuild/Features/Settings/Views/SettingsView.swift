@@ -38,92 +38,98 @@ struct SettingsView: View {
     @State private var showingPermissionAlert = false
     
     var body: some View {
-        NavigationView {
-            mainContent
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") { dismiss() }
-                            .fontWeight(.medium)
+        mainContent
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .fontWeight(.medium)
+                }
+            }
+            // Sheets
+            .fixedSheet(isPresented: $showingChangeEmail) {
+                ChangeEmailView()
+            }
+            .fixedSheet(isPresented: $showingChangePassword) {
+                ChangePasswordView()
+            }
+            .fixedSheet(isPresented: $showingChangeUsername) {
+                ChangeUsernameView()
+            }
+            .fixedSheet(isPresented: $subscriptionService.showPaywall) {
+                PaywallView()
+            }
+            .fixedSheet(isPresented: $showingEmailComposer) {
+                if EmailComposer.canSendEmail() {
+                    EmailComposer(
+                        recipient: "support@100days.site",
+                        subject: "100Days App Support",
+                        body: getEmailSupportBody()
+                    ) { _, _ in }
+                }
+            }
+            .fixedSheet(isPresented: $showingShareSheet) {
+                ShareSheet(items: [
+                    AppStoreHelper.getShareMessage(),
+                    AppStoreHelper.getShareableAppLink()
+                ])
+            }
+            // Alerts
+            .alert("Success", isPresented: $showSuccessMessage) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(successMessage)
+            }
+            .alert("Error", isPresented: $showingError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage)
+            }
+            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await handleDeleteAccount()
                     }
                 }
-                // Sheets
-                .sheet(isPresented: $showingChangeEmail) {
-                    ChangeEmailView()
-                }
-                .sheet(isPresented: $showingChangePassword) {
-                    ChangePasswordView()
-                }
-                .sheet(isPresented: $showingChangeUsername) {
-                    ChangeUsernameView()
-                        .environmentObject(userSession)
-                }
-                .sheet(isPresented: $subscriptionService.showPaywall) {
-                    PaywallView()
-                }
-                .sheet(isPresented: $showingEmailComposer) {
-                    if EmailComposer.canSendEmail() {
-                        EmailComposer(
-                            recipient: "support@100days.site",
-                            subject: "100Days App Support",
-                            body: getEmailSupportBody()
-                        )
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")
+            }
+            .alert("Delete All Challenges", isPresented: $showingDeleteChallengesConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await handleDeleteAllChallenges()
                     }
                 }
-                .sheet(isPresented: $showingShareSheet) {
-                    Utilities_ShareSheet(items: [
-                        AppStoreHelper.getShareMessage(),
-                        AppStoreHelper.getShareableAppLink()
-                    ])
-                }
-                // Alerts
-                .alert("Success", isPresented: $showSuccessMessage) {
-                    Button("OK", role: .cancel) {}
-                } message: {
-                    Text(successMessage)
-                }
-                .alert("Error", isPresented: $showingError) {
-                    Button("OK", role: .cancel) {}
-                } message: {
-                    Text(errorMessage)
-                }
-                .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Delete", role: .destructive) {
-                        Task {
-                            await handleDeleteAccount()
-                        }
+            } message: {
+                Text("Are you sure you want to delete all your challenges? This action cannot be undone.")
+            }
+            .alert("Notification Permission", isPresented: $showingPermissionAlert) {
+                Button("Settings", role: .none) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
                     }
-                } message: {
-                    Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")
                 }
-                .alert("Delete All Challenges", isPresented: $showingDeleteChallengesConfirmation) {
-                    Button("Cancel", role: .cancel) {}
-                    Button("Delete", role: .destructive) {
-                        Task {
-                            await handleDeleteAllChallenges()
-                        }
-                    }
-                } message: {
-                    Text("Are you sure you want to delete all your challenges? This action cannot be undone.")
-                }
-                .alert("Notification Permission", isPresented: $showingPermissionAlert) {
-                    Button("Settings", role: .none) {
-                        if let url = URL(string: UIApplication.openSettingsURLString) {
-                            UIApplication.shared.open(url)
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("Please enable notifications in settings to receive reminders.")
-                }
-                .onAppear {
-                    syncWithNotificationService()
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Please enable notifications in settings to receive reminders.")
+            }
+            .onAppear {
+                syncWithNotificationService()
+                selectedTheme = themeManager.currentTheme
+            }
+            .accentColor(Color.theme.accent)
+            .onReceive(NotificationCenter.default.publisher(for: .appThemeDidChange)) { notification in
+                // Update selectedTheme when it changes externally
+                if let themeRawValue = notification.object as? String,
+                   let updatedTheme = AppThemeMode(rawValue: themeRawValue) {
+                    selectedTheme = updatedTheme
+                } else {
                     selectedTheme = themeManager.currentTheme
                 }
-        }
-        .accentColor(.theme.accent)
+            }
     }
     
     // MARK: - Content Views
@@ -159,7 +165,7 @@ struct SettingsView: View {
                         HStack {
                             Text("@\(username)")
                                 .font(.system(.subheadline, design: .monospaced))
-                                .foregroundColor(.theme.accent)
+                                .foregroundColor(Color.theme.accent)
                                 .fontWeight(.medium)
                             
                             Spacer()
@@ -168,16 +174,16 @@ struct SettingsView: View {
                                 showingChangeUsername = true
                             }
                             .font(.footnote)
-                            .foregroundColor(.theme.accent)
+                            .foregroundColor(Color.theme.accent)
                         }
                     }
                     
                     Button(action: { showingChangeEmail = true }) {
-                        SettingsRow(icon: "envelope.fill", title: "Change Email", showChevron: true)
+                        SettingsRow(icon: "envelope.fill", title: "Change Email", color: .theme.text, showChevron: true)
                     }
                     
                     Button(action: { showingChangePassword = true }) {
-                        SettingsRow(icon: "lock.fill", title: "Change Password", showChevron: true)
+                        SettingsRow(icon: "lock.fill", title: "Change Password", color: .theme.text, showChevron: true)
                     }
                     
                     Button(action: { 
@@ -185,11 +191,11 @@ struct SettingsView: View {
                             await handleSignOut()
                         }
                     }) {
-                        SettingsRow(icon: "arrow.right.square", title: "Sign Out", color: .red)
+                        SettingsRow(icon: "arrow.right.square", title: "Sign Out", color: .red, showChevron: true)
                     }
                     
                     Button(action: { showingDeleteConfirmation = true }) {
-                        SettingsRow(icon: "trash", title: "Delete Account", color: .red)
+                        SettingsRow(icon: "trash", title: "Delete Account", color: .red, showChevron: true)
                     }
                 }
                 .padding(.vertical, 4)
@@ -204,18 +210,18 @@ struct SettingsView: View {
                     // Current plan display
                     HStack {
                         Image(systemName: subscriptionService.isProUser ? "sparkles" : "sparkles.rectangle.stack")
-                            .foregroundColor(subscriptionService.isProUser ? .yellow : .theme.subtext)
+                            .foregroundColor(subscriptionService.isProUser ? Color.yellow : Color.theme.subtext)
                         
                         Text(subscriptionService.isProUser ? "Pro" : "Free")
                             .font(.headline)
-                            .foregroundColor(subscriptionService.isProUser ? .theme.accent : .theme.text)
+                            .foregroundColor(subscriptionService.isProUser ? Color.theme.accent : Color.theme.text)
                         
                         Spacer()
                         
                         if subscriptionService.isProUser, let renewalDate = subscriptionService.renewalDate {
                             Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
                                 .font(.caption)
-                                .foregroundColor(.theme.subtext)
+                                .foregroundColor(Color.theme.subtext)
                         }
                     }
                     .padding(.vertical, 4)
@@ -227,7 +233,7 @@ struct SettingsView: View {
                         Button(action: {
                             AppStoreHelper.openSubscriptionManagement()
                         }) {
-                            SettingsRow(icon: "creditcard", title: "Manage Subscription", showChevron: true)
+                            SettingsRow(icon: "creditcard", title: "Manage Subscription", color: .theme.text, showChevron: true)
                         }
                     } else {
                         Button(action: {
@@ -240,7 +246,7 @@ struct SettingsView: View {
                     // Restore purchases
                     Button(action: restorePurchases) {
                         HStack {
-                            SettingsRow(icon: "arrow.clockwise", title: "Restore Purchases")
+                            SettingsRow(icon: "arrow.clockwise", title: "Restore Purchases", color: .theme.text, showChevron: true)
                             
                             if isRestoringPurchases {
                                 Spacer()
@@ -261,7 +267,7 @@ struct SettingsView: View {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     Button(action: { showingDeleteChallengesConfirmation = true }) {
-                        SettingsRow(icon: "trash.fill", title: "Delete All Challenges", color: .red)
+                        SettingsRow(icon: "trash.fill", title: "Delete All Challenges", color: .red, showChevron: true)
                     }
                     .disabled(isPerformingAction)
                     
@@ -289,11 +295,11 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Notifications Disabled")
                                 .font(.headline)
-                                .foregroundColor(.theme.text)
+                                .foregroundColor(Color.theme.text)
                             
                             Text("Enable notifications to receive reminders for your challenges.")
                                 .font(.subheadline)
-                                .foregroundColor(.theme.subtext)
+                                .foregroundColor(Color.theme.subtext)
                             
                             Button("Enable Notifications") {
                                 requestNotificationPermission()
@@ -315,7 +321,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Daily Reminder")
                             .font(.headline)
-                            .foregroundColor(.theme.text)
+                            .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
                             .onChange(of: isDailyReminderEnabled) { oldValue, newValue in
@@ -325,7 +331,7 @@ struct SettingsView: View {
                                     cancelReminders()
                                 }
                             }
-                            .tint(.theme.accent)
+                            .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                         
                         DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
@@ -335,7 +341,7 @@ struct SettingsView: View {
                                     updateReminderTime()
                                 }
                             }
-                            .tint(.theme.accent)
+                            .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized || !isDailyReminderEnabled)
                     }
                     .padding(.vertical, 4)
@@ -346,7 +352,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Streak Reminder")
                             .font(.headline)
-                            .foregroundColor(.theme.text)
+                            .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
                             .onChange(of: isStreakReminderEnabled) { oldValue, newValue in
@@ -356,12 +362,12 @@ struct SettingsView: View {
                                     cancelStreakReminder()
                                 }
                             }
-                            .tint(.theme.accent)
+                            .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                         
                         Text("Get notified when you're about to break your streak")
                             .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
+                            .foregroundColor(Color.theme.subtext)
                     }
                     .padding(.vertical, 4)
                     
@@ -371,14 +377,14 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Settings")
                             .font(.headline)
-                            .foregroundColor(.theme.text)
+                            .foregroundColor(Color.theme.text)
                         
                         Toggle("Sound", isOn: $isSoundEnabled)
-                            .tint(.theme.accent)
+                            .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                         
                         Toggle("Vibration", isOn: $isVibrationEnabled)
-                            .tint(.theme.accent)
+                            .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                     }
                     .padding(.vertical, 4)
@@ -391,29 +397,114 @@ struct SettingsView: View {
     private var appearanceSection: some View {
         SettingsSection(title: "Appearance", icon: "paintpalette.fill") {
             SettingsCard {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 20) {
                     Text("Theme")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                        .padding(.bottom, 4)
+                        .font(.headline)
+                        .foregroundColor(Color.theme.text)
                     
-                    // Updated theme picker using ThemeManager
-                    Picker("Theme", selection: $selectedTheme) {
-                        ForEach(AppThemeMode.allCases) { theme in
-                            HStack {
-                                Image(systemName: theme.iconName)
-                                Text(theme.displayName)
+                    // Enhanced theme selector with visual previews
+                    HStack(spacing: 12) {
+                        ForEach(AppThemeMode.allCases) { themeMode in
+                            let isThemeSelected = selectedTheme == themeMode
+                            let themeAction = {
+                                hapticFeedback(style: .medium)
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    themeManager.setTheme(themeMode)
+                                    // Force UI update after a short delay
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        selectedTheme = themeManager.currentTheme
+                                    }
+                                }
                             }
-                            .tag(theme)
+                            
+                            ThemeOptionButton(
+                                theme: themeMode,
+                                isSelected: isThemeSelected,
+                                action: themeAction
+                            )
                         }
                     }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: selectedTheme) { oldValue, newValue in
-                        hapticFeedback()
-                        themeManager.setTheme(newValue)
+                    .padding(.vertical, 8)
+                    
+                    // Short explanation of the system theme option
+                    if selectedTheme == .system {
+                        HStack(spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .foregroundColor(Color.theme.accent)
+                            Text("System theme follows your device settings")
+                                .font(.caption)
+                                .foregroundColor(Color.theme.subtext)
+                        }
+                        .padding(.top, 4)
                     }
                 }
                 .padding(.vertical, 8)
+            }
+        }
+    }
+    
+    // Custom theme option button with preview
+    struct ThemeOptionButton: View {
+        let theme: AppThemeMode
+        let isSelected: Bool
+        let action: () -> Void
+        
+        var body: some View {
+            Button(action: action) {
+                VStack(spacing: 12) {
+                    // Theme preview circle with day/night visualization
+                    ZStack {
+                        Circle()
+                            .fill(themePreviewColor)
+                            .frame(width: 60, height: 60)
+                            .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                        
+                        Image(systemName: theme.iconName)
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(themeIconColor)
+                    }
+                    
+                    // Theme name
+                    Text(theme.displayName)
+                        .font(.subheadline)
+                        .fontWeight(isSelected ? .semibold : .medium)
+                        .foregroundColor(isSelected ? Color.theme.accent : Color.theme.text)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(isSelected ? Color.theme.accent.opacity(0.1) : Color.clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(isSelected ? Color.theme.accent : Color.clear, lineWidth: 2)
+                        )
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(AppScaleButtonStyle())
+        }
+        
+        // Colors that represent the theme preview
+        private var themePreviewColor: Color {
+            switch theme {
+            case .light:
+                return Color(UIColor.systemGray6)
+            case .dark:
+                return Color(UIColor.systemGray)
+            case .system:
+                return Color.theme.background
+            }
+        }
+        
+        private var themeIconColor: Color {
+            switch theme {
+            case .light:
+                return Color.black
+            case .dark:
+                return Color.white
+            case .system:
+                return Color.theme.accent
             }
         }
     }
@@ -423,7 +514,7 @@ struct SettingsView: View {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     Button(action: { showingShareSheet = true }) {
-                        SettingsRow(icon: "square.and.arrow.up", title: "Refer a Friend", showChevron: true)
+                        SettingsRow(icon: "square.and.arrow.up", title: "Refer a Friend", color: .theme.text, showChevron: true)
                     }
                     
                     Button(action: {
@@ -436,13 +527,13 @@ struct SettingsView: View {
                             }
                         }
                     }) {
-                        SettingsRow(icon: "envelope.fill", title: "Contact Support", showChevron: true)
+                        SettingsRow(icon: "envelope.fill", title: "Contact Support", color: .theme.text, showChevron: true)
                     }
                     
                     Button(action: {
                         AppStoreHelper.openAppStoreReview()
                     }) {
-                        SettingsRow(icon: "star.bubble.fill", title: "Rate on App Store", showChevron: true)
+                        SettingsRow(icon: "star.bubble.fill", title: "Rate on App Store", color: .theme.text, showChevron: true)
                     }
                     
                     Button(action: {
@@ -450,7 +541,7 @@ struct SettingsView: View {
                             UIApplication.shared.open(twitterURL)
                         }
                     }) {
-                        SettingsRow(icon: "bird.fill", title: "Follow Us on Twitter", showChevron: true)
+                        SettingsRow(icon: "bird.fill", title: "Follow Us on Twitter", color: .theme.text, showChevron: true)
                     }
                 }
                 .padding(.vertical, 4)
@@ -463,11 +554,11 @@ struct SettingsView: View {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 16) {
                     Link(destination: URL(string: "https://100days.site/privacy")!) {
-                        SettingsRow(icon: "hand.raised.fill", title: "Privacy Policy", showChevron: true)
+                        SettingsRow(icon: "hand.raised.fill", title: "Privacy Policy", color: .theme.text, showChevron: true)
                     }
                     
                     Link(destination: URL(string: "https://100days.site/terms")!) {
-                        SettingsRow(icon: "doc.text.fill", title: "Terms of Service", showChevron: true)
+                        SettingsRow(icon: "doc.text.fill", title: "Terms of Service", color: .theme.text, showChevron: true)
                     }
                 }
                 .padding(.vertical, 4)
@@ -478,11 +569,25 @@ struct SettingsView: View {
     private var appInfoSection: some View {
         SettingsSection(title: "App Info", icon: "info.circle.fill") {
             SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    // Version info
-                    InfoRow(title: "Version", value: getAppVersion())
-                    InfoRow(title: "Build", value: getBuildNumber())
-                    InfoRow(title: "Last Updated", value: getFormattedDate())
+                VStack(alignment: .leading, spacing: 16) {
+                    // Version info with icons
+                    InfoRow(title: "Version", value: getAppVersion(), icon: "number")
+                    InfoRow(title: "Build", value: getBuildNumber(), icon: "hammer.fill")
+                    InfoRow(title: "Current Date", value: getFormattedDate(), icon: "calendar")
+                    
+                    // App links
+                    Divider()
+                        .padding(.vertical, 8)
+                    
+                    Link(destination: URL(string: "https://100days.site")!) {
+                        SettingsRow(icon: "globe", title: "Visit Website", color: .theme.text, showChevron: true)
+                    }
+                    
+                    if let appID = Bundle.main.infoDictionary?["AppStoreID"] as? String {
+                        Link(destination: URL(string: "https://apps.apple.com/app/id\(appID)")!) {
+                            SettingsRow(icon: "square.and.arrow.up", title: "Share App", color: .theme.text, showChevron: true)
+                        }
+                    }
                 }
                 .padding(.vertical, 8)
             }
@@ -494,14 +599,44 @@ struct SettingsView: View {
     private struct InfoRow: View {
         let title: String
         let value: String
+        var icon: String? = nil
         
         var body: some View {
-            HStack {
-                Text(title)
-                    .foregroundColor(.theme.subtext)
+            HStack(spacing: 12) {
+                if let icon = icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 14))
+                        .foregroundColor(Color.theme.accent.opacity(0.7))
+                        .frame(width: 24, height: 24)
+                        .background(
+                            Circle()
+                                .fill(Color.theme.accent.opacity(0.1))
+                                .frame(width: 30, height: 30)
+                        )
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundColor(Color.theme.subtext)
+                    
+                    Text(value)
+                        .font(.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(Color.theme.text)
+                }
+                
                 Spacer()
-                Text(value)
-                    .foregroundColor(.theme.text)
+            }
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button(action: {
+                    UIPasteboard.general.string = value
+                    // Could add haptic feedback here
+                }) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
             }
         }
     }
@@ -543,8 +678,8 @@ struct SettingsView: View {
         return formatter.string(from: Date())
     }
     
-    private func hapticFeedback() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
+    private func hapticFeedback(style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
+        let generator = UIImpactFeedbackGenerator(style: style)
         generator.impactOccurred()
     }
     
@@ -729,6 +864,8 @@ struct SettingsSection<Content: View>: View {
     let title: String
     let icon: String
     let content: Content
+    @State private var isExpanded = true
+    @State private var animateIcon = false
     
     init(title: String, icon: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -738,27 +875,71 @@ struct SettingsSection<Content: View>: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .foregroundColor(.theme.accent)
-                    .font(.system(size: 18, weight: .semibold))
+            // Enhanced Header with animation
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isExpanded.toggle()
+                    animateIcon = true
+                }
                 
-                Text(title)
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(.theme.text)
+                // Reset animation flag after slight delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    animateIcon = false
+                }
+                
+                let generator = UIImpactFeedbackGenerator(style: .light)
+                generator.impactOccurred()
+            }) {
+                HStack(spacing: 12) {
+                    // Icon with enhanced visual appeal
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .shadow(color: Color.theme.accent.opacity(0.3), radius: 3, x: 0, y: 2)
+                        )
+                        .rotationEffect(Angle(degrees: animateIcon ? 10 : 0))
+                    
+                    Text(title)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(Color.theme.text)
+                    
+                    Spacer()
+                    
+                    // Chevron indicator with rotation animation
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(Color.theme.subtext)
+                        .rotationEffect(Angle(degrees: isExpanded ? 0 : -90))
+                        .animation(.easeInOut, value: isExpanded)
+                }
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 4)
+            .buttonStyle(PlainButtonStyle())
             
-            content
+            // Content with slide animation
+            if isExpanded {
+                content
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .animation(.easeInOut, value: isExpanded)
+            }
         }
-        .padding(.vertical, 8)
+        .padding(.bottom, 24)
     }
 }
 
 /// A styled card container for settings content
 struct SettingsCard<Content: View>: View {
     let content: Content
+    @State private var isAppearing = false
     
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -771,8 +952,19 @@ struct SettingsCard<Content: View>: View {
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 10, x: 0, y: 4)
+                    .shadow(color: Color.black.opacity(0.07), radius: 10, x: 0, y: 5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.theme.accent.opacity(0.05), lineWidth: 1)
+                    )
             )
+            .opacity(isAppearing ? 1.0 : 0.7)
+            .scaleEffect(isAppearing ? 1.0 : 0.98)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    isAppearing = true
+                }
+            }
     }
 }
 
@@ -780,16 +972,37 @@ struct SettingsCard<Content: View>: View {
 struct SettingsRow: View {
     let icon: String
     let title: String
-    var color: Color = .theme.text
-    var showChevron: Bool = false
+    let color: Color
+    let showChevron: Bool
+    @State private var isPressed = false
+    
+    init(
+        icon: String,
+        title: String,
+        color: Color = Color.theme.text,
+        showChevron: Bool = false
+    ) {
+        self.icon = icon
+        self.title = title
+        self.color = color
+        self.showChevron = showChevron
+    }
     
     var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .foregroundColor(color)
-                .frame(width: 24)
+        HStack(spacing: 14) {
+            // Enhanced icon with background
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.1))
+                    .frame(width: 36, height: 36)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(color)
+            }
             
             Text(title)
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(color)
             
             Spacer()
@@ -798,12 +1011,36 @@ struct SettingsRow: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(Color.theme.subtext.opacity(0.6))
+                    .padding(.trailing, 4)
             }
         }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(isPressed ? 0.0 : 0.03), 
+                       radius: isPressed ? 0 : 3, 
+                       x: 0, 
+                       y: isPressed ? 0 : 1)
+        )
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isPressed)
+        .contentShape(Rectangle())
+        // Add gesture for feedback when pressed
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    isPressed = true
+                }
+                .onEnded { _ in
+                    isPressed = false
+                }
+        )
     }
 }
 
-// MARK: - Change Email/Password Views
+// MARK: - Change Email View
 
 struct ChangeEmailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -840,7 +1077,7 @@ struct ChangeEmailView: View {
                         } else {
                             Text("Update Email")
                                     .fontWeight(.semibold)
-                                    .foregroundColor(.theme.accent)
+                                    .foregroundColor(Color.theme.accent)
                             }
                             
                             Spacer()
@@ -888,102 +1125,13 @@ struct ChangeEmailView: View {
     }
 }
 
-struct ChangePasswordView: View {
-    @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var userSession: UserSession
-    @State private var currentPassword = ""
-    @State private var newPassword = ""
-    @State private var confirmPassword = ""
-    @State private var isUpdating = false
-    @State private var showingError = false
-    @State private var errorMessage = ""
-    
-    var body: some View {
-        NavigationView {
-            Form {
-                Section {
-                    SecureField("Current Password", text: $currentPassword)
-                        .textContentType(.password)
-                        .submitLabel(.next)
-                    
-                    SecureField("New Password", text: $newPassword)
-                        .textContentType(.newPassword)
-                        .submitLabel(.next)
-                    
-                    SecureField("Confirm New Password", text: $confirmPassword)
-                        .textContentType(.newPassword)
-                        .submitLabel(.done)
-                }
-                
-                Section {
-                    Button(action: updatePassword) {
-                        HStack {
-                            Spacer()
-                            
-                        if isUpdating {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                        } else {
-                            Text("Update Password")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.theme.accent)
-                            }
-                            
-                            Spacer()
-                        }
-                    }
-                    .disabled(currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty || isUpdating)
-                }
-            }
-            .navigationTitle("Change Password")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
-            .alert("Error", isPresented: $showingError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
-            }
-        }
-    }
-    
-    private func updatePassword() {
-        isUpdating = true
-        Task {
-            do {
-                try await updatePasswordWithUserSession()
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-                showingError = true
-            }
-            isUpdating = false
-        }
-    }
-    
-    private func updatePasswordWithUserSession() async throws {
-        guard let user = Auth.auth().currentUser else {
-            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
-        }
-        
-        // Check if passwords match
-        if newPassword != confirmPassword {
-            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "New passwords do not match"])
-        }
-        
-        // Reauthenticate user
-        let credential = EmailAuthProvider.credential(withEmail: user.email ?? "", password: currentPassword)
-        try await user.reauthenticate(with: credential)
-        
-        // Update password
-        try await user.updatePassword(to: newPassword)
-    }
-}
+// MARK: - Preview Provider
 
 struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
-        SettingsView()
-            .environmentObject(UserSession.shared)
-            .environmentObject(SubscriptionService.shared)
-            .environmentObject(NotificationService.shared)
+        Group {
+            SettingsView()
+                .withAppDependencies()
+        }
     }
 } 

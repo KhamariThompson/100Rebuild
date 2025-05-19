@@ -18,12 +18,21 @@ struct ProfileView: View {
     @State private var isShowingNewChallenge = false
     @State private var isShowingShareSheet = false
     @FocusState private var isUsernameFocused: Bool
+    @State private var scrollOffset: CGFloat = 0
+    
+    // Profile gradient for header title
+    private let profileGradient = LinearGradient(
+        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
     
     var body: some View {
         NavigationView {
-            ZStack {
+            ZStack(alignment: .top) {
                 // Background
-                Color.theme.background.ignoresSafeArea()
+                Color.theme.background
+                    .ignoresSafeArea()
                 
                 // Full screen loading view when initially loading
                 if viewModel.isInitialLoad {
@@ -42,9 +51,13 @@ struct ProfileView: View {
                 // Main content
                 else {
                     ScrollView {
-                        VStack(spacing: 24) {
+                        VStack(spacing: 0) {
+                            // Spacer to push content below the header
+                            Color.clear
+                                .frame(height: 110)
+                            
                             // Profile Header
-                            VStack(spacing: 16) {
+                            VStack(spacing: AppSpacing.m) {
                                 profileImageSection
                                 
                                 if viewModel.isEditingUsername {
@@ -53,7 +66,7 @@ struct ProfileView: View {
                                     userInfoSection
                                 }
                             }
-                            .padding(.vertical, 20)
+                            .padding(.vertical, AppSpacing.m)
                             
                             // Identity-Focused Stats
                             identityStatsSection
@@ -113,9 +126,13 @@ struct ProfileView: View {
                                     .padding(.horizontal)
                                 }
                             }
+                            
+                            // Add some bottom padding for better scrolling
+                            Color.clear.frame(height: 40)
                         }
+                        .padding(.horizontal)
+                        .trackScrollOffset($scrollOffset)
                     }
-                    .transition(.opacity)
                     .overlay {
                         if viewModel.isLoading && !viewModel.isInitialLoad {
                             VStack {
@@ -125,53 +142,64 @@ struct ProfileView: View {
                             }
                             .frame(width: 100, height: 100)
                             .background(
-                                RoundedRectangle(cornerRadius: 16)
+                                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                     .fill(Color.theme.surface.opacity(0.8))
-                                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                                    .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
                             )
                             .transition(.scale.combined(with: .opacity))
                         }
                     }
                 }
+                
+                // Overlay the dynamic header
+                if !viewModel.isInitialLoad {
+                    ScrollAwareHeaderView(
+                        title: "Profile",
+                        scrollOffset: $scrollOffset,
+                        subtitle: userSession.currentUser?.displayName ?? userSession.currentUser?.email ?? "",
+                        accentGradient: profileGradient
+                    )
+                }
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
             .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
             .navigationBarItems(trailing: 
-                Button(action: { isShowingSettings = true }) {
+                Button(action: {
+                    print("Settings button tapped")
+                    
+                    // Add haptic feedback for immediate response
+                    let impactGenerator = UIImpactFeedbackGenerator(style: .medium)
+                    impactGenerator.impactOccurred()
+                    
+                    // Then show settings
+                    isShowingSettings = true
+                }) {
                     Image(systemName: "gear")
-                        .font(.headline)
+                        .font(.title3)
+                        .foregroundColor(.theme.accent)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Settings")
             )
-            .sheet(isPresented: $isShowingSettings) {
+            .fixedSheet(isPresented: $isShowingSettings) {
                 SettingsView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
             }
-            .sheet(isPresented: $isShowingAnalytics) {
-                ProgressView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
+            .fixedSheet(isPresented: $isShowingAnalytics) {
+                Text("Profile Analytics")
+                    .font(.title)
+                    .padding()
             }
-            .sheet(isPresented: $isShowingNewChallenge) {
-                ChallengesView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
+            .fixedSheet(isPresented: $isShowingNewChallenge) {
+                Text("New Challenge")
+                    .font(.title)
+                    .padding()
             }
-            .sheet(isPresented: $isShowingShareSheet) {
-                Utilities_ShareSheet(items: [
-                    "I'm building my habit with 100Days! Track your progress and never break your streak: https://apps.apple.com/app/100days-habit-challenge/id1234567890"
-                ])
-            }
-            .fullScreenCover(isPresented: $viewModel.showCameraPicker) {
-                ImagePicker(selectedImage: $viewModel.profileImage, isPresented: $viewModel.showCameraPicker, source: .camera)
-                    .ignoresSafeArea()
-                    .onDisappear {
-                        if viewModel.profileImage != nil {
-                            viewModel.uploadProfilePhotoFromCamera(viewModel.profileImage!)
-                        }
-                    }
+            .fixedSheet(isPresented: $isShowingShareSheet) {
+                let username = viewModel.username.isEmpty ? (userSession.currentUser?.displayName ?? "User") : viewModel.username
+                let shareText = "I'm tracking my 100-day challenges using the 100Days app! Follow me at @\(username) or check out https://100days.site"
+                ShareSheet(items: [shareText])
             }
             .alert(isPresented: Binding<Bool>(
                 get: { viewModel.error != nil },
@@ -179,7 +207,7 @@ struct ProfileView: View {
             )) {
                 Alert(
                     title: Text("Error"),
-                    message: Text(viewModel.error ?? "Unknown error occurred"),
+                    message: Text(viewModel.error ?? "Unknown error"),
                     dismissButton: .default(Text("OK"))
                 )
             }
@@ -559,25 +587,25 @@ struct ProfileView: View {
         
         var body: some View {
             Button(action: action) {
-                VStack(spacing: 12) {
+                VStack(spacing: AppSpacing.s) {
                     Image(systemName: icon)
-                        .font(.system(size: 24))
+                        .font(.system(size: AppSpacing.iconSizeMedium))
                         .foregroundColor(color)
                     
                     Text(title)
-                        .font(.callout)
+                        .font(AppTypography.callout)
                         .fontWeight(.medium)
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+                .padding(.vertical, AppSpacing.buttonVerticalPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                         .fill(Color.theme.surface)
-                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
                 )
             }
-            .buttonStyle(ScaleButtonStyle())
+            .buttonStyle(AppScaleButtonStyle())
         }
     }
     
@@ -589,31 +617,33 @@ struct ProfileView: View {
         let icon: String
         
         var body: some View {
-            VStack(spacing: 10) {
+            VStack(spacing: AppSpacing.s) {
                 Image(systemName: icon)
-                    .font(.system(size: 24))
+                    .font(.system(size: AppSpacing.iconSizeMedium))
                     .foregroundColor(.theme.accent)
                 
                 if title == "Member Since" {
                     Text(value)
-                        .font(.system(size: 16))
+                        .font(AppTypography.callout)
                         .bold()
                         .multilineTextAlignment(.center)
                 } else {
                     Text(value)
-                        .font(.title2)
+                        .font(AppTypography.title2)
                         .bold()
                 }
                 
                 Text(title)
-                    .font(.caption)
-                    .foregroundColor(.gray)
+                    .font(AppTypography.caption)
+                    .foregroundColor(.theme.subtext)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(Color.theme.surface)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+            .padding(.vertical, AppSpacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
+            )
         }
     }
     
@@ -654,27 +684,27 @@ struct ProfileProLockedView<Content: View>: View {
                     generator.impactOccurred()
                     isShowingPaywall = true
                 }) {
-                    VStack(spacing: 12) {
+                    VStack(spacing: AppSpacing.s) {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 24))
+                            .font(.system(size: AppSpacing.iconSizeMedium))
                             .foregroundColor(.theme.accent)
                         
                         Text("Pro Feature")
-                            .font(.headline)
+                            .font(AppTypography.headline)
                             .foregroundColor(.theme.text)
                         
                         Text("Upgrade to unlock")
-                            .font(.subheadline)
+                            .font(AppTypography.subheadline)
                             .foregroundColor(.theme.subtext)
                     }
-                    .padding()
+                    .padding(AppSpacing.m)
                     .background(
-                        RoundedRectangle(cornerRadius: 16)
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                             .fill(Color.theme.surface)
-                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 4)
                     )
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(AppScaleButtonStyle())
             }
         }
         .sheet(isPresented: $isShowingPaywall) {

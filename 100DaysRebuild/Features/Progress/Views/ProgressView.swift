@@ -4,6 +4,8 @@ import FirebaseFirestore
 import FirebaseAuth
 import Foundation
 
+// Import components from the renamed file
+
 // Always be explicit about UserProgressViewModel type to avoid ambiguity
 // Updated to reference ProgressDashboardViewModel to avoid conflicts
 typealias UPViewModel = ProgressDashboardViewModel
@@ -73,77 +75,282 @@ struct ProgressView: View {
     @State private var showAnalytics = false
     @State private var loadTask: Task<Void, Never>? = nil
     @State private var hasLoadedOnce = false
+    @State private var scrollOffset: CGFloat = 0
+    
+    // Gradient for progress title
+    private let progressGradient = LinearGradient(
+        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
     
     var body: some View {
-        NavigationView {
-            ProgressContentView(viewModel: viewModel, showAnalytics: $showAnalytics)
-                .background(Color.theme.background.ignoresSafeArea())
-                .navigationTitle("Progress")
-        }
-        .onAppear {
-            // Cancel any existing task first to prevent multiple concurrent tasks
-            loadTask?.cancel()
-            loadTask = nil
+        ZStack(alignment: .top) {
+            // Background
+            Color.theme.background
+                .ignoresSafeArea()
             
-            // Mark tab as changing when this view appears
-            if router.selectedTab == 1 {
-                router.tabIsChanging = true
-                
-                // Only load once unless forced refresh
-                if !hasLoadedOnce {
-                    // Load progress data when the view appears, but only if this tab is selected
-                    loadTask = Task {
-                        do {
-                            // Add a small delay to prevent rapid reloading during tab switching
-                            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 second delay
-                            
-                            if !Task.isCancelled {
-                                await viewModel.loadData(forceRefresh: false)
-                                
-                                if !Task.isCancelled {
-                                    hasLoadedOnce = true
-                                    
-                                    // After data is loaded, mark tab as not changing
-                                    if router.selectedTab == 1 {
-                                        router.tabIsChanging = false
-                                    }
-                                }
-                            }
-                        } catch is CancellationError {
-                            // Safely handle task cancellation - just ignore it
-                            print("Progress loading task was cancelled")
-                        } catch {
-                            print("Error loading progress: \(error.localizedDescription)")
-                            // Don't reset hasLoadedOnce on error to prevent repeated attempts
+            // Content with scroll tracking
+            ScrollView {
+                VStack(spacing: AppSpacing.m) {
+                    // Spacer to push content below the header - use GeometryReader to get dynamic spacing
+                    GeometryReader { geo in
+                        Color.clear.frame(height: 110)
+                            .preference(key: SafeAreaKey.self, value: geo.safeAreaInsets.top)
+                    }
+                    .frame(height: 110)
+                    
+                    // Content based on state
+                    if viewModel.isLoading && !hasLoadedOnce {
+                        loadingView
+                            .transition(.opacity)
+                    } else if let errorMessage = viewModel.errorMessage, !viewModel.hasData {
+                        errorView(message: errorMessage)
+                            .transition(.opacity)
+                    } else if viewModel.hasData {
+                        DetailedProgressView(viewModel: viewModel, showAnalytics: $showAnalytics)
+                            .transition(.opacity)
+                    } else {
+                        emptyStateView
+                            .transition(.opacity)
+                    }
+                }
+                .trackScrollOffset($scrollOffset)
+            }
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.hasData)
+            
+            // Dynamic header overlay
+            ScrollAwareHeaderView(
+                title: "Progress",
+                scrollOffset: $scrollOffset,
+                accentGradient: progressGradient
+            ) {
+                // Additional stats in header
+                if viewModel.hasData && !viewModel.isLoading {
+                    HStack(spacing: AppSpacing.m) {
+                        // Current streak display - get directly from userStatsService
+                        HStack(spacing: AppSpacing.xxs) {
+                            Image(systemName: "flame.fill")
+                                .font(.system(size: AppSpacing.iconSizeSmall))
+                                .foregroundColor(.orange)
+                            Text("Streak: \(userStatsService.userStats.currentStreak)")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.theme.subtext)
+                        }
+                        
+                        // Completion percentage - directly from userStatsService
+                        HStack(spacing: AppSpacing.xxs) {
+                            Image(systemName: "chart.bar.fill")
+                                .font(.system(size: AppSpacing.iconSizeSmall))
+                                .foregroundColor(.theme.accent)
+                            Text("\(Int(userStatsService.userStats.overallCompletionPercentage * 100))% Complete")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.theme.subtext)
                         }
                     }
+                }
+            }
+            
+            // Analytics button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        // Add haptic feedback for responsiveness
+                        let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+                        feedbackGenerator.impactOccurred()
+                        
+                        showAnalytics = true
+                    } label: {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.system(size: AppSpacing.iconSizeSmall, weight: .semibold))
+                    }
+                    .disabled(viewModel.isLoading || !viewModel.hasData)
+                    .padding(.trailing, AppSpacing.m)
+                    .padding(.top, AppSpacing.xs)
+                }
+                .frame(height: 44)
+                .background(Color.clear)
+                
+                Spacer()
+            }
+        }
+        .navigationTitle("Progress") // Only set the title, don't create navigation bar
+        .navigationBarTitleDisplayMode(.inline) // Use inline to minimize height issues
+        .refreshable {
+            await refreshData()
+        }
+        .onAppear {
+            print("ProgressView - onAppear")
+            // Cancel any existing task first to prevent multiple concurrent tasks
+            cancelCurrentTask()
+            
+            // First, check if userStatsService already has data we can use immediately
+            if userStatsService.userStats.totalChallenges > 0 && !hasLoadedOnce {
+                print("ProgressView - Using existing userStatsService data")
+                
+                // UserStatsService already has data, so mark viewModel as having data too
+                if !viewModel.hasData {
+                    viewModel.hasData = true
+                }
+                
+                // Mark tab as not changing since we have data immediately
+                router.tabIsChanging = false
+                hasLoadedOnce = true
+            }
+            
+            // Then start a new task to load fresh data
+            loadTask = Task {
+                // Check if we need to refresh data
+                if !userStatsService.isLoading && (!hasLoadedOnce || NetworkMonitor.shared.isConnected) {
+                    print("ProgressView - Loading fresh data from userStatsService")
+                    
+                    // First refresh central data source
+                    await userStatsService.refreshUserStats()
+                    
+                    // Then load view-specific data
+                    await viewModel.loadData()
+                    
+                    // Mark as loaded once
+                    if !Task.isCancelled {
+                        hasLoadedOnce = true
+                        router.tabIsChanging = false
+                    }
                 } else {
-                    // If already loaded once, just mark tab as not changing
+                    print("ProgressView - Using cached data, no refresh needed")
                     router.tabIsChanging = false
+                    hasLoadedOnce = true
                 }
             }
         }
         .onDisappear {
-            // When view disappears, cancel any loading tasks
-            // Use async cancellation to avoid immediate termination
-            Task {
-                loadTask?.cancel()
-                loadTask = nil
+            print("ProgressView - onDisappear")
+            cancelCurrentTask()
+        }
+        .fixedSheet(isPresented: $showAnalytics) {
+            if #available(iOS 16.0, *) {
+                ProgressAnalyticsView()
+            } else {
+                Text("Advanced analytics requires iOS 16 or later.")
+                    .padding()
             }
+        }
+        .fixNavigationLayout()
+    }
+    
+    // Helper method to cancel any running task
+    private func cancelCurrentTask() {
+        if let task = loadTask {
+            task.cancel()
+            loadTask = nil
+            print("ProgressView - Cancelled existing task")
+        }
+    }
+    
+    // Method to refresh data with proper cancellation
+    private func refreshData() async {
+        print("ProgressView - Manual refresh triggered")
+        cancelCurrentTask()
+        
+        loadTask = Task {
+            print("ProgressView - Refreshing data from all sources")
             
-            // If this tab is still selected but view is disappearing, 
-            // make sure we cancel any ongoing view model tasks too
-            if router.selectedTab == 1 {
-                viewModel.cancelTasks()
+            // First refresh userStatsService (central data source)
+            await userStatsService.refreshUserStats()
+            
+            // Then refresh view-specific data
+            await viewModel.loadData(forceRefresh: true)
+        }
+    }
+    
+    // Loading view with progress indicator
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(.theme.accent)
+            
+            Text("Loading your progress...")
+                .font(.headline)
+                .foregroundColor(.theme.text)
+            
+            Text("Hold tight as we fetch your latest data")
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .padding(.top, 40)
+    }
+    
+    // Error view with retry button
+    private func errorView(message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 50))
+                .foregroundColor(.yellow)
+            
+            Text(message)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            if NetworkMonitor.shared.isConnected {
+                Button("Try Again") {
+                    Task { 
+                        await refreshData()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                HStack {
+                    Image(systemName: "wifi.slash")
+                    Text("You're offline")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ShowProgressAnalytics"))) { _ in
-            showAnalytics = true
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+    
+    // Empty state when no data is available
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "chart.bar")
+                .font(.system(size: 50))
+                .foregroundColor(.theme.accent.opacity(0.7))
+            
+            Text("No progress data yet")
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(.theme.text)
+            
+            Text("Complete challenges to see your progress.")
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Button("Start a Challenge") {
+                withAnimation {
+                    // Switch to challenges tab
+                    router.changeTab(to: 0)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color.theme.accent)
+            .foregroundColor(.white)
+            .cornerRadius(12)
         }
-        .sheet(isPresented: $showAnalytics) {
-            ProgressAnalyticsView()
-                .environmentObject(viewModel)
-        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }
 
@@ -152,6 +359,7 @@ struct ProgressContentView: View {
     @ObservedObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var router: TabViewRouter
     @Binding var showAnalytics: Bool
     
     var body: some View {
@@ -235,49 +443,101 @@ struct ProgressContentView: View {
     }
     
     private var fullScreenLoadingView: some View {
-        VStack {
-            SwiftUI.ProgressView()
-                .progressViewStyle(CircularProgressViewStyle())
-                .scaleEffect(1.5)
-                .padding()
+        VStack(spacing: 24) {
+            // Loading animation container
+            ZStack {
+                // Pulsating background circle
+                Circle()
+                    .fill(Color.theme.accent.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                    .scaleEffect(viewModel.isInitialLoad ? 1.1 : 0.9)
+                    .animation(
+                        Animation.easeInOut(duration: 1.2)
+                            .repeatForever(autoreverses: true),
+                        value: viewModel.isInitialLoad
+                    )
+                    .onAppear { viewModel.isInitialLoad = true }
+                
+                // Loading spinner
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
+                    .scaleEffect(1.8)
+                    .padding(30)
+            }
             
-            Text("Loading your progress...")
-                .foregroundColor(.theme.subtext)
-                .padding(.top, 8)
+            VStack(spacing: 12) {
+                // Main loading text
+                Text("Loading your progress...")
+                    .font(.system(size: 22, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .padding(.top, 8)
+                
+                // Informational text with friendlier wording
+                Text("We're gathering your achievements and streaks.")
+                    .font(.subheadline)
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .opacity(0.9)
+                
+                // Loading indicators row
+                HStack(spacing: 24) {
+                    LoadingStepIndicator(title: "Stats", isCompleted: true)
+                    LoadingStepIndicator(title: "Streaks", isCompleted: true)
+                    LoadingStepIndicator(title: "Charts", isCompleted: false, isAnimating: true)
+                }
+                .padding(.top, 12)
+            }
             
-            // Add a tip about what's happening
-            Text("This may take a moment as we gather your data.")
-                .font(.caption)
-                .foregroundColor(.theme.subtext)
-                .padding(.top, 4)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+            // Fallback or skip option with better styling
+            // Only show after a 3 second delay
+            FallbackButton(isShowing: viewModel.isInitialLoad) {
+                // Provide fallback to sample data with animation
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    viewModel.hasData = true
+                    viewModel.isInitialLoad = false
+                    viewModel.isLoading = false
+                }
+            }
         }
+        .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.top, 100)
+        .background(Color.theme.background)
     }
     
     private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Your Progress")
-                .font(.title2)
-                .foregroundColor(.theme.text)
-            
-            HStack(spacing: 20) {
-                AppProgressStatCard(title: "Current Streak", value: "\(viewModel.currentStreak)")
-                AppProgressStatCard(title: "Longest Streak", value: "\(viewModel.longestStreak)")
+        VStack(alignment: .leading, spacing: 16) {
+            // Enhanced section title with icon
+            HStack(spacing: 12) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.theme.accent)
+                
+                Text("Your Progress")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
             }
+            .padding(.horizontal, 4)
+            .padding(.bottom, 4)
             
-            HStack(spacing: 20) {
-                AppProgressStatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%")
-                AppProgressStatCard(title: "Challenges", value: "\(viewModel.totalChallenges)")
+            // Stats grid with responsive layout
+            VStack(spacing: 20) {
+                HStack(spacing: 20) {
+                    AppProgressStatCard(title: "Current Streak", value: "\(viewModel.currentStreak)", icon: "flame.fill")
+                    AppProgressStatCard(title: "Longest Streak", value: "\(viewModel.longestStreak)", icon: "trophy.fill")
+                }
+                
+                HStack(spacing: 20) {
+                    AppProgressStatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%", icon: "chart.pie.fill")
+                    AppProgressStatCard(title: "Challenges", value: "\(viewModel.totalChallenges)", icon: "checklist")
+                }
             }
         }
-        .padding()
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
         )
         .padding(.horizontal)
     }
@@ -347,85 +607,171 @@ struct ProgressContentView: View {
     }
     
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 60))
-                .foregroundColor(.theme.accent)
-            
-            Text("No Progress Data Yet")
-                .font(.title2)
-                .foregroundColor(.theme.text)
-            
-            Text("Start a challenge and check in daily to see your progress here")
-                .font(.body)
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            // Add a button to navigate to challenges
-            NavigationLink(destination: ChallengesView()) {
-                Text("Start a Challenge")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.theme.accent)
-                    )
+        VStack(spacing: 24) {
+            // Animated empty state illustration
+            ZStack {
+                // Background shape
+                Circle()
+                    .fill(Color.theme.accent.opacity(0.08))
+                    .frame(width: 120, height: 120)
+                
+                // Main icon with subtle animation
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundColor(.theme.accent)
+                    .symbolEffect(.pulse.byLayer, options: .repeating)
             }
+            
+            VStack(spacing: 16) {
+                Text("No Progress Data Yet")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                
+                Text("Start a challenge to begin tracking your progress and building your habits.")
+                    .font(.subheadline)
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+            }
+            
+            Button(action: {
+                // Add haptic feedback
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                
+                // Navigate to challenges tab with animation
+                withAnimation {
+                    router.changeTab(to: 0)
+                }
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Start a Challenge")
+                        .font(.headline)
+                }
+                .padding(.horizontal, 32)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .foregroundColor(.white)
+                .cornerRadius(16)
+                .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+            .buttonStyle(AppScaleButtonStyle())
             .padding(.top, 8)
         }
-        .padding()
+        .padding(36)
         .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.08), radius: 16, x: 0, y: 6)
+        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 40)
     }
     
     private func errorState(message: String) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 60))
-                .foregroundColor(.orange)
-            
-            Text("Couldn't Load Progress")
-                .font(.title2)
-                .foregroundColor(.theme.text)
-            
-            Text(message)
-                .font(.body)
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button {
-                Task {
-                    await viewModel.loadData(forceRefresh: true)
-                }
-            } label: {
-                Text("Try Again")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.theme.accent)
-                    )
+        VStack(spacing: 28) {
+            // Animated error icon
+            ZStack {
+                // Pulsating background for emphasis
+                Circle()
+                    .fill(Color.red.opacity(0.1))
+                    .frame(width: 110, height: 110)
+                
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 48, weight: .semibold))
+                    .foregroundColor(.red.opacity(0.8))
+                    .symbolEffect(.variableColor.iterative.reversing)
             }
-            .padding(.top, 8)
             
-            // If not connected, show offline indicator
-            if !viewModel.isNetworkConnected {
-                HStack {
-                    Image(systemName: "wifi.slash")
-                    Text("You're offline")
+            VStack(spacing: 16) {
+                Text("Unable to Load Progress")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+            }
+            
+            VStack(spacing: 16) {
+                // Primary action button
+                Button(action: {
+                    // Add haptic feedback
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // Try loading again
+                    Task {
+                        await viewModel.loadData(forceRefresh: true)
+                    }
+                }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Try Again")
+                            .font(.headline)
+                    }
+                    .frame(height: 50)
+                    .frame(minWidth: 180)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.theme.accent)
+                            .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+                    )
+                    .foregroundColor(.white)
                 }
-                .font(.caption)
-                .foregroundColor(.red)
-                .padding(.top, 8)
+                .buttonStyle(AppScaleButtonStyle())
+                
+                // Secondary action button
+                Button(action: {
+                    // Add haptic feedback
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                    
+                    // Load sample data with animation
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        viewModel.hasData = true
+                        viewModel.errorMessage = nil
+                        viewModel.isInitialLoad = false
+                        viewModel.isLoading = false
+                    }
+                }) {
+                    Text("Continue with Sample Data")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.theme.accent)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.theme.accent.opacity(0.5), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(AppScaleButtonStyle())
             }
         }
-        .padding()
+        .padding(36)
         .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.08), radius: 16, x: 0, y: 6)
+        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 40)
     }
     
     // Daily Spark Section
@@ -536,52 +882,9 @@ struct ProgressContentView: View {
     }
 }
 
-struct AppProgressStatCard: View {
-    let title: String
-    let value: String
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(value)
-                .font(.title)
-                .foregroundColor(.theme.accent)
-            Text(title)
-                .font(.subheadline)
-                .foregroundColor(.theme.subtext)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-        )
-    }
-}
+// NOTE: AppProgressStatCard has been moved to ProgressComponents.swift
 
-struct ProgressBadgeCard: View {
-    let badge: ProgressBadge
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: badge.iconName)
-                .font(.system(size: 30))
-                .foregroundColor(.theme.accent)
-            
-            Text(badge.title)
-                .font(.caption)
-                .foregroundColor(.theme.text)
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-        )
-    }
-}
+// NOTE: ProgressBadgeCard has been moved to ProgressComponents.swift
 
 @MainActor
 class UserProgressViewModel: ObservableObject {
@@ -961,9 +1264,9 @@ struct ProgressAnalyticsView: View {
                         
                         // Basic stats in horizontal layout
                         HStack(spacing: 16) {
-                            StatCard(title: "Challenges", value: "\(viewModel.totalChallenges)")
-                            StatCard(title: "Current Streak", value: "\(viewModel.currentStreak)")
-                            StatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%")
+                            AnalyticsStatCard(title: "Challenges", value: "\(viewModel.totalChallenges)")
+                            AnalyticsStatCard(title: "Current Streak", value: "\(viewModel.currentStreak)")
+                            AnalyticsStatCard(title: "Completion", value: "\(Int(viewModel.completionPercentage * 100))%")
                         }
                         
                         // Circular progress indicator
@@ -1005,19 +1308,28 @@ struct ProgressAnalyticsView: View {
             }
             .navigationTitle("Analytics")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+            .safeAreaInset(edge: .top) {
+                HStack {
+                    Spacer()
+                    Button {
                         dismiss()
+                    } label: {
+                        Text("Done")
+                            .foregroundColor(.theme.accent)
+                            .fontWeight(.medium)
                     }
+                    .padding(.trailing)
+                    .padding(.top, 8)
                 }
+                .frame(height: 44)
+                .background(Color.clear)
             }
         }
     }
 }
 
 // Helper views for the analytics screen
-struct StatCard: View {
+struct AnalyticsStatCard: View {
     var title: String
     var value: String
     
@@ -1067,3 +1379,8 @@ struct ProgressCircleView: View {
         .frame(width: size, height: size)
     }
 }
+
+// Helper components for loading screen
+
+// NOTE: LoadingStepIndicator and FallbackButton moved to ProgressComponents.swift
+

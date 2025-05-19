@@ -26,12 +26,12 @@ struct CheckInHistoryView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.theme.text)
-                    .padding(.top, 16)
-                    .padding(.horizontal, 20)
+                    .padding(.top, AppSpacing.m)
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
                 // Progress summary
-                HStack(spacing: 16) {
+                HStack(spacing: AppSpacing.m) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Days completed")
                             .font(.subheadline)
@@ -200,86 +200,82 @@ struct CheckInHistoryCard: View {
     let checkIn: Views_CheckInRecord
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Header with day number and date
-            HStack {
-                Text("Day \(checkIn.dayNumber)")
-                    .font(.headline)
-                    .foregroundColor(.theme.accent)
+        AppComponents.Card {
+            VStack(alignment: .leading, spacing: AppSpacing.itemSpacing) {
+                // Header with day number and date
+                HStack {
+                    Text("Day \(checkIn.dayNumber)")
+                        .font(AppTypography.headline)
+                        .foregroundColor(.theme.accent)
+                    
+                    Spacer()
+                    
+                    Text(checkIn.date, style: .date)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(.theme.subtext)
+                }
                 
-                Spacer()
+                // If there's a photo, show it
+                if checkIn.photoURL != nil {
+                    AsyncImage(url: checkIn.photoURL) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color.theme.surface)
+                                .overlay(ProgressView())
+                                .frame(height: 160)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 160)
+                                .clipped()
+                        case .failure:
+                            Rectangle()
+                                .fill(Color.theme.surface)
+                                .overlay(
+                                    Image(systemName: "photo.fill")
+                                        .foregroundColor(.theme.subtext.opacity(0.5))
+                                )
+                                .frame(height: 160)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .cornerRadius(AppSpacing.cardCornerRadius)
+                }
                 
-                Text(checkIn.date, style: .date)
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-            }
-            
-            // If there's a photo, show it
-            if checkIn.photoURL != nil {
-                AsyncImage(url: checkIn.photoURL) { phase in
-                    switch phase {
-                    case .empty:
-                        Rectangle()
-                            .fill(Color.theme.surface)
-                            .overlay(ProgressView())
-                            .frame(height: 160)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 160)
-                            .clipped()
-                    case .failure:
-                        Rectangle()
-                            .fill(Color.theme.surface)
-                            .overlay(
-                                Image(systemName: "photo.fill")
-                                    .foregroundColor(.theme.subtext.opacity(0.5))
-                            )
-                            .frame(height: 160)
-                    @unknown default:
-                        EmptyView()
+                // If there's a note, show a preview
+                if let note = checkIn.note, !note.isEmpty {
+                    Text(note)
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(.theme.text)
+                        .lineLimit(2)
+                        .padding(.vertical, AppSpacing.xxs)
+                }
+                
+                // Show the quote if available
+                if let quote = checkIn.quote {
+                    HStack {
+                        Text("\"\(quote.text)\"")
+                            .font(AppTypography.caption)
+                            .italic()
+                            .foregroundColor(.theme.subtext)
+                            .lineLimit(1)
+                        Spacer()
                     }
                 }
-                .cornerRadius(12)
-            }
-            
-            // If there's a note, show a preview
-            if let note = checkIn.note, !note.isEmpty {
-                Text(note)
-                    .font(.subheadline)
-                    .foregroundColor(.theme.text)
-                    .lineLimit(2)
-                    .padding(.vertical, 4)
-            }
-            
-            // Show the quote if available
-            if let quote = checkIn.quote {
+                
+                // Footer with tap to view more indication
                 HStack {
-                    Text("\"\(quote.text)\"")
-                        .font(.caption)
-                        .italic()
-                        .foregroundColor(.theme.subtext)
-                        .lineLimit(1)
                     Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(AppTypography.caption)
+                        .foregroundColor(.theme.subtext)
                 }
             }
-            
-            // Footer with tap to view more indication
-            HStack {
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.theme.subtext)
-            }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 5, x: 0, y: 2)
-        )
     }
 }
 

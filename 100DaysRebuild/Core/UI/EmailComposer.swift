@@ -7,6 +7,14 @@ struct EmailComposer: UIViewControllerRepresentable {
     let recipient: String
     let subject: String
     let body: String
+    let completionHandler: ((MFMailComposeResult, Error?) -> Void)?
+    
+    init(recipient: String, subject: String, body: String, completionHandler: ((MFMailComposeResult, Error?) -> Void)? = nil) {
+        self.recipient = recipient
+        self.subject = subject
+        self.body = body
+        self.completionHandler = completionHandler
+    }
     
     func makeUIViewController(context: Context) -> MFMailComposeViewController {
         let composer = MFMailComposeViewController()
@@ -31,6 +39,9 @@ struct EmailComposer: UIViewControllerRepresentable {
         }
         
         func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            if let completionHandler = parent.completionHandler {
+                completionHandler(result, error)
+            }
             parent.presentationMode.wrappedValue.dismiss()
         }
     }
@@ -63,7 +74,7 @@ struct EmailButtonModifier: ViewModifier {
                 }
             }
             .sheet(isPresented: $showingMailView) {
-                EmailComposer(recipient: emailAddress, subject: subject, body: body)
+                EmailComposer(recipient: emailAddress, subject: subject, body: body) { _, _ in }
             }
     }
 }

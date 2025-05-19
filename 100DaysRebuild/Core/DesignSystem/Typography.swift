@@ -43,6 +43,56 @@ public enum AppTypography {
     public static let bodyMedium = Font.custom(FontSize.body, weight: .medium)
     public static let subheadlineMedium = Font.custom(FontSize.subheadline, weight: .medium)
     public static let captionMedium = Font.custom(FontSize.caption, weight: .medium)
+    
+    // Dynamic Type Styles
+    // These styles automatically adapt to user's text size preferences
+    public static let dynamicDisplay = Font.system(.largeTitle, design: .rounded).weight(.bold)
+    public static let dynamicLargeTitle = Font.system(.largeTitle, design: .rounded).weight(.bold)
+    public static let dynamicTitle1 = Font.system(.title, design: .rounded).weight(.bold)
+    public static let dynamicTitle2 = Font.system(.title2, design: .rounded).weight(.semibold)
+    public static let dynamicTitle3 = Font.system(.title3, design: .rounded).weight(.semibold)
+    public static let dynamicHeadline = Font.system(.headline, design: .rounded)
+    public static let dynamicBody = Font.system(.body, design: .rounded)
+    public static let dynamicCallout = Font.system(.callout, design: .rounded)
+    public static let dynamicSubheadline = Font.system(.subheadline, design: .rounded)
+    public static let dynamicFootnote = Font.system(.footnote, design: .rounded)
+    public static let dynamicCaption = Font.system(.caption, design: .rounded)
+    public static let dynamicCaption2 = Font.system(.caption2, design: .rounded)
+    
+    /// Maps AppTypography font to a Dynamic Type text style
+    public static func dynamicTextStyle(for font: Font) -> Font {
+        switch font {
+        case display, largeTitle:
+            return dynamicLargeTitle
+        case title1:
+            return dynamicTitle1
+        case title2:
+            return dynamicTitle2
+        case title3:
+            return dynamicTitle3
+        case headline:
+            return dynamicHeadline
+        case body, bodyMedium:
+            return dynamicBody
+        case callout:
+            return dynamicCallout
+        case subheadline, subheadlineMedium:
+            return dynamicSubheadline
+        case footnote:
+            return dynamicFootnote
+        case caption, captionMedium:
+            return dynamicCaption
+        case small:
+            return dynamicCaption2
+        default:
+            return dynamicBody
+        }
+    }
+    
+    /// Get a dynamic version of a custom font
+    public static func dynamicCustomFont(name: String, size: CGFloat, style: Font.TextStyle) -> Font {
+        return Font.custom(name, size: size, relativeTo: style)
+    }
 }
 
 // MARK: - Font Extensions
@@ -83,10 +133,35 @@ public struct FontModifier: ViewModifier {
     }
 }
 
+/// Modifier that applies a dynamic font that scales with the user's text size preferences
+public struct DynamicFontModifier: ViewModifier {
+    let font: Font
+    
+    public init(font: Font) {
+        self.font = font
+    }
+    
+    public func body(content: Content) -> some View {
+        content
+            .font(AppTypography.dynamicTextStyle(for: font))
+    }
+}
+
 // MARK: - View Extensions
 public extension View {
     func appFont(_ font: Font) -> some View {
         self.modifier(FontModifier(font: font))
+    }
+    
+    /// Apply a font that scales with Dynamic Type
+    func dynamicFont(_ font: Font) -> some View {
+        self.modifier(DynamicFontModifier(font: font))
+    }
+    
+    /// Apply a ScaledMetric to any value that should scale with text size
+    func scaledValue(_ value: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> CGFloat {
+        let scaledMetric = ScaledMetric(wrappedValue: value, relativeTo: textStyle)
+        return scaledMetric.wrappedValue
     }
 }
 
@@ -107,4 +182,18 @@ public extension View {
     func caption() -> some View { appFont(AppTypography.caption) }
     func captionMedium() -> some View { appFont(AppTypography.captionMedium) }
     func small() -> some View { appFont(AppTypography.small) }
+    
+    // Dynamic Type versions
+    func dynamicDisplay() -> some View { appFont(AppTypography.dynamicDisplay) }
+    func dynamicLargeTitle() -> some View { appFont(AppTypography.dynamicLargeTitle) }
+    func dynamicTitle() -> some View { appFont(AppTypography.dynamicTitle1) }
+    func dynamicTitle2() -> some View { appFont(AppTypography.dynamicTitle2) }
+    func dynamicTitle3() -> some View { appFont(AppTypography.dynamicTitle3) }
+    func dynamicHeadline() -> some View { appFont(AppTypography.dynamicHeadline) }
+    func dynamicBody() -> some View { appFont(AppTypography.dynamicBody) }
+    func dynamicCallout() -> some View { appFont(AppTypography.dynamicCallout) }
+    func dynamicSubheadline() -> some View { appFont(AppTypography.dynamicSubheadline) }
+    func dynamicFootnote() -> some View { appFont(AppTypography.dynamicFootnote) }
+    func dynamicCaption() -> some View { appFont(AppTypography.dynamicCaption) }
+    func dynamicCaption2() -> some View { appFont(AppTypography.dynamicCaption2) }
 } 

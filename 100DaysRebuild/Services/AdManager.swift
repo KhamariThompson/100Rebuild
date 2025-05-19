@@ -137,7 +137,7 @@ struct ProUpgradeBanner: View {
                     .background(Color.theme.accent)
                     .cornerRadius(8)
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(AppScaleButtonStyle())
                 .padding(.top, 4)
             }
             .padding(12)

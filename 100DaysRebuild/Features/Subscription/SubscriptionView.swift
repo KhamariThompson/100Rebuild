@@ -81,7 +81,7 @@ struct SubscriptionView: View {
                     .font(.headline)
             }
         }
-        .buttonStyle(.primary)
+        .buttonStyle(AppPrimaryButtonStyle())
         .padding(.horizontal)
     }
     

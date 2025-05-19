@@ -155,7 +155,7 @@ struct ShareCardCustomizerView: View {
             }
             .sheet(isPresented: $showingShareSheet) {
                 if let image = shareImage {
-                    Utilities_ShareSheet(items: [image])
+                    ShareSheet(items: [image])
                 }
             }
             .fullScreenCover(isPresented: $showPreviewFullScreen) {

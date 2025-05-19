@@ -52,7 +52,7 @@ public class ThemeManager: ObservableObject {
         didSet {
             if oldValue != currentTheme {
                 saveTheme()
-                NotificationCenter.default.post(name: .appThemeDidChange, object: nil)
+                NotificationCenter.default.post(name: .appThemeDidChange, object: currentTheme.rawValue)
             }
         }
     }
@@ -74,7 +74,13 @@ public class ThemeManager: ObservableObject {
     /// - Parameter theme: The new theme to apply
     public func setTheme(_ theme: AppThemeMode) {
         guard theme != currentTheme else { return }
-        currentTheme = theme
+        
+        // Use main actor to ensure UI updates are thread-safe
+        DispatchQueue.main.async {
+            self.currentTheme = theme
+            // Post theme change notification
+            NotificationCenter.default.post(name: .appThemeDidChange, object: theme.rawValue)
+        }
     }
     
     /// Toggle between light and dark modes (skipping system)
@@ -176,10 +182,26 @@ extension View {
 /// Modifier that applies the app theme from ThemeManager
 struct AppThemeModifier: ViewModifier {
     @ObservedObject private var themeManager = ThemeManager.shared
+    @State private var lastTheme: AppThemeMode? = nil
     
     func body(content: Content) -> some View {
         content
             .preferredColorScheme(themeManager.effectiveColorScheme())
-            .animation(.easeInOut(duration: 0.2), value: themeManager.currentTheme)
+            .onChange(of: themeManager.currentTheme) { _, newValue in
+                // Only apply animation if this isn't the first appearance
+                if lastTheme != nil {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        lastTheme = newValue
+                    }
+                } else {
+                    lastTheme = newValue
+                }
+            }
+            .onAppear {
+                // Initialize the last theme on first appearance
+                if lastTheme == nil {
+                    lastTheme = themeManager.currentTheme
+                }
+            }
     }
 } 

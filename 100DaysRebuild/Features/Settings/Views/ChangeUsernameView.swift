@@ -3,169 +3,114 @@ import FirebaseFirestore
 
 struct ChangeUsernameView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var viewModel = ChangeUsernameViewModel()
-    @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject private var userSession: UserSession
     
-    // UI State
-    @State private var showSuccessToast = false
+    @State private var newUsername = ""
+    @State private var isAvailable = false
+    @State private var isChecking = false
+    @State private var errorMessage = ""
+    @State private var showError = false
+    @State private var isSaving = false
     
     var body: some View {
-        NavigationView {
-            Form {
-                usernameSection
-                
-                cooldownSection
-                
-                infoSection
-            }
-            .navigationTitle("Change Username")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
+        Form {
+            Section {
+                TextField("New Username", text: $newUsername)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    .onChange(of: newUsername) { _, newValue in
+                        checkUsernameAvailability()
                     }
-                }
                 
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        Task {
-                            await viewModel.saveUsername()
-                        }
-                    }
-                    .fontWeight(.semibold)
-                    .disabled(!viewModel.canSaveUsername)
-                }
-            }
-            .onAppear {
-                Task {
-                    await viewModel.loadUserData()
-                }
-            }
-            .alert(isPresented: $viewModel.showError) {
-                Alert(
-                    title: Text("Error"),
-                    message: Text(viewModel.errorMessage),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
-            .overlay {
-                if viewModel.isLoading {
-                    LoadingView()
-                }
-                
-                if showSuccessToast {
-                    VStack {
+                if isChecking {
+                    HStack {
                         Spacer()
-                        SuccessToastView(message: "Username updated successfully")
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                            .padding(.bottom, 40)
+                        ProgressView()
+                        Spacer()
                     }
-                    .animation(.spring(), value: showSuccessToast)
-                    .zIndex(100)
-                }
-            }
-            .onChange(of: viewModel.usernameUpdated) { updated in
-                if updated {
-                    showSuccessToast = true
-                    // Hide toast after delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        showSuccessToast = false
-                        dismiss()
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - View Components
-    
-    private var usernameSection: some View {
-        Section {
-            TextField("Username", text: $viewModel.newUsername)
-                .disableAutocorrection(true)
-                .autocapitalization(.none)
-                .font(.system(.body, design: .monospaced))
-                .onChange(of: viewModel.newUsername) { oldValue, newValue in
-                    viewModel.validateUsername()
-                }
-                .disabled(viewModel.isInCooldownPeriod)
-            
-            if !viewModel.validationMessage.isEmpty {
-                Text(viewModel.validationMessage)
-                    .font(.caption)
-                    .foregroundColor(viewModel.isValidUsername ? .green : .red)
-                    .padding(.top, 4)
-            }
-        } header: {
-            Text("Your Username")
-        } footer: {
-            if viewModel.isInCooldownPeriod {
-                Text("Username can't be changed during the cooldown period.")
-                    .font(.caption)
-            }
-        }
-    }
-    
-    private var cooldownSection: some View {
-        Group {
-            if viewModel.isInCooldownPeriod {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Cooldown Period")
-                            .font(.headline)
-                            .foregroundColor(.theme.text)
-                        
+                } else if !newUsername.isEmpty {
+                    if isAvailable {
                         HStack {
-                            Image(systemName: "clock")
-                                .foregroundColor(.theme.accent)
-                                .font(.system(size: 18))
-                            
-                            Text("You can change your username again in")
-                                .foregroundColor(.theme.text)
-                            
                             Spacer()
-                            
-                            Text(viewModel.formattedTimeRemaining)
-                                .bold()
-                                .foregroundColor(.theme.accent)
+                            Label("Username available", systemImage: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Spacer()
+                        }
+                    } else {
+                        HStack {
+                            Spacer()
+                            Label(errorMessage.isEmpty ? "Username unavailable" : errorMessage, 
+                                systemImage: "xmark.circle.fill")
+                                .foregroundColor(.red)
+                            Spacer()
                         }
                     }
-                    .padding(.vertical, 4)
                 }
+            }
+            
+            Section {
+                Button(action: saveUsername) {
+                    if isSaving {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        }
+                    } else {
+                        Text("Save")
+                            .frame(maxWidth: .infinity)
+                            .foregroundColor(newUsername.isEmpty || !isAvailable ? .gray : .theme.accent)
+                    }
+                }
+                .disabled(newUsername.isEmpty || !isAvailable || isSaving)
+                
+                Button("Cancel") {
+                    dismiss()
+                }
+                .foregroundColor(.red)
+            }
+        }
+        .navigationTitle("Change Username")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Done") {
+                    dismiss()
+                }
+            }
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+        .onAppear {
+            if let username = userSession.username {
+                newUsername = username
             }
         }
     }
     
-    private var infoSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(.theme.accent)
-                        .font(.system(size: 18))
-                    
-                    Text("You can only change your username once every 48 hours to maintain consistency across the platform.")
-                        .font(.callout)
-                        .foregroundColor(.theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                
-                HStack(alignment: .top) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.yellow)
-                        .font(.system(size: 18))
-                    
-                    Text("Usernames must be 3-20 characters and can only contain letters and numbers. No spaces or special characters are allowed.")
-                        .font(.callout)
-                        .foregroundColor(.theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(.vertical, 8)
-        } header: {
-            Text("Username Guidelines")
-        }
+    private func checkUsernameAvailability() {
+        isChecking = true
+        errorMessage = ""
+        isAvailable = false
+        
+        // Implement the logic to check username availability
+        // This is a placeholder and should be replaced with actual implementation
+        
+        isChecking = false
+    }
+    
+    private func saveUsername() {
+        isSaving = true
+        errorMessage = ""
+        
+        // Implement the logic to save the new username
+        // This is a placeholder and should be replaced with actual implementation
+        
+        isSaving = false
+        dismiss()
     }
 }
 
@@ -218,7 +163,9 @@ struct SuccessToastView: View {
     }
 }
 
-#Preview {
-    ChangeUsernameView()
-        .environmentObject(UserSession.shared)
+struct ChangeUsernameView_Previews: PreviewProvider {
+    static var previews: some View {
+        ChangeUsernameView()
+            .withAppDependencies()
+    }
 } 

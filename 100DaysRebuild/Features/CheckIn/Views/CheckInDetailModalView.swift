@@ -445,7 +445,7 @@ struct ShareCardView: View {
             .navigationBarItems(leading: Button("Cancel") { dismiss() })
             .sheet(isPresented: $showingShareSheet) {
                 if let image = shareImage {
-                    Utilities_ShareSheet(items: [image])
+                    ShareSheet(items: [image])
                 }
             }
         }

@@ -44,7 +44,7 @@ struct ChallengesView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: AppSpacing.iconSizeSmall, weight: .semibold))
                     }
                 }
             }
@@ -66,24 +66,24 @@ struct ChallengesView: View {
                     // Assuming a CheckInView exists or create a simple one
                     VStack {
                         Text("Check in to: \(challenge.title)")
-                            .font(.headline)
-                            .padding()
+                            .font(AppTypography.headline)
+                            .padding(AppSpacing.m)
                         
                         Button("Check In") {
                             checkInToChallenge(challenge)
                             isShowingCheckInSheet = false
                         }
-                        .padding()
+                        .padding(AppSpacing.m)
                         .background(Color.theme.accent)
                         .foregroundColor(.white)
-                        .cornerRadius(10)
+                        .cornerRadius(AppSpacing.cardCornerRadius)
                         
                         Button("Cancel") {
                             isShowingCheckInSheet = false
                         }
-                        .padding()
+                        .padding(AppSpacing.m)
                     }
-                    .padding()
+                    .padding(AppSpacing.m)
                     .frame(width: 300, height: 250)
                 }
             }
@@ -139,65 +139,66 @@ struct ChallengesView: View {
     }
     
     private var loadingView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: AppSpacing.m) {
             ProgressView()
                 .scaleEffect(1.5)
                 .tint(.theme.accent)
             
             Text("Loading challenges...")
-                .font(.headline)
+                .font(AppTypography.headline)
                 .foregroundColor(.theme.text)
             
             Text("Hold tight as we fetch your latest data")
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+                .padding(.horizontal, AppSpacing.xl)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.theme.background)
     }
     
     private var emptyStateView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: AppSpacing.m) {
             GreetingView(viewModel: viewModel)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .padding(.bottom, AppSpacing.xs)
             
             FliqloTimerView(viewModel: viewModel)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .padding(.bottom, AppSpacing.l)
             
             Image(systemName: "flag.fill")
                 .font(.system(size: 70))
                 .foregroundColor(.theme.accent.opacity(0.7))
-                .padding(.bottom, 16)
+                .padding(.bottom, AppSpacing.m)
             
             Text("No Challenges Yet")
-                .font(.title2)
+                .font(AppTypography.title2)
                 .bold()
                 .foregroundColor(.theme.text)
             
             Text("Start your first 100-day challenge and begin tracking your progress.")
-                .font(.body)
+                .font(AppTypography.body)
                 .multilineTextAlignment(.center)
                 .foregroundColor(.theme.subtext)
-                .padding(.horizontal)
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
             
             Button(action: { viewModel.isShowingNewChallenge = true }) {
                 Text("Create Challenge")
-                    .font(.headline)
+                    .font(AppTypography.headline)
                     .foregroundColor(.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 30)
+                    .padding(.vertical, AppSpacing.buttonVerticalPadding)
+                    .padding(.horizontal, AppSpacing.buttonHorizontalPadding)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                             .fill(Color.theme.accent)
                     )
             }
-            .padding(.top, 12)
+            .buttonStyle(AppScaleButtonStyle())
+            .padding(.top, AppSpacing.s)
         }
-        .padding()
+        .padding(AppSpacing.m)
     }
     
     private var challengeListView: some View {
@@ -207,21 +208,21 @@ struct ChallengesView: View {
             }
             
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: AppSpacing.l) {
                     GreetingView(viewModel: viewModel)
-                        .padding(.horizontal)
-                        .padding(.top, 16)
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.top, AppSpacing.m)
                     
                     FliqloTimerView(viewModel: viewModel)
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.bottom, AppSpacing.xs)
                     
-                    LazyVStack(spacing: 16) {
+                    LazyVStack(spacing: AppSpacing.m) {
                         ForEach(viewModel.challenges) { challenge in
                             challengeCardView(challenge)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                 }
             }
         }
@@ -239,7 +240,7 @@ struct ChallengesView: View {
                 }
             }
         )
-        .padding(.bottom, 4)
+        .padding(.bottom, AppSpacing.xxs)
         .contentShape(Rectangle())
         .contextMenu {
             Button {
@@ -317,8 +318,8 @@ struct ChallengesOfflineBanner: View {
                 .foregroundColor(.secondary)
             Spacer()
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+        .padding(.vertical, AppSpacing.xs)
         .background(Color(.systemGray6))
         .transition(.move(edge: .top).combined(with: .opacity))
     }
@@ -371,28 +372,28 @@ struct NewChallengeSheet: View {
                     .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
                     
                     if isTimed {
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: AppSpacing.xs) {
                             Text("Timer challenges require you to complete a timed session before checking in.")
                                 .font(.callout)
                                 .foregroundColor(.theme.subtext)
-                                .padding(.vertical, 4)
+                                .padding(.vertical, AppSpacing.xxs)
                         }
                     }
                 }
                 
                 Section(header: Text("Popular Challenge Ideas")) {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
+                        HStack(spacing: AppSpacing.xs) {
                             ForEach(challengeSuggestions, id: \.self) { suggestion in
                                 Button(action: {
                                     viewModel.challengeTitle = suggestion
                                 }) {
                                     Text(suggestion)
                                         .font(.footnote)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, AppSpacing.s)
+                                        .padding(.vertical, AppSpacing.xs)
                                         .background(
-                                            RoundedRectangle(cornerRadius: 16)
+                                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                                 .fill(Color.theme.surface)
                                                 .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
                                         )
@@ -400,7 +401,7 @@ struct NewChallengeSheet: View {
                                 }
                             }
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, AppSpacing.xs)
                     }
                     .padding(.horizontal, -16)
                 }
@@ -536,7 +537,7 @@ struct GreetingView: View {
     
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(viewModel.getGreeting())
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
@@ -557,8 +558,8 @@ struct GreetingView: View {
                     .font(.system(size: 24))
             }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
+        .padding(.vertical, AppSpacing.s)
+        .padding(.horizontal, AppSpacing.xs)
         .background(Color.theme.background)
         .transition(.opacity)
     }
@@ -591,15 +592,15 @@ struct FliqloTimerView: View {
     @ObservedObject var viewModel: ChallengesViewModel
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: AppSpacing.xs) {
             if viewModel.lastCheckInDate == nil {
                 Text("You haven't checked in yet — today's your Day 1.")
                     .font(.headline)
                     .foregroundColor(.theme.accent)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, AppSpacing.xs)
             } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: AppSpacing.s) {
+                    HStack(spacing: AppSpacing.xs) {
                         Image(systemName: "clock")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.theme.accent)
@@ -613,7 +614,7 @@ struct FliqloTimerView: View {
                         Text("Last check-in: \(formattedDate(lastCheckIn))")
                             .font(.subheadline)
                             .foregroundColor(.theme.subtext)
-                            .padding(.bottom, 4)
+                            .padding(.bottom, AppSpacing.xxs)
                     }
                     
                     // Use TimelineView to update every second
@@ -624,9 +625,9 @@ struct FliqloTimerView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
+        .padding(AppSpacing.cardPadding)
         .background(
-            RoundedRectangle(cornerRadius: 16)
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 5)
         )
@@ -644,7 +645,7 @@ struct ModernFlipClockView: View {
     var timeString: String
     
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: AppSpacing.s) {
             // Parse the timeString (format: "Xh Ym Zs")
             let components = timeString.components(separatedBy: " ")
             
@@ -657,16 +658,16 @@ struct ModernFlipClockView: View {
                     let digitPart = String(component.dropLast())
                     let unitPart = String(component.suffix(1))
                     
-                    VStack(spacing: 4) {
+                    VStack(spacing: AppSpacing.xxs) {
                         // Create flip panel for the digit
                         Text(digitPart)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundColor(.theme.text)
                             .frame(minWidth: 60)
-                            .padding(.vertical, 8)
+                            .padding(.vertical, AppSpacing.xs)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: AppSpacing.s)
                                     .fill(
                                         LinearGradient(
                                             gradient: Gradient(colors: [

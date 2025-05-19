@@ -5,24 +5,54 @@ import FirebaseAuth
 struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
     @Environment(\.colorScheme) private var colorScheme
+    @State private var scrollOffset: CGFloat = 0
+    
+    // Social gradient for header title
+    private let socialGradient = LinearGradient(
+        gradient: Gradient(colors: [Color.theme.accent, Color.purple.opacity(0.7)]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Social coming soon header
-                socialComingSoonHeader
-                
-                // Username card
-                usernameCard
-                
-                // Social links section
-                socialLinksSection
-                    .padding(.top)
+        ZStack(alignment: .top) {
+            // Background
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // Content with scroll tracking
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Spacer to push content below the header
+                    Color.clear
+                        .frame(height: 110)
+                    
+                    // Main content
+                    VStack(spacing: 24) {
+                        // Social coming soon header
+                        socialComingSoonHeader
+                        
+                        // Username card
+                        usernameCard
+                        
+                        // Social links section
+                        socialLinksSection
+                            .padding(.top)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 16)
+                }
+                .trackScrollOffset($scrollOffset)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 16)
+            
+            // Overlay the dynamic header
+            ScrollAwareHeaderView(
+                title: "Social",
+                scrollOffset: $scrollOffset,
+                subtitle: "Connect with others",
+                accentGradient: socialGradient
+            )
         }
-        .background(Color.theme.background.ignoresSafeArea())
         .overlay {
             if viewModel.isLoading {
                 LoadingOverlay()

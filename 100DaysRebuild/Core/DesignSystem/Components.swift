@@ -8,35 +8,35 @@ public enum AppComponents {
     public struct Card<Content: View>: View {
         let content: Content
         private var hasShadow: Bool
-        private var cornerRadius: CGFloat
+        private var includeBorder: Bool
         @Environment(\.colorScheme) private var colorScheme
         
         public init(
-            cornerRadius: CGFloat = 16,
             hasShadow: Bool = true,
+            includeBorder: Bool = false,
             @ViewBuilder content: () -> Content
         ) {
             self.content = content()
             self.hasShadow = hasShadow
-            self.cornerRadius = cornerRadius
+            self.includeBorder = includeBorder
         }
         
         public var body: some View {
             content
-                .padding()
+                .padding(AppSpacing.cardPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: cornerRadius)
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                         .fill(Color.theme.surface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: cornerRadius)
+                        .conditionalOverlay(includeBorder) {
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                 .stroke(Color.theme.border, lineWidth: 1)
                                 .opacity(colorScheme == .dark ? 0.3 : 0.1)
-                        )
+                        }
                         .shadow(
                             color: hasShadow ? Color.theme.shadow : .clear,
-                            radius: colorScheme == .dark ? 12 : 8,
+                            radius: colorScheme == .dark ? 10 : 6,
                             x: 0,
-                            y: 4
+                            y: 2
                         )
                 )
         }
@@ -53,15 +53,15 @@ public enum AppComponents {
         
         public var body: some View {
             content
-                .padding()
+                .padding(AppSpacing.cardPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                         .fill(Color.theme.surface.opacity(colorScheme == .dark ? 0.4 : 0.8))
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                 .stroke(Color.theme.border, lineWidth: 1)
                         )
-                        .shadow(color: Color.theme.shadow, radius: 10, x: 0, y: 4)
+                        .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
                         .blur(radius: 0.5)
                 )
         }
@@ -82,11 +82,11 @@ public enum AppComponents {
         
         public var body: some View {
             content
-                .padding()
+                .padding(AppSpacing.cardPadding)
                 .background(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                         .fill(gradient)
-                        .shadow(color: Color.theme.shadow, radius: 10, x: 0, y: 4)
+                        .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
                 )
         }
     }
@@ -132,22 +132,22 @@ public enum AppComponents {
         
         public var body: some View {
             Text(text)
-                .font(.caption)
+                .font(AppTypography.caption)
                 .fontWeight(.medium)
                 .foregroundColor(style == .outlined ? color : .white)
-                .padding(.horizontal, style == .capsule ? 10 : 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, style == .capsule ? AppSpacing.xs : AppSpacing.xs)
+                .padding(.vertical, AppSpacing.xxs)
                 .background(
                     Group {
                         switch style {
                         case .filled:
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: AppSpacing.xs)
                                 .fill(color)
                         case .outlined:
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: AppSpacing.xs)
                                 .stroke(color, lineWidth: 1.5)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 8)
+                                    RoundedRectangle(cornerRadius: AppSpacing.xs)
                                         .fill(Color.theme.surface)
                                 )
                         case .capsule:
@@ -168,7 +168,7 @@ public enum AppComponents {
         public init(
             value: Double,
             color: Color = Color.theme.accent,
-            height: CGFloat = 8
+            height: CGFloat = AppSpacing.xs
         ) {
             self.value = max(0, min(1, value))
             self.color = color

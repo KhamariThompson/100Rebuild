@@ -165,7 +165,7 @@ struct ChallengeCardView: View {
                         .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
                     )
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(AppScaleButtonStyle())
                 .disabled(isPerformingCheckIn)
             } else if challenge.isCompleted {
                 HStack {

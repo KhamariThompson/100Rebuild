@@ -1,5 +1,50 @@
 # Implemented Fixes
 
+## Firebase Initialization Fixes
+
+- **Proper Firebase Configuration**: Fixed Firebase initialization in AppDelegate to ensure it happens before any Firebase services are accessed.
+- **Reliable Firebase Detection**: Added logic to verify Firebase is properly initialized and configured before use.
+- **Offline Persistence**: Configured Firestore with proper offline persistence settings (100MB cache).
+- **Firestore Connectivity Monitoring**: Added special connectivity handling for Firestore with DNS resolution checks.
+- **Recovery from DNS Issues**: Implemented automatic reconnection logic when "firestore.googleapis.com" DNS resolution fails.
+
+## Network Connectivity Improvements
+
+- **Enhanced NetworkMonitor**: Added advanced network state detection with interface type checking and DNS resolution.
+- **Firestore-specific Connectivity**: Added specific monitoring for Firestore connections separate from general network state.
+- **Periodic Network Checks**: Implemented regular validation of connectivity state every 30 seconds.
+- **DNS Resolution Troubleshooting**: Added specific handling for DNS resolution issues that were causing Firebase connectivity problems.
+
+## RevenueCat Configuration Fixes
+
+- **Proper Initialization Order**: Configured RevenueCat after Firebase to ensure proper dependency initialization.
+- **Improved Error Handling**: Added custom error handler to properly log and suppress expected errors.
+- **Retry Logic for Offerings**: Added retry mechanism for offerings that fail to load initially.
+- **Fallback Pricing**: Implemented robust fallback mechanism when RevenueCat offerings aren't configured.
+- **Proper User Identification**: Fixed user identification with RevenueCat to ensure proper subscription tracking.
+
+## Authentication Service Fixes
+
+- **Robust User Session Management**: Improved error handling and state management in UserSession.
+- **Apple Sign In Error Fixes**: Added handling for "No active account" error from Apple Authentication Services.
+- **Safe User Profile Loading**: Added network and availability checks before loading user profiles.
+
+## UI/Layout Fixes
+
+- **Input Assistant Constraint Fixes**: Fixed SystemInputAssistantView constraint issues causing CGAffineTransformInvert errors.
+- **Apple Sign In Button Constraints**: Fixed constraints on ASAuthorizationAppleIDButton.
+- **Navigation Bar Appearance**: Standardized navigation bar appearance settings.
+
+## Other Improvements
+
+- **Improved Logging**: Enhanced debug logging for network status, Firebase configuration, and RevenueCat operations.
+- **Error Resilience**: Made the app more resilient to transient errors, especially during startup.
+
+## Known Issues
+
+- RevenueCat offerings configuration may still require setup from the RevenueCat dashboard.
+- In extremely poor network conditions, the initial Firestore connection might still time out, but the retry logic will recover.
+
 ## Fix 1: Firebase Initialization Issues
 
 - Moved Firebase configuration to the AppDelegate's didFinishLaunchingWithOptions
@@ -47,3 +92,45 @@
 - Added consistent UI feedback with loading indicators and success animations
 - Ensured profile photos persist across app views through UserSession updates
 - Created a reusable photo source picker with better UI integration
+
+## Auto Layout Constraint Fixes (May 19, 2023)
+
+### Issues Fixed
+
+- Fixed recurring Auto Layout constraint warnings about `UIView-Encapsulated-Layout-Height == 0`
+- Fixed `CGAffineTransformInvert: singular matrix` errors
+- Resolved conflicting constraints involving `SwiftUI.UIKitNavigationBar` and `UIFocusContainerGuide`
+- Eliminated repeated constraint breakage warnings in the console
+
+### Implementation Details
+
+1. **Fixed NavigationView Nesting**
+
+   - Removed nested NavigationViews in tab content
+   - Applied a single NavigationView at the MainAppView level
+   - Updated tab wrapper views to avoid duplicating navigation contexts
+
+2. **Improved SettingsView Presentation**
+
+   - Fixed app freezing when tapping settings gear icon in ProfileView
+   - Used withAppDependencies() instead of creating multiple new environment objects
+   - Prevents creation of duplicate ThemeManager instances
+
+3. **Enhanced Sheet Presentations**
+
+   - Created a new fixedSheet modifier for consistent sheet presentations
+   - Automatically applies proper environment objects and navigation fixes
+   - Prevents layout conflicts between sheets and navigation views
+
+4. **Added Layout Healing Modifiers**
+
+   - Added FixNavigationLayoutModifier to enforce proper layout rules
+   - Created SafeAreaKey PreferenceKey for dynamic safe area handling
+   - Implemented GeometryReader techniques to respect device safe areas
+
+5. **Refactored ProgressView Layout**
+   - Removed unnecessary nested NavigationView
+   - Improved header layout with dynamic spacing
+   - Fixed analytics button presentation
+
+These changes eliminated the repeating layout constraint warnings by addressing structural issues in the navigation hierarchy and ensuring proper dependency injection patterns.

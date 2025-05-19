@@ -7,6 +7,7 @@ enum SubscriptionError: Error {
     case restoreFailed
     case unknown
     case timeout
+    case notSignedIntoAppStore
 }
 
 enum SubscriptionPlan: String {
@@ -68,6 +69,9 @@ class SubscriptionViewModel: ObservableObject {
         
         do {
             try await subscriptionService.purchaseSubscription(plan: plan)
+        } catch SubscriptionError.notSignedIntoAppStore {
+            errorMessage = "You need to be signed into the App Store to make purchases. Please sign in through Settings app."
+            showError = true
         } catch {
             errorMessage = "Failed to purchase subscription: \(error.localizedDescription)"
             showError = true
@@ -87,6 +91,9 @@ class SubscriptionViewModel: ObservableObject {
                 errorMessage = "No previous purchases found to restore"
                 showError = true
             }
+        } catch SubscriptionError.notSignedIntoAppStore {
+            errorMessage = "You need to be signed into the App Store to restore purchases. Please sign in through Settings app."
+            showError = true
         } catch {
             errorMessage = "Failed to restore purchases: \(error.localizedDescription)"
             showError = true

@@ -538,6 +538,10 @@ class UserProgressViewModelImpl: ObservableObject {
                     return date
                 case .milestone(_, _, _, let date):
                     return date
+                case .streak(_, let date):
+                    return date
+                case .completion(_, let date):
+                    return date
                 }
             }
             

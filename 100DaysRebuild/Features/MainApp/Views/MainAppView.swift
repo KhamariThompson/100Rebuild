@@ -33,6 +33,7 @@ struct MainAppView: View {
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var userStatsService = UserStatsService.shared
     @StateObject private var viewModel = ProgressDashboardViewModel.shared
+    @EnvironmentObject var themeManager: ThemeManager
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
     @State private var showPaywall = false
@@ -42,77 +43,83 @@ struct MainAppView: View {
     @AppStorage("isHighContrastEnabled") private var isHighContrastEnabled = false
     
     var body: some View {
-        ZStack {
-            // Background color covering entire screen
-            Color.theme.background
-                .ignoresSafeArea()
-                .zIndex(-1) // Ensure background is at the bottom
-            
-            // Main tab view showing tabs
-            TabView(selection: $router.selectedTab) {
-                ChallengesView()
-                    .tabItem {
-                        Image(systemName: "flag.fill")
-                            .renderingMode(.template)
-                            .foregroundColor(.theme.accent)
-                        Text("Challenges")
-                    }
-                    .tag(0)
+        NavigationView {
+            ZStack {
+                // Background color covering entire screen
+                Color.theme.background
+                    .ignoresSafeArea()
+                    .zIndex(-1) // Ensure background is at the bottom
                 
-                ProgressView()
-                    .environmentObject(viewModel)
-                    .tabItem {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .renderingMode(.template)
-                            .foregroundColor(.theme.accent)
-                        Text("Progress")
-                    }
-                    .tag(1)
+                // Main tab view showing tabs
+                TabView(selection: $router.selectedTab) {
+                    ChallengesView()
+                        .tabItem {
+                            Image(systemName: "flag.fill")
+                                .renderingMode(.template)
+                                .foregroundColor(.theme.accent)
+                            Text("Challenges")
+                        }
+                        .tag(0)
+                    
+                    ProgressView()
+                        .environmentObject(viewModel)
+                        .tabItem {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .renderingMode(.template)
+                                .foregroundColor(.theme.accent)
+                            Text("Progress")
+                        }
+                        .tag(1)
+                    
+                    MainApp_SocialTabView()
+                        .tabItem {
+                            Image(systemName: "person.2.fill")
+                                .renderingMode(.template)
+                                .foregroundColor(.theme.accent)
+                            Text("Social")
+                        }
+                        .tag(2)
+                    
+                    ProfileView()
+                        .tabItem {
+                            Image(systemName: "person.fill")
+                                .renderingMode(.template)
+                                .foregroundColor(.theme.accent)
+                            Text("Profile")
+                        }
+                        .tag(3)
+                }
+                .accentColor(Color.theme.accent) // Set explicit accent color for tab items
+                .onChange(of: router.selectedTab) { newValue in
+                    router.changeTab(to: newValue)
+                }
+                .zIndex(1) // Ensure tab view is above background but below overlays
+                .environmentObject(router)
+                .environmentObject(subscriptionService)
+                .environmentObject(notificationService)
+                .environmentObject(userStatsService)
+                .environmentObject(themeManager)
                 
-                MainApp_SocialTabView()
-                    .tabItem {
-                        Image(systemName: "person.2.fill")
-                            .renderingMode(.template)
-                            .foregroundColor(.theme.accent)
-                        Text("Social")
-                    }
-                    .tag(2)
+                // Paywall overlay with theme awareness
+                if subscriptionService.showPaywall {
+                    PaywallView()
+                        .environmentObject(themeManager)
+                        .withAppTheme() // Apply theme explicitly to the overlay
+                        .transition(.opacity)
+                        .zIndex(100)
+                }
                 
-                ProfileView()
-                    .tabItem {
-                        Image(systemName: "person.fill")
-                            .renderingMode(.template)
-                            .foregroundColor(.theme.accent)
-                        Text("Profile")
-                    }
-                    .tag(3)
-            }
-            .accentColor(Color.theme.accent) // Set explicit accent color for tab items
-            .onChange(of: router.selectedTab) { newValue in
-                router.changeTab(to: newValue)
-            }
-            .zIndex(1) // Ensure tab view is above background but below overlays
-            .environmentObject(router)
-            .environmentObject(subscriptionService)
-            .environmentObject(notificationService)
-            .environmentObject(userStatsService)
-            
-            // Paywall overlay with theme awareness
-            if subscriptionService.showPaywall {
-                PaywallView()
-                    .withAppTheme() // Apply theme explicitly to the overlay
-                    .transition(.opacity)
-                    .zIndex(100)
-            }
-            
-            // Notification settings overlay with theme awareness
-            if showNotificationSettings {
-                NotificationSettingsView(isPresented: $showNotificationSettings)
-                    .withAppTheme() // Apply theme explicitly to the overlay
-                    .transition(.opacity)
-                    .zIndex(101)
+                // Notification settings overlay with theme awareness
+                if showNotificationSettings {
+                    NotificationSettingsView(isPresented: $showNotificationSettings)
+                        .environmentObject(themeManager)
+                        .withAppTheme() // Apply theme explicitly to the overlay
+                        .transition(.opacity)
+                        .zIndex(101)
+                }
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // Important for consistent navigation style
         .background(Color.theme.background) // Additional background to ensure no transparency
         .onAppear {
             setupTabBarAppearance()
@@ -173,13 +180,9 @@ struct MainAppView: View {
 }
 
 // These wrapper views ensure each tab has its own navigation context
-struct ChallengesTabView: View {
+struct MainApp_ChallengesTabView: View {
     var body: some View {
-        NavigationView {
-            ChallengesView()
-                .navigationTitle("Challenges")
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
+        ChallengesView()
     }
 }
 
@@ -187,32 +190,20 @@ struct ProgressTabView: View {
     @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
     
     var body: some View {
-        NavigationView {
-            ProgressView()
-                .environmentObject(progressViewModel)
-                .navigationTitle("Progress")
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
+        ProgressView()
+            .environmentObject(progressViewModel)
     }
 }
 
 struct MainApp_SocialTabView: View {
     var body: some View {
-        NavigationView {
-            SocialView()
-                .navigationTitle("Social")
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
+        SocialView()
     }
 }
 
 struct ProfileTabView: View {
     var body: some View {
-        NavigationView {
-            ProfileView()
-                .navigationTitle("Profile")
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
+        ProfileView()
     }
 }
 

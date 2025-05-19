@@ -64,34 +64,34 @@ struct ProBlurredPreview: ViewModifier {
                     // Show overlay only for non-pro users
                     ZStack {
                         if !subscriptionService.isProUser {
-                            VStack(spacing: 12) {
+                            VStack(spacing: AppSpacing.s) {
                                 Text(message)
-                                    .font(.headline)
+                                    .font(AppTypography.headline)
                                     .multilineTextAlignment(.center)
-                                    .foregroundColor(.theme.text)
-                                    .padding(.bottom, 8)
+                                    .foregroundColor(Color.theme.text)
+                                    .padding(.bottom, AppSpacing.xs)
                                 
                                 Button {
                                     subscriptionService.showPaywall = true
                                 } label: {
                                     Text("Upgrade to Pro")
-                                        .font(.subheadline.bold())
+                                        .font(AppTypography.subheadline.bold())
                                         .foregroundColor(.white)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, AppSpacing.m)
+                                        .padding(.vertical, AppSpacing.xs)
                                         .background(
                                             Capsule()
                                                 .fill(Color.theme.accent)
                                         )
                                 }
                             }
-                            .padding()
+                            .padding(AppSpacing.m)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                     .fill(Color.theme.surface.opacity(0.95))
-                                    .shadow(color: Color.black.opacity(0.15), radius: 10)
+                                    .shadow(color: Color.theme.shadow, radius: 10)
                             )
-                            .padding()
+                            .padding(AppSpacing.m)
                         }
                     }
                 )

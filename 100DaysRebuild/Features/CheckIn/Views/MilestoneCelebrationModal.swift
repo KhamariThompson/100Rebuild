@@ -257,7 +257,7 @@ struct MilestoneShareCardView: View {
             }
             .sheet(isPresented: $showShareSheet) {
                 if let image = shareImage {
-                    Utilities_ShareSheet(items: [image])
+                    ShareSheet(items: [image])
                 }
             }
         }

@@ -28,6 +28,10 @@ class SubscriptionService: ObservableObject {
     private var isLoadingOfferings = false
     private var didAttemptOfferingsLoad = false
     
+    // Add retry logic for offerings
+    private var offeringsRetryCount = 0
+    private let maxOfferingsRetries = 3
+    
     // RevenueCat API key
     private var apiKey: String {
         // Production SDK API key (not secret key)
@@ -38,6 +42,9 @@ class SubscriptionService: ObservableObject {
     private let monthlyProductID = "com.KhamariThompson.100Days.monthly"
     
     private init() {
+        // Configure custom error handling
+        setupRevenueCatErrorHandling()
+        
         // Initialize RevenueCat
         setupRevenueCat()
         
@@ -77,15 +84,37 @@ class SubscriptionService: ObservableObject {
         }
     }
     
+    // Add method to set up custom error handling for RevenueCat
+    private func setupRevenueCatErrorHandling() {
+        print("Configuring RevenueCat error handling...")
+        // This will be called by the RevenueCat SDK after configure
+        Purchases.logHandler = { level, message in
+            // Filter out the offerings not configured errors that are expected during development
+            if message.contains("There are no products registered in the RevenueCat dashboard for your offerings") {
+                // Just log that we're using fallback pricing
+                print("No products registered in RevenueCat dashboard, using fallback pricing mechanism")
+                return
+            }
+            
+            // Log other messages as usual
+            if level == .debug {
+                print("RC: ℹ️ \(message)")
+            } else if level == .info {
+                print("RC: ℹ️ \(message)")
+            } else if level == .warn {
+                print("RC: ⚠️ \(message)")
+            } else if level == .error {
+                print("RC: ❌ \(message)")
+            }
+        }
+    }
+    
     private func setupRevenueCat() {
         // Only configure if not already configured
         if Purchases.isConfigured {
             print("RevenueCat is already configured, skipping initialization")
             return
         }
-        
-        // Configure RevenueCat with API key
-        Purchases.configure(withAPIKey: apiKey)
         
         // Enable debug logs to help troubleshoot
         #if DEBUG
@@ -94,23 +123,8 @@ class SubscriptionService: ObservableObject {
         Purchases.logLevel = .error
         #endif
         
-        // Setup custom error handling to suppress offerings errors
-        Purchases.logHandler = { level, message in
-            // Filter out the offerings not configured errors that are expected during development
-            if message.contains("There are no products registered in the RevenueCat dashboard for your offerings") {
-                // Just ignore these messages completely
-                return
-            }
-            
-            // Log other messages as usual
-            if level == .debug {
-                #if DEBUG
-                print("RC: \(message)")
-                #endif
-            } else if level == .error || level == .info {
-                print("RevenueCat Error: \(message)")
-            }
-        }
+        // Configure RevenueCat with API key
+        Purchases.configure(withAPIKey: apiKey)
         
         // Ensure entitlements are configured correctly
         print("RevenueCat configured with key: \(apiKey)")
@@ -163,13 +177,22 @@ class SubscriptionService: ObservableObject {
     private func listenForTransactions() {
         // Listen for StoreKit transaction updates
         Task {
-            for await result in Transaction.updates {
-                if case .verified(let transaction) = result {
-                    // Always finish the transaction after handling
-                    await transaction.finish()
-                    
-                    // Update subscription status
-                    await updateSubscriptionStatus()
+            do {
+                for await result in Transaction.updates {
+                    if case .verified(let transaction) = result {
+                        // Always finish the transaction after handling
+                        await transaction.finish()
+                        
+                        // Update subscription status
+                        await updateSubscriptionStatus()
+                    }
+                }
+            } catch {
+                // Handle "No active account" error
+                if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                    print("StoreKit: No active account, ignoring.")
+                } else {
+                    print("Unhandled transaction error: \(error.localizedDescription)")
                 }
             }
         }
@@ -185,6 +208,10 @@ class SubscriptionService: ObservableObject {
             // Load fallback pricing if we have products
             if !availableProducts.isEmpty {
                 await loadFallbackPricing()
+            } else {
+                // Use default fallback pricing since no products are available
+                print("No StoreKit product available either, using hardcoded fallback price")
+                self.fallbackPricing = "$4.99"
             }
             
             // Log available products for debug
@@ -193,6 +220,7 @@ class SubscriptionService: ObservableObject {
             }
         } catch {
             print("Failed to load products: \(error.localizedDescription)")
+            self.fallbackPricing = "$4.99" // Fallback price if products can't be loaded
         }
     }
     
@@ -220,18 +248,32 @@ class SubscriptionService: ObservableObject {
                 return
             }
         } catch {
-            print("Failed to check RevenueCat subscription: \(error.localizedDescription)")
+            // Handle "No active account" error
+            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                print("StoreKit: No active account, ignoring when checking RevenueCat subscription.")
+            } else {
+                print("Failed to check RevenueCat subscription: \(error.localizedDescription)")
+            }
         }
         
         // Fallback to StoreKit 2 if RevenueCat check failed
         let detachedTask = Task.detached {
-            for await result in Transaction.currentEntitlements {
-                if case .verified(let transaction) = result {
-                    Task { @MainActor in
-                        self.isProUser = true
-                        self.renewalDate = transaction.expirationDate
+            do {
+                for await result in Transaction.currentEntitlements {
+                    if case .verified(let transaction) = result {
+                        Task { @MainActor in
+                            self.isProUser = true
+                            self.renewalDate = transaction.expirationDate
+                        }
+                        return
                     }
-                    return
+                }
+            } catch {
+                // Handle "No active account" error
+                if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                    print("StoreKit: No active account, ignoring when checking currentEntitlements.")
+                } else {
+                    print("Failed to check StoreKit entitlements: \(error.localizedDescription)")
                 }
             }
             
@@ -336,27 +378,42 @@ class SubscriptionService: ObservableObject {
                 }
             } else {
                 print("No current offering available - using StoreKit fallback")
-                // Mark as error to use fallback
-                await MainActor.run {
-                    self.offeringsLoaded = true
-                    self.errorLoadingOfferings = true
-                    self.didAttemptOfferingsLoad = true
-                    self.isLoadingOfferings = false
-                }
-                await loadFallbackPricing()
+                await retryOfferingsOrLoadFallback()
                 return false
             }
         } catch {
             print("Error checking offerings: \(error.localizedDescription)")
-            // Mark as error to use fallback
+            await retryOfferingsOrLoadFallback()
+            return false
+        }
+    }
+    
+    // New method to retry offerings load or use fallback
+    private func retryOfferingsOrLoadFallback() async {
+        offeringsRetryCount += 1
+        
+        if offeringsRetryCount < maxOfferingsRetries {
+            print("Retrying offerings load (attempt \(offeringsRetryCount)/\(maxOfferingsRetries))...")
+            
+            // Wait before retry
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            
+            // Reset state for retry
+            isLoadingOfferings = false
+            didAttemptOfferingsLoad = false
+            
+            // Try again
+            let _ = await checkOfferingsConfiguration()
+        } else {
+            // Mark as error to use fallback after max retries
             await MainActor.run {
                 self.offeringsLoaded = true
                 self.errorLoadingOfferings = true
                 self.didAttemptOfferingsLoad = true
                 self.isLoadingOfferings = false
             }
+            // Use StoreKit fallback pricing
             await loadFallbackPricing()
-            return false
         }
     }
     
@@ -399,7 +456,12 @@ class SubscriptionService: ObservableObject {
                     // Purchase succeeded
                     return
                 } catch {
-                    print("RevenueCat purchase failed: \(error.localizedDescription)")
+                    // Handle "No active account" error
+                    if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                        print("StoreKit: No active account during purchase, attempting fallback to direct StoreKit.")
+                    } else {
+                        print("RevenueCat purchase failed: \(error.localizedDescription)")
+                    }
                     // Fall through to StoreKit approach as fallback
                 }
             } else {
@@ -438,8 +500,14 @@ class SubscriptionService: ObservableObject {
                 throw SubscriptionError.unknown
             }
         } catch {
-            print("Purchase error: \(error.localizedDescription)")
-            throw SubscriptionError.purchaseFailed
+            // Handle "No active account" error
+            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                print("StoreKit: No active account when purchasing directly, likely not signed into App Store.")
+                throw SubscriptionError.notSignedIntoAppStore
+            } else {
+                print("Purchase error: \(error.localizedDescription)")
+                throw SubscriptionError.purchaseFailed
+            }
         }
     }
     
@@ -449,15 +517,13 @@ class SubscriptionService: ObservableObject {
             await loadProducts() // Make sure products are loaded
         }
         
-        if let product = availableProducts.first(where: { $0.id == monthlyProductID }) {
-            // Use the StoreKit price
-            await MainActor.run {
-                self.fallbackPricing = product.displayPrice
-            }
-            print("Using StoreKit fallback pricing: \(product.displayPrice)")
+        if let monthlyProduct = availableProducts.first(where: { $0.id == monthlyProductID }) {
+            // Use StoreKit product price
+            self.fallbackPricing = monthlyProduct.displayPrice
         } else {
-            // Keep default fallback price
-            print("No StoreKit product available either, using hardcoded fallback price")
+            // Fallback to hardcoded price if no StoreKit product is available
+            self.fallbackPricing = "$4.99"
+            print("No StoreKit products available, using hardcoded price: \(self.fallbackPricing)")
         }
     }
     
@@ -473,8 +539,14 @@ class SubscriptionService: ObservableObject {
                 self.renewalDate = customerInfo.entitlements["pro"]?.expirationDate
             }
         } catch {
-            print("Failed to restore purchases with RevenueCat: \(error.localizedDescription)")
-            throw SubscriptionError.restoreFailed
+            // Handle "No active account" error
+            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                print("StoreKit: No active account when restoring, likely not signed into App Store.")
+                throw SubscriptionError.notSignedIntoAppStore
+            } else {
+                print("Failed to restore purchases with RevenueCat: \(error.localizedDescription)")
+                throw SubscriptionError.restoreFailed
+            }
         }
     }
     

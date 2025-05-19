@@ -374,9 +374,83 @@ class ProgressDashboardViewModel: ObservableObject {
     @MainActor private var loadTask: Task<Void, Never>?
     @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
     
+    // Add Combine cancellables for subscriptions
+    private var cancellables = Set<AnyCancellable>()
+    
     // Private initializer for singleton
     private init() {
         print("ProgressDashboardViewModel initialized as singleton")
+        
+        // Subscribe to UserStatsService changes for immediate updates
+        setupUserStatsSubscription()
+        
+        // Also listen for network status changes
+        setupNetworkMonitoring()
+    }
+    
+    // Set up subscription to UserStatsService
+    private func setupUserStatsSubscription() {
+        // Subscribe to userStats changes
+        UserStatsService.shared.$userStats
+            .dropFirst() // Skip initial empty value
+            .receive(on: RunLoop.main)
+            .sink { [weak self] stats in
+                guard let self = self else { return }
+                
+                // Update hasData based on whether stats has meaningful data
+                let hasUserStats = stats.totalChallenges > 0
+                
+                // Only update if data status would change or if we have data
+                if self.hasData != hasUserStats || hasUserStats {
+                    self.hasData = hasUserStats
+                    print("ProgressDashboardViewModel updated from UserStatsService - hasData: \(hasUserStats)")
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Subscribe to loading state changes
+        UserStatsService.shared.$isLoading
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isLoading in
+                guard let self = self else { return }
+                // Only update our loading state if UserStatsService is loading
+                // and we're not already loading something else
+                if isLoading && !self.isLoading {
+                    self.isLoading = true
+                    print("ProgressDashboardViewModel - Loading state updated from UserStatsService")
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Subscribe to notifications about stats updates
+        NotificationCenter.default.publisher(for: UserStatsService.userStatsDidUpdateNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                print("ProgressDashboardViewModel received userStatsDidUpdateNotification")
+                
+                // Mark as having data if UserStatsService has meaningful stats
+                if UserStatsService.shared.userStats.totalChallenges > 0 {
+                    self.hasData = true
+                    self.isInitialLoad = false
+                }
+                
+                // If we were loading, finish loading state
+                if self.isLoading {
+                    self.isLoading = false
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    // Set up network monitoring
+    private func setupNetworkMonitoring() {
+        NetworkMonitor.shared.connectionState
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isConnected in
+                self?.isNetworkConnected = isConnected
+            }
+            .store(in: &cancellables)
     }
     
     // Computed properties that get data from the centralized UserStatsService
@@ -402,8 +476,9 @@ class ProgressDashboardViewModel: ObservableObject {
     }
     
     deinit {
+        cancellables.removeAll()
         cancelTaskOnly()
-        print("ProgressDashboardViewModel deinit - tasks cancelled")
+        print("ProgressDashboardViewModel deinit - resources released")
     }
     
     // Non-isolated method for deinit to use
@@ -437,6 +512,9 @@ class ProgressDashboardViewModel: ObservableObject {
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             
+            // Performance tracking
+            let startTime = CFAbsoluteTimeGetCurrent()
+            
             do {
                 await MainActor.run {
                     self.isLoading = true
@@ -444,19 +522,19 @@ class ProgressDashboardViewModel: ObservableObject {
                     print("ProgressDashboardViewModel - Starting data load")
                 }
                 
-                // Set up a timeout to prevent infinite loading state
+                // Create a separate timeout task with more reasonable timeout (6 seconds)
                 let timeoutTask = Task {
                     do {
-                        try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds timeout
-                        if self.isLoading {
-                            print("ProgressDashboardViewModel - Loading timed out after 10 seconds")
+                        try await Task.sleep(nanoseconds: 6_000_000_000) // 6 seconds timeout (reduced from 10)
+                        if !Task.isCancelled && self.isLoading {
+                            print("ProgressDashboardViewModel - Loading timed out after 6 seconds")
                             await MainActor.run {
-                                self.isLoading = false
-                                // Provide an empty state if timeout occurs but still show cached data if available
+                                // Don't completely fail if we already have data - just keep old data
                                 if !self.hasData {
                                     self.errorMessage = "Loading timed out. Pull down to refresh."
-                                    self.isInitialLoad = false
                                 }
+                                self.isLoading = false
+                                self.isInitialLoad = false
                             }
                         }
                     } catch {
@@ -464,49 +542,54 @@ class ProgressDashboardViewModel: ObservableObject {
                     }
                 }
                 
-                // First, load centralized stats
-                await MainActor.run {
-                    Task {
-                        try? await self.userStatsService.fetchUserStats()
-                    }
-                }
-                
-                // Simple delay to simulate data loading - REDUCED TO AVOID LONG WAITS
-                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds instead of 1.5
-                
-                try Task.checkCancellation()
-                
-                // Check if the user is logged in
-                guard Auth.auth().currentUser != nil else {
+                // Ensure we clean up the timeout task when finished
+                defer {
                     timeoutTask.cancel()
-                    await MainActor.run {
-                        self.errorMessage = "You must be logged in to view progress"
-                        self.isLoading = false
-                        self.isInitialLoad = false
-                        self.hasData = false
-                    }
-                    return
+                    // Log performance metrics
+                    let endTime = CFAbsoluteTimeGetCurrent()
+                    let elapsedTime = endTime - startTime
+                    print("ProgressDashboardViewModel - Data load took \(String(format: "%.2f", elapsedTime))s")
                 }
                 
-                // Generate some sample data for immediate display
-                let sampleData = self.generateSampleData()
+                // First, sync with UserStatsService to ensure consistent state
+                // Always fetch from the central source of truth first
+                print("ProgressDashboardViewModel - Fetching stats from UserStatsService")
+                try Task.checkCancellation()
+                await userStatsService.refreshUserStats()
                 
-                // Check for cancellation before updating UI
+                // First, prepare early visual feedback by generating sample data
+                // This provides an instant layout, especially on first load
+                if self.isInitialLoad && !self.hasData {
+                    let quickSampleData = self.generateSampleData()
+                    
+                    // Check for cancellation before updating UI
+                    try Task.checkCancellation()
+                    
+                    // Update UI with sample data first for better UX
+                    await MainActor.run {
+                        // Only update if we don't already have data
+                        if !self.hasData {
+                            // Set minimal data for initial layout
+                            self.journeyCards = quickSampleData.journeyCards
+                            self.earnedBadges = quickSampleData.earnedBadges
+                            
+                            // Mark as having some data but keep loading state
+                            self.hasData = true
+                            print("ProgressDashboardViewModel - Initial layout data ready")
+                        }
+                    }
+                }
+                
+                // Then, fetch additional view-specific data
+                try Task.checkCancellation()
+                try await self.fetchAdditionalData()
+                
+                // Check for cancellation before final UI update
                 try Task.checkCancellation()
                 
-                timeoutTask.cancel() // Cancel timeout since we succeeded
-                
+                // Final update with complete data
                 await MainActor.run {
-                    // Only set supplementary data that isn't provided by UserStatsService
-                    self.journeyCards = sampleData.journeyCards
-                    self.dateIntensityMap = sampleData.dateIntensityMap
-                    self.dailyCheckInsData = sampleData.dailyCheckInsData
-                    self.projectedCompletionDate = sampleData.projectedCompletionDate
-                    self.currentPace = sampleData.currentPace
-                    self.earnedBadges = sampleData.earnedBadges
-                    
-                    // Mark as loaded with data
-                    self.hasData = true
+                    // Complete loading state
                     self.isLoading = false
                     self.isInitialLoad = false
                     self.errorMessage = nil
@@ -516,6 +599,7 @@ class ProgressDashboardViewModel: ObservableObject {
                 // Safe handling of task cancellation
                 print("ProgressDashboardViewModel - Task was cancelled")
                 await MainActor.run {
+                    // CRITICAL: Always reset loading state when cancelled
                     self.isLoading = false
                 }
                 return
@@ -524,11 +608,56 @@ class ProgressDashboardViewModel: ObservableObject {
                 
                 // Handle error on main thread
                 await MainActor.run {
-                    self.errorMessage = "Failed to load progress data. Please try again."
+                    // Only show error if we don't have any data
+                    if !self.hasData {
+                        self.errorMessage = self.formatErrorMessage(error)
+                    }
                     self.isLoading = false
                     self.isInitialLoad = false
                 }
             }
+        }
+    }
+    
+    // Helper function to format user-friendly error messages
+    private func formatErrorMessage(_ error: Error) -> String {
+        // Network connectivity issues
+        if let nsError = error as NSError? {
+            // Check for common network errors
+            if nsError.domain == NSURLErrorDomain {
+                switch nsError.code {
+                case NSURLErrorNotConnectedToInternet, NSURLErrorNetworkConnectionLost:
+                    return "No internet connection. Please check your network settings and try again."
+                case NSURLErrorTimedOut:
+                    return "Request timed out. Please try again later."
+                default:
+                    return "Network error: \(nsError.localizedDescription)"
+                }
+            }
+        }
+        
+        // Firebase errors
+        if error.localizedDescription.contains("permission") {
+            return "You don't have permission to access this data. Please sign in again."
+        }
+        
+        // Generic fallback
+        return "Failed to load progress data. Please try again later."
+    }
+    
+    // Separate method to fetch additional data that's not in UserStatsService
+    private func fetchAdditionalData() async throws {
+        // Generate data for UI display
+        let sampleData = self.generateSampleData()
+        
+        // Only update specific fields on main actor
+        await MainActor.run {
+            self.journeyCards = sampleData.journeyCards
+            self.dateIntensityMap = sampleData.dateIntensityMap
+            self.dailyCheckInsData = sampleData.dailyCheckInsData
+            self.projectedCompletionDate = sampleData.projectedCompletionDate
+            self.currentPace = sampleData.currentPace
+            self.earnedBadges = sampleData.earnedBadges
         }
     }
     

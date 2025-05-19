@@ -115,6 +115,47 @@ class FirebaseService {
     private init() {
         // Firebase configuration will be initialized in AppDelegate
         setupNetworkMonitoring()
+        
+        // Listen for Firestore connectivity check requests
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleFirestoreConnectivityCheck),
+            name: NetworkMonitor.firestoreConnectivityCheckRequested,
+            object: nil
+        )
+    }
+    
+    @objc private func handleFirestoreConnectivityCheck() {
+        // Only perform this check if Firestore is already initialized
+        guard let db = firestore else { return }
+        
+        // Perform a simple read operation to test connectivity
+        db.collection("_connectivity").limit(to: 1).getDocuments { snapshot, error in
+            if let error = error {
+                if error.localizedDescription.contains("firestore.googleapis.com") ||
+                   error.localizedDescription.contains("lookup error") ||
+                   error.localizedDescription.contains("Domain name not found") {
+                    
+                    // Notify about Firestore-specific connectivity issue
+                    NotificationCenter.default.post(
+                        name: NetworkMonitor.firestoreConnectivityChanged,
+                        object: nil,
+                        userInfo: [
+                            "isConnected": false,
+                            "hasDNSIssues": true,
+                            "error": error.localizedDescription
+                        ]
+                    )
+                }
+            } else {
+                // Firestore connection successful
+                NotificationCenter.default.post(
+                    name: NetworkMonitor.firestoreConnectivityChanged,
+                    object: nil,
+                    userInfo: ["isConnected": true, "hasDNSIssues": false]
+                )
+            }
+        }
     }
     
     private func setupNetworkMonitoring() {
@@ -147,6 +188,7 @@ class FirebaseService {
     
     deinit {
         networkMonitor.cancel()
+        NotificationCenter.default.removeObserver(self)
     }
     
     func configure() {
@@ -726,14 +768,8 @@ class FirebaseService {
     
     // MARK: - Firestore Utilities
     func setCacheSettings(sizeLimitInMB: Int = -1) {
-        guard let firestore = firestore else { return }
-        
-        let settings = firestore.settings
-        let sizeNumber = sizeLimitInMB < 0 ? 
-            NSNumber(value: FirestoreCacheSizeUnlimited) : 
-            NSNumber(value: sizeLimitInMB * 1024 * 1024)
-        
-        settings.cacheSettings = PersistentCacheSettings(sizeBytes: sizeNumber)
-        firestore.settings = settings
+        // Skip setting cache settings - these should only be set in AppDelegate
+        // before any Firestore operations
+        print("setCacheSettings: Settings should only be modified in AppDelegate before Firestore is initialized")
     }
 } 

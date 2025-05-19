@@ -5,6 +5,19 @@ struct NavigationConfigurator: ViewModifier {
     func body(content: Content) -> some View {
         // Updated to use modern SwiftUI navigation
         content
+            .navigationViewStyle(StackNavigationViewStyle())
+            .navigationBarTitleDisplayMode(.inline)
+            // Add background with GeometryReader to help prevent layout conflicts
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: SafeAreaKey.self, value: geo.safeAreaInsets.top)
+                        .onPreferenceChange(SafeAreaKey.self) { _ in
+                            // Just receiving the preference change helps eliminate
+                            // some of the conflicting constraints by forcing layout pass
+                        }
+                }
+            )
     }
 }
 

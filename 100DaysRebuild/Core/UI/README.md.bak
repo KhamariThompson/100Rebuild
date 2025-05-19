@@ -1,0 +1,205 @@
+# 100Days Design System
+
+This document provides an overview of the design system architecture used in the 100Days app.
+
+## Overview
+
+The 100Days design system ensures a consistent and professional look and feel across the entire application. It follows these key principles:
+
+1. **Consistency**: Use defined spacing, typography, and color values instead of hardcoded numbers
+2. **Adaptability**: All components work in both light and dark modes
+3. **Reusability**: Shared components over one-off implementations
+4. **Accessibility**: Readable text and appropriate touch targets
+
+## Directory Structure
+
+The design system is organized into the following components:
+
+```
+Core/
+├── DesignSystem/          # Core design system components
+│   ├── AppSpacing.swift   # Spacing constants
+│   ├── Typography.swift   # Text styles and fonts
+│   ├── Colors.swift       # Color palette and themes
+│   ├── ButtonStyles.swift # Button styling
+│   ├── Components.swift   # Reusable UI components
+│   ├── StatCard.swift     # Stat display components
+│   ├── ProgressComponents.swift # Progress UI components
+│   ├── ShadowModifiers.swift # Shadow styling
+│   ├── DesignGuide.swift  # Documentation & preview
+│   └── ThemeManager.swift # Theme handling
+├── Extensions/            # View extensions
+│   ├── View+Extensions.swift  # General view extensions
+│   └── ...
+└── UI/                    # Higher-level UI components
+    ├── AppViewModifiers.swift # Common modifiers
+    └── ...
+```
+
+## Key Components
+
+### Spacing
+
+The `AppSpacing` enum defines a consistent spacing scale:
+
+- **xxs**: 4pt - Minimal spacing
+- **xs**: 8pt - Extra small spacing
+- **s**: 12pt - Small spacing
+- **m**: 16pt - Medium spacing (default)
+- **l**: 24pt - Large spacing
+- **xl**: 32pt - Extra large spacing
+- **xxl**: 48pt - Extra extra large spacing
+
+Component-specific spacing values are also defined for cards, buttons, etc.
+
+### Typography
+
+The `AppTypography` enum provides consistent text styles with appropriate sizes and weights:
+
+- Display, largeTitle, title1, title2, title3
+- headline, body, callout, subheadline
+- footnote, caption, small
+
+Font extensions provide convenient access to these styles.
+
+### Colors
+
+The `Colors.swift` file defines the app's color palette with theme support:
+
+- `.theme.accent`: Primary brand color
+- `.theme.background`: Main background color
+- `.theme.surface`: Surface/card background color
+- `.theme.text`: Primary text color
+- `.theme.subtext`: Secondary text color
+- `.theme.border`: Border color
+- `.theme.shadow`: Shadow color
+
+### Components
+
+Reusable UI components:
+
+- **Cards**: `AppComponents.Card`, `GlassCard`, `GradientCard`
+- **Stats**: `StatCard`, `HorizontalStatCard`
+- **Buttons**: Button styles in various variants
+- **Progress**: Progress indicators and stats
+
+## Usage Guidelines
+
+1. **Always use semantic constants**:
+
+   ```swift
+   // ✅ Do this
+   .padding(.vertical, AppSpacing.m)
+
+   // ❌ Not this
+   .padding(.vertical, 16)
+   ```
+
+2. **Use typography constants**:
+
+   ```swift
+   // ✅ Do this
+   .font(AppTypography.headline)
+   // or
+   .headline()
+
+   // ❌ Not this
+   .font(.system(size: 17, weight: .semibold))
+   ```
+
+3. **Use theme colors**:
+
+   ```swift
+   // ✅ Do this
+   .foregroundColor(.theme.text)
+
+   // ❌ Not this
+   .foregroundColor(.black)
+   ```
+
+4. **Use provided components**:
+
+   ```swift
+   // ✅ Do this
+   AppComponents.Card {
+     // content
+   }
+
+   // ❌ Not this - creating custom cards
+   RoundedRectangle(cornerRadius: 16)
+     .fill(Color.white)
+     .shadow(...)
+   ```
+
+## Extending the Design System
+
+When adding new components to the design system:
+
+1. Place them in the appropriate directory
+2. Document their purpose and usage
+3. Create a preview for visual testing
+4. Ensure theme compatibility
+5. Update the `DesignGuide` file with examples
+
+## Theme Support
+
+All components automatically adapt to light and dark modes through the `ThemeManager`. Always test your UI in both modes to ensure proper contrast and readability.
+
+## Known Issues and Future Improvements
+
+There are still several places in the codebase that use hardcoded values instead of the design system constants. Here's a plan for addressing them:
+
+### Remaining Hardcoded Values
+
+Areas that need attention:
+
+- UI/PaywallView.swift (several hardcoded paddings)
+- UI/ProLockedView.swift (hardcoded paddings and sizes)
+- Any custom view components created before the design system implementation
+
+### Fixing Approach
+
+When fixing hardcoded values:
+
+1. Replace numeric paddings with AppSpacing constants:
+
+   ```swift
+   // Before
+   .padding(16)
+
+   // After
+   .padding(AppSpacing.m)
+   ```
+
+2. Replace numeric corner radii:
+
+   ```swift
+   // Before
+   .cornerRadius(8)
+
+   // After
+   .cornerRadius(AppSpacing.xs)
+   ```
+
+3. Replace fixed font sizes with Typography:
+
+   ```swift
+   // Before
+   .font(.system(size: 17, weight: .semibold))
+
+   // After
+   .font(AppTypography.body)
+   ```
+
+4. Use ScaledMetric for values that should adapt to Dynamic Type:
+   ```swift
+   @ScaledMetric(relativeTo: .body) var iconSize: CGFloat = 24
+   ```
+
+### Modernization Priorities
+
+Focus on these components first:
+
+1. Core UI components used across multiple screens
+2. Components visible in the main user flow
+3. Accessibility-critical components

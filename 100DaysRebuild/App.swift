@@ -7,6 +7,7 @@ import AuthenticationServices
 import Network
 import FirebaseFirestore
 import Foundation
+import RevenueCat
 
 // Replace the import with a direct implementation of OfflineBanner
 // @_exported import struct App.OfflineBanner
@@ -34,28 +35,17 @@ struct OfflineBanner: View {
 class AppDelegate: NSObject, UIApplicationDelegate {
     private var networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
+    // Add a static flag to track when Firebase has been configured
+    static var firebaseConfigured = false
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // Configure Firebase at the very beginning, before any other Firebase-related code
-        if FirebaseApp.app() == nil {
-            FirebaseApp.configure()
-            print("✅ Firebase configured")
-            
-            // Configure Firestore for offline persistence using the newer cacheSettings API
-            let db = Firestore.firestore()
-            let settings = db.settings
-            
-            // Replace deprecated properties with new cacheSettings API
-            let cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 104857600)) // 100MB as a default size
-            settings.cacheSettings = cacheSettings
-            
-            db.settings = settings
-            // Set a flag to indicate Firebase is initialized
-            UserDefaults.standard.set(true, forKey: "firebase_initialized")
-            print("Firestore offline persistence configured")
-        } else {
-            print("Firebase was already configured")
-        }
+        print("App100Days init - Using AppDelegate for Firebase initialization")
+        
+        // IMPORTANT: Configure Firebase at the very beginning, before any other Firebase-related code runs
+        configureFirebase()
+        
+        // Configure RevenueCat after Firebase
+        configureRevenueCat()
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -75,6 +65,52 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
     
+    // Extract Firebase configuration to a separate method
+    private func configureFirebase() {
+        // Only configure Firebase if it hasn't been configured yet
+        if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
+            // Explicitly configure Firebase with the default GoogleService-Info.plist first
+            FirebaseApp.configure()
+            print("✅ Firebase configured")
+            
+            // Now that Firebase is configured but before any Firestore method is called,
+            // we can set the Firestore settings
+            let settings = FirestoreSettings()
+            
+            // Replace deprecated properties with new cacheSettings API
+            let cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 100 * 1024 * 1024)) // 100MB cache size
+            settings.cacheSettings = cacheSettings
+            
+            // Apply these settings to the Firestore instance before any other Firestore method is called
+            Firestore.firestore().settings = settings
+            
+            // Set a flag to indicate Firebase is initialized
+            UserDefaults.standard.set(true, forKey: "firebase_initialized")
+            // Set our static flag
+            AppDelegate.firebaseConfigured = true
+            print("Firestore offline persistence configured")
+        } else {
+            print("Firebase already configured, skipping initialization")
+        }
+    }
+    
+    // Extract RevenueCat configuration to a separate method
+    private func configureRevenueCat() {
+        let apiKey = "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
+        
+        // Configure RevenueCat with API key if not already configured
+        if !Purchases.isConfigured {
+            // Set RevenueCat behavior before configure
+            Purchases.logLevel = .debug
+            
+            // Configure with the API key
+            Purchases.configure(withAPIKey: apiKey)
+            print("RevenueCat configured with key: \(apiKey)")
+            print("Expected product ID: com.KhamariThompson.100Days.monthly")
+            print("Expected entitlement: pro")
+        }
+    }
+    
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
         return GIDSignIn.sharedInstance.handle(url)
     }
@@ -86,7 +122,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
     
     private func startNetworkMonitoring() {
-        networkMonitor.pathUpdateHandler = { path in
+        networkMonitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
             print("Network connectivity changed: \(isConnected ? "Connected" : "Disconnected")")
             
@@ -572,6 +608,7 @@ struct App100Days: App {
     @StateObject private var adManager = AdManager.shared
     @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
     @StateObject private var appStateCoordinator = AppStateCoordinator.shared
+    @StateObject private var themeManager = ThemeManager.shared
     @AppStorage("AppTheme") private var appTheme: String = "system"
     
     init() {
@@ -611,18 +648,29 @@ struct App100Days: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                AppContentView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
-                    .environmentObject(adManager)
-                    .environmentObject(progressViewModel)
-                    .onAppear {
-                        print("App main view appeared")
-                        // Initialize services
-                        _ = NetworkMonitor.shared
-                        _ = FirebaseAvailabilityService.shared
-                    }
+                if userSession.isAuthenticated {
+                    AppContentView()
+                        .environmentObject(userSession)
+                        .environmentObject(subscriptionService)
+                        .environmentObject(notificationService)
+                        .environmentObject(adManager)
+                        .environmentObject(progressViewModel)
+                        .environmentObject(themeManager)
+                        .onAppear {
+                            print("App main view appeared")
+                            // Initialize services
+                            _ = NetworkMonitor.shared
+                            _ = FirebaseAvailabilityService.shared
+                        }
+                        .withAppTheme()
+                        .animation(.easeInOut(duration: 0.3), value: themeManager.currentTheme)
+                } else {
+                    AuthView()
+                        .environmentObject(userSession)
+                        .environmentObject(themeManager)
+                        .withAppTheme()
+                        .animation(.easeInOut(duration: 0.3), value: themeManager.currentTheme)
+                }
                 
                 // Show offline banner when in offline state
                 if appStateCoordinator.appState == .offline {
@@ -769,6 +817,7 @@ struct AppContentView: View {
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var adManager: AdManager
     @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
+    @EnvironmentObject var themeManager: ThemeManager
     
     var body: some View {
         Group {
@@ -780,6 +829,7 @@ struct AppContentView: View {
                     .environmentObject(notificationService)
                     .environmentObject(adManager)
                     .environmentObject(progressViewModel)
+                    .environmentObject(themeManager)
                     .applyLayoutFixes()
             } else {
                 // Only use AuthView for login/signup
@@ -789,6 +839,7 @@ struct AppContentView: View {
                     .environmentObject(notificationService)
                     .environmentObject(adManager)
                     .environmentObject(progressViewModel)
+                    .environmentObject(themeManager)
                     .applyLayoutFixes()
             }
         }
