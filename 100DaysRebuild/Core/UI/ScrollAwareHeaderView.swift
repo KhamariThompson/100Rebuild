@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// A reusable header view that dynamically responds to scroll position
-/// with FAANG-level polish including shrinking title, blur, and elevation changes
+/// A reusable header view with a fixed position regardless of scroll position
 struct ScrollAwareHeaderView<Content: View>: View {
     // Title text to display in the header
     let title: String
     
-    // Binding to track scroll offset from parent
+    // Binding to track scroll offset from parent (kept for compatibility)
     @Binding var scrollOffset: CGFloat
     
     // Optional subtitle that appears below the title
@@ -18,47 +17,8 @@ struct ScrollAwareHeaderView<Content: View>: View {
     // Optional custom content view that appears below the title
     var additionalContent: Content?
     
-    // Threshold for when the header should start transforming
-    var transformThreshold: CGFloat = 80
-    
-    // Maximum height of the expanded header
-    var maxHeight: CGFloat = 140
-    
-    // Minimum height of the collapsed header
-    var minHeight: CGFloat = 60
-    
-    // Visual properties that change with scroll offset
-    private var titleScale: CGFloat {
-        let scale = 1.0 - min(max(0, scrollOffset), transformThreshold) / transformThreshold * 0.3
-        return max(0.7, scale)
-    }
-    
-    private var titleOffset: CGFloat {
-        return min(0, -scrollOffset * 0.2)
-    }
-    
-    private var headerHeight: CGFloat {
-        let shrinkAmount = min(max(0, scrollOffset), transformThreshold) / transformThreshold
-        return max(minHeight, maxHeight - (maxHeight - minHeight) * shrinkAmount)
-    }
-    
-    private var backgroundOpacity: CGFloat {
-        return min(1, max(0, scrollOffset) / (transformThreshold * 0.7))
-    }
-    
-    private var shadowOpacity: CGFloat {
-        return min(0.2, max(0, scrollOffset) / transformThreshold * 0.2)
-    }
-    
-    private var titleOpacity: CGFloat {
-        return 1.0 - min(0.3, max(0, scrollOffset) / transformThreshold * 0.3)
-    }
-    
-    // Helper for content fade opacity calculation to avoid ambiguous operator errors
-    private var contentFadeOpacity: CGFloat {
-        let multiplier: CGFloat = 2
-        return max(0, 1 - (backgroundOpacity * multiplier))
-    }
+    // Fixed header height - reduced to match Cal AI
+    var headerHeight: CGFloat = 80
     
     init(title: String, 
          scrollOffset: Binding<CGFloat>, 
@@ -85,57 +45,40 @@ struct ScrollAwareHeaderView<Content: View>: View {
     }
     
     var body: some View {
-        VStack(spacing: 8) {
-            // Title with dynamic sizing based on scroll position
+        VStack(alignment: .leading, spacing: 2) {
+            // Title with optional gradient
             if let gradient = accentGradient {
                 Text(title)
-                    .font(SwiftUI.Font.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.largeTitle)
+                    .fontWeight(.semibold)
                     .foregroundStyle(gradient)
-                    .kerning(0.2)
-                    .scaleEffect(titleScale, anchor: .bottom)
-                    .offset(y: titleOffset)
-                    .opacity(titleOpacity)
             } else {
                 Text(title)
-                    .font(SwiftUI.Font.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.theme.text)
-                    .kerning(0.2)
-                    .scaleEffect(titleScale, anchor: .bottom)
-                    .offset(y: titleOffset)
-                    .opacity(titleOpacity)
+                    .font(.largeTitle)
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color.theme.text)
             }
             
             // Subtitle if provided
             if let subtitle = subtitle {
                 Text(subtitle)
-                    .modifier(SubtitleTextStyle())
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(Color.theme.subtext)
-                    .opacity(contentFadeOpacity)
-                    .padding(.top, -4)
             }
             
             // Additional content if provided
             if let additionalContent = additionalContent {
                 additionalContent
-                    .opacity(contentFadeOpacity)
+                    .padding(.top, 4)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 10)
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
         .frame(height: headerHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            // Blurred background that appears when scrolling
-            ZStack {
-                if backgroundOpacity > 0 {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .opacity(backgroundOpacity)
-                }
-            }
-        )
-        .shadow(color: Color.black.opacity(shadowOpacity), radius: 4, y: 2)
+        .background(Color.theme.background)
+        .zIndex(99) // Ensure header stays on top
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -145,7 +88,7 @@ struct ScrollAwareHeaderView<Content: View>: View {
 struct SubtitleTextStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.caption)
+            .font(.system(size: 15, weight: .regular, design: .rounded))
     }
 }
 
@@ -196,7 +139,7 @@ struct ScreenWithScrollHeader<Content: View>: View {
                 VStack {
                     // Spacer to push content below the header
                     Color.clear
-                        .frame(height: 110)
+                        .frame(height: CalAIDesignTokens.headerHeight)
                     
                     // Main content
                     content
@@ -212,7 +155,6 @@ struct ScreenWithScrollHeader<Content: View>: View {
                 subtitle: subtitle
             )
         }
-        .edgesIgnoringSafeArea(.top)
     }
 }
 
@@ -225,7 +167,7 @@ struct ScrollAwareHeaderView_Previews: PreviewProvider {
             ZStack(alignment: .top) {
                 ScrollView {
                     VStack(spacing: 20) {
-                        Color.clear.frame(height: 140)
+                        Color.clear.frame(height: 80)
                         
                         ForEach(0..<20) { i in
                             RoundedRectangle(cornerRadius: 10)

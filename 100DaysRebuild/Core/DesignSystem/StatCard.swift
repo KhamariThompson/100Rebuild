@@ -41,15 +41,14 @@ public struct StatCard: View {
                     }
                     
                     Text(title)
-                        .font(AppTypography.subheadline)
+                        .font(.system(size: AppTypography.FontSize.subheadline, weight: .regular, design: .rounded))
                         .foregroundColor(Color.theme.subtext)
                 }
                 
                 // Value
                 Text(value)
-                    .font(AppTypography.title1)
+                    .font(.system(size: AppTypography.FontSize.title1, weight: .medium, design: .rounded))
                     .foregroundColor(Color.theme.text)
-                    .fontWeight(.semibold)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -99,19 +98,91 @@ public struct HorizontalStatCard: View {
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     // Title
                     Text(title)
-                        .font(AppTypography.subheadline)
+                        .font(.system(size: AppTypography.FontSize.subheadline, weight: .regular, design: .rounded))
                         .foregroundColor(Color.theme.subtext)
                     
                     // Value
                     Text(value)
-                        .font(AppTypography.title2)
+                        .font(.system(size: AppTypography.FontSize.title2, weight: .medium, design: .rounded))
                         .foregroundColor(Color.theme.text)
-                        .fontWeight(.semibold)
                 }
                 
                 Spacer()
             }
         }
+    }
+}
+
+/// A circular stat card in CalAI style
+public struct CircularStatCard: View {
+    private let title: String
+    private let value: String
+    private let progress: Double?
+    private let color: Color
+    
+    public init(
+        title: String,
+        value: String,
+        progress: Double? = nil,
+        color: Color = Color.theme.accent
+    ) {
+        self.title = title
+        self.value = value
+        self.progress = progress
+        self.color = color
+    }
+    
+    public var body: some View {
+        VStack(spacing: AppSpacing.s) {
+            // Circular progress if available
+            if let progress = progress {
+                ZStack {
+                    // Background circle
+                    Circle()
+                        .stroke(
+                            color.opacity(0.2),
+                            lineWidth: AppSpacing.progressRingStrokeWidth
+                        )
+                    
+                    // Progress circle
+                    Circle()
+                        .trim(from: 0, to: CGFloat(min(progress, 1.0)))
+                        .stroke(
+                            color,
+                            style: StrokeStyle(
+                                lineWidth: AppSpacing.progressRingStrokeWidth,
+                                lineCap: .round
+                            )
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeOut, value: progress)
+                    
+                    // Value text
+                    Text(value)
+                        .font(.system(size: 22, weight: .medium, design: .rounded))
+                        .foregroundColor(.theme.text)
+                }
+                .frame(width: AppSpacing.circularProgressSizeSmall, height: AppSpacing.circularProgressSizeSmall)
+            } else {
+                // Just the value if no progress
+                Text(value)
+                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+            }
+            
+            // Title
+            Text(title)
+                .font(.system(size: AppTypography.FontSize.subheadline, weight: .regular, design: .rounded))
+                .foregroundColor(Color.theme.subtext)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+        .frame(minWidth: 100)
+        .background(
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.06), radius: 4, x: 0, y: 1)
+        )
     }
 }
 
@@ -129,8 +200,15 @@ struct StatCard_Previews: PreviewProvider {
             HorizontalStatCard(
                 title: "Completion Rate",
                 value: "92%",
-                icon: "chart.bar.fill",
+                icon: "chart.bar",
                 color: .green
+            )
+            
+            CircularStatCard(
+                title: "Calories Left",
+                value: "1962",
+                progress: 0.75,
+                color: .orange
             )
         }
         .padding()
@@ -149,8 +227,15 @@ struct StatCard_Previews: PreviewProvider {
             HorizontalStatCard(
                 title: "Completion Rate",
                 value: "92%",
-                icon: "chart.bar.fill",
+                icon: "chart.bar",
                 color: .green
+            )
+            
+            CircularStatCard(
+                title: "Calories Left",
+                value: "1962",
+                progress: 0.75,
+                color: .orange
             )
         }
         .padding()

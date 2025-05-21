@@ -120,11 +120,6 @@ struct ProLockedView<Content: View>: View {
                             )
                         }
                         .buttonStyle(AppScaleButtonStyle())
-                        .onHover { hovering in
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                hoverEffect = hovering
-                            }
-                        }
                         .padding(.top, AppSpacing.s)
                         .opacity(animateElements ? 1 : 0)
                         .offset(y: animateElements ? 0 : 10)

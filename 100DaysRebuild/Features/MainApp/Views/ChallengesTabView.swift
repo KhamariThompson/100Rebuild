@@ -11,86 +11,70 @@ struct MainAppChallengesTabView: View {
     
     var body: some View {
         NavigationView {
-            ZStack(alignment: .top) {
-                // Main content with scroll tracking
-                ZStack {
-                    // Background
-                    Color.theme.background
-                        .ignoresSafeArea()
-                    
-                    // Content based on state
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            // Spacer to push content below the header
-                            Color.clear
-                                .frame(height: 110)
-                            
-                            // Conditionally show appropriate content
-                            if viewModel.isInitialLoad {
-                                loadingView
-                                    .transition(.opacity)
-                            } else if viewModel.isLoading && viewModel.challenges.isEmpty {
-                                loadingView
-                                    .transition(.opacity)
-                            } else if viewModel.challenges.isEmpty {
-                                emptyStateView
-                                    .transition(.opacity)
-                            } else {
-                                challengeListView
-                                    .transition(.opacity)
+            VStack(spacing: 0) {
+                // Static header outside of scroll view
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .top) {
+                        // Title with proper styling
+                        Text("100Days")
+                            .font(.largeTitle)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.theme.text)
+                        
+                        Spacer()
+                        
+                        // Menu button
+                        Menu {
+                            Button(action: { viewModel.isShowingNewChallenge = true }) {
+                                Label("New Challenge", systemImage: "plus")
                             }
-                        }
-                        .trackScrollOffset($scrollOffset)
-                    }
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.challenges.isEmpty)
-                }
-                
-                // Overlay the dynamic header
-                ScrollAwareHeaderView(
-                    title: "Challenges",
-                    scrollOffset: $scrollOffset
-                ) {
-                    // Optional additional content for the header
-                    if !viewModel.isInitialLoad && !viewModel.challenges.isEmpty {
-                        HStack(spacing: 12) {
-                            Text("Active: \(viewModel.challenges.count)")
-                                .font(.caption)
-                                .foregroundColor(Color.theme.subtext)
                             
-                            if let currentStreak = viewModel.challenges.map({ $0.streakCount }).max(), currentStreak > 0 {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "flame.fill")
-                                        .font(.caption)
-                                        .foregroundColor(.orange)
-                                    Text("Streak: \(currentStreak)")
-                                        .font(.caption)
-                                        .foregroundColor(Color.theme.subtext)
+                            if !viewModel.challenges.isEmpty {
+                                Button(action: refreshChallenges) {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
                                 }
                             }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 18, weight: .semibold))
                         }
                     }
                 }
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button(action: { viewModel.isShowingNewChallenge = true }) {
-                            Label("New Challenge", systemImage: "plus")
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .padding(.top, CalAIDesignTokens.headerPaddingTop)
+                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.theme.background)
+                
+                // Content with ScrollView - separate from header
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Conditionally show appropriate content
+                        if viewModel.isInitialLoad {
+                            loadingView
+                                .transition(.opacity)
+                        } else if viewModel.isLoading && viewModel.challenges.isEmpty {
+                            loadingView
+                                .transition(.opacity)
+                        } else if viewModel.challenges.isEmpty {
+                            emptyStateView
+                                .transition(.opacity)
+                        } else {
+                            challengeListView
+                                .transition(.opacity)
                         }
-                        
-                        if !viewModel.challenges.isEmpty {
-                            Button(action: refreshChallenges) {
-                                Label("Refresh", systemImage: "arrow.clockwise")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18, weight: .semibold))
                     }
                 }
+                .safeAreaInset(edge: .top) {
+                    // Spacer to ensure content doesn't appear under the header
+                    Color.clear.frame(height: 0)
+                }
+                .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.challenges.isEmpty)
             }
+            .background(Color.theme.background.ignoresSafeArea())
+            .navigationBarHidden(true) // Hide the navigation bar since we have our own header
             .sheet(isPresented: $viewModel.isShowingNewChallenge) {
                 NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
                     Task {

@@ -3,6 +3,10 @@ import SwiftUI
 import FirebaseFirestore
 import Network
 import Combine
+import Firebase
+import FirebaseFirestore
+import FirebaseStorage
+import UIKit
 
 // Using canonical Challenge model
 // (No import needed as it will be accessed directly)
@@ -73,11 +77,27 @@ class ChallengesViewModel: ObservableObject {
             await loadUserProfile()
             await loadChallenges()
         }
+        
+        // Observe user profile updates
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleUserProfileUpdated),
+            name: NSNotification.Name("UserProfileUpdated"),
+            object: nil
+        )
     }
     
     deinit {
         timerCancellable?.cancel()
         subscriptions.removeAll()
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleUserProfileUpdated(_ notification: Notification) {
+        // Reload user profile to update name
+        Task {
+            await loadUserProfile()
+        }
     }
     
     private func setupChallengeStoreSubscriptions() {
@@ -150,20 +170,16 @@ class ChallengesViewModel: ObservableObject {
         isLoading = true
         error = nil
         
-        // Create the challenge with current timestamp
-        let challenge = Challenge(
-            title: title,
-            ownerId: userId,
-            lastModified: Date(),
-            isTimed: isTimed
-        )
-        
         do {
-            // Use the store to save the challenge
-            try await challengeStore.saveChallenge(challenge)
+            // Use the challenge service to create challenge - it handles permissions and limits
+            try await challengeService.createChallenge(title: title, userId: userId)
+            
             isLoading = false
             challengeTitle = ""
             isShowingNewChallenge = false
+            
+            // Refresh challenges after creation
+            await loadChallenges()
         } catch {
             isLoading = false
             self.error = error.localizedDescription
@@ -268,15 +284,52 @@ class ChallengesViewModel: ObservableObject {
         }
     }
     
-    /// Check in to a challenge
-    func checkInToChallenge(_ challenge: Challenge) async -> Result<Challenge, Error> {
+    /// Perform check-in to a challenge
+    func checkInToChallenge(_ challenge: Challenge, note: String = "", image: UIImage? = nil) async -> Result<Void, Error> {
+        isLoading = true
+        
         do {
-            let updatedChallenge = try await challengeService.checkIn(to: challenge)
-            return .success(updatedChallenge)
+            // Start by performing the basic check-in using the CheckInService
+            try await CheckInService.shared.checkIn(for: challenge.id.uuidString)
+            
+            // If there's a note, save it (implement separately if needed)
+            if !note.isEmpty {
+                // Note: Implement note saving logic directly here as needed
+                print("Note for challenge: \(note)")
+            }
+            
+            // If there's an image, upload it (implement separately if needed)
+            if let image = image {
+                // Note: Implement image upload logic directly here as needed
+                print("Image provided for check-in")
+            }
+            
+            // Update the local challenges data
+            await loadChallenges()
+            
+            // Refresh user stats to ensure they're up to date
+            await refreshUserStats()
+            
+            isLoading = false
+            return .success(())
         } catch {
-            showError = true
-            errorMessage = "Failed to check in: \(error.localizedDescription)"
+            isLoading = false
             return .failure(error)
+        }
+    }
+    
+    // Helper to refresh the user stats
+    private func refreshUserStats() async {
+        do {
+            // Update the last check-in date locally
+            updateLastCheckInDate()
+            
+            // Update UserStatsService to ensure consistency across the app
+            await UserStatsService.shared.refreshUserStats()
+            
+            print("User stats updated successfully")
+        } catch {
+            print("Error updating user stats: \(error.localizedDescription)")
         }
     }
     
@@ -316,13 +369,42 @@ class ChallengesViewModel: ObservableObject {
     /// Format the time since last check-in
     func formattedTimeSinceLastCheckIn() -> String {
         guard let _ = lastCheckInDate else {
-            return "0h 0m 0s"
+            return "0hr 0min 0sec"
         }
         
         let hours = Int(timeSinceLastCheckIn) / 3600
         let minutes = Int(timeSinceLastCheckIn) % 3600 / 60
         let seconds = Int(timeSinceLastCheckIn) % 60
         
-        return "\(hours)h \(minutes)m \(seconds)s"
+        return "\(hours)hr \(minutes)min \(seconds)sec"
+    }
+    
+    // MARK: - Helper Properties
+    
+    // Return the highest streak count from all challenges
+    var maxStreak: Int {
+        challenges.map(\.streakCount).max() ?? 0
+    }
+    
+    /// Get the most urgent challenge (close to breaking streak)
+    var mostUrgentChallenge: Challenge? {
+        // Find challenges where:
+        // 1. The challenge has not been completed today
+        // 2. The challenge isn't completed (all 100 days)
+        // 3. The streak is at risk (not checked in yesterday)
+        // 4. Sort by highest streak count first to prioritize preserving longer streaks
+        
+        let urgentChallenges = challenges.filter { challenge in
+            !challenge.isCompletedToday && 
+            !challenge.isCompleted && 
+            challenge.hasStreakExpired
+        }
+        
+        return urgentChallenges.max(by: { $0.streakCount < $1.streakCount })
+    }
+    
+    /// Check if the user has any active streaks
+    var hasActiveStreaks: Bool {
+        challenges.contains { $0.streakCount > 0 }
     }
 } 

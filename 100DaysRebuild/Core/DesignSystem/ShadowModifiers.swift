@@ -17,13 +17,13 @@ public enum ShadowStyle {
     public func radius(_ colorScheme: ColorScheme? = nil) -> CGFloat {
         switch self {
         case .subtle:
-            return AppColors.shadowRadiusForTheme(light: 4, dark: 8, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 3, dark: 5, colorScheme: colorScheme)
         case .standard:
-            return AppColors.shadowRadiusForTheme(light: 8, dark: 12, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 6, dark: 8, colorScheme: colorScheme)
         case .elevated:
-            return AppColors.shadowRadiusForTheme(light: 12, dark: 16, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 8, dark: 12, colorScheme: colorScheme)
         case .strong:
-            return AppColors.shadowRadiusForTheme(light: 16, dark: 20, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 12, dark: 16, colorScheme: colorScheme)
         case .custom(let radius, _, _):
             return radius
         }
@@ -33,13 +33,13 @@ public enum ShadowStyle {
     public func yOffset(_ colorScheme: ColorScheme? = nil) -> CGFloat {
         switch self {
         case .subtle:
-            return AppColors.shadowRadiusForTheme(light: 2, dark: 3, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 1, dark: 2, colorScheme: colorScheme)
         case .standard:
-            return AppColors.shadowRadiusForTheme(light: 4, dark: 5, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 2, dark: 3, colorScheme: colorScheme)
         case .elevated:
-            return AppColors.shadowRadiusForTheme(light: 6, dark: 7, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 4, dark: 5, colorScheme: colorScheme)
         case .strong:
-            return AppColors.shadowRadiusForTheme(light: 8, dark: 10, colorScheme: colorScheme)
+            return AppColors.shadowRadiusForTheme(light: 6, dark: 8, colorScheme: colorScheme)
         case .custom(_, let y, _):
             return y
         }
@@ -49,13 +49,13 @@ public enum ShadowStyle {
     public func opacity(_ colorScheme: ColorScheme? = nil) -> Double {
         switch self {
         case .subtle:
-            return AppColors.opacityForTheme(light: 0.05, dark: 0.15, colorScheme: colorScheme)
+            return AppColors.opacityForTheme(light: 0.03, dark: 0.08, colorScheme: colorScheme)
         case .standard:
-            return AppColors.opacityForTheme(light: 0.1, dark: 0.2, colorScheme: colorScheme)
+            return AppColors.opacityForTheme(light: 0.06, dark: 0.12, colorScheme: colorScheme)
         case .elevated:
-            return AppColors.opacityForTheme(light: 0.15, dark: 0.25, colorScheme: colorScheme)
+            return AppColors.opacityForTheme(light: 0.08, dark: 0.16, colorScheme: colorScheme)
         case .strong:
-            return AppColors.opacityForTheme(light: 0.2, dark: 0.3, colorScheme: colorScheme)
+            return AppColors.opacityForTheme(light: 0.12, dark: 0.22, colorScheme: colorScheme)
         case .custom(_, _, let opacity):
             return opacity
         }

@@ -13,12 +13,13 @@ struct AuthView: View {
     @EnvironmentObject var userSession: UserSession
     @Environment(\.colorScheme) private var colorScheme
     @FocusState private var focusedField: Field?
+    @State private var showTerms = false
+    @State private var showPrivacy = false
     
     enum Field: Hashable {
         case email, password, confirmPassword, username
     }
     
-    // Simplified body with clean structure
     var body: some View {
         NavigationView {
             ZStack {
@@ -26,13 +27,15 @@ struct AuthView: View {
                 Color.theme.background.ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 30) {
+                    VStack(spacing: CalAIDesignTokens.screenPadding) {
                         // App logo and title
                         appHeader
                         
                         // Auth mode selector
-                        AuthModeSelector(viewModel: viewModel)
-                            .padding(.horizontal, 20)
+                        if viewModel.authMode != .forgotPassword {
+                            AuthModeSelector(viewModel: viewModel)
+                                .padding(.top, 10)
+                        }
                         
                         // Main authentication form
                         authForm
@@ -42,11 +45,14 @@ struct AuthView: View {
                             socialSignInSection
                         }
                         
+                        // Terms and privacy links
+                        termsAndPrivacyLinks
+                        
                         // Add extra space at bottom for keyboard
                         Spacer(minLength: 30)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 40)
+                    .padding(.horizontal, CalAIDesignTokens.screenPadding)
+                    .padding(.top, 60)
                     .padding(.bottom, 30)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -75,6 +81,12 @@ struct AuthView: View {
             .onAppear {
                 // Reset focus state to ensure keyboard behavior is correct
                 focusedField = nil
+            }
+            .fullScreenCover(isPresented: $showTerms) {
+                TermsAndPrivacyView(mode: .terms)
+            }
+            .fullScreenCover(isPresented: $showPrivacy) {
+                TermsAndPrivacyView(mode: .privacy)
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
@@ -131,12 +143,12 @@ struct AuthModeSelector: View {
                 }
             }) {
                 Text("Sign In")
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundColor(viewModel.authMode == .emailSignIn ? .white : .theme.subtext)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 14)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .fill(viewModel.authMode == .emailSignIn ? Color.theme.accent : Color.clear)
                     )
             }
@@ -148,24 +160,87 @@ struct AuthModeSelector: View {
                 }
             }) {
                 Text("Sign Up")
-                    .font(.headline)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundColor(viewModel.authMode == .emailSignUp ? .white : .theme.subtext)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 14)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .fill(viewModel.authMode == .emailSignUp ? Color.theme.accent : Color.clear)
                     )
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.theme.background.opacity(0.6))
+            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.04), radius: 3, x: 0, y: 1)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
-        )
+    }
+}
+
+// MARK: - Launch Screen View
+struct LaunchScreenView: View {
+    @State private var opacity = 0.0
+    @State private var scale = 0.8
+    @State private var showAuth = false
+    
+    var body: some View {
+        ZStack {
+            Color.theme.background.ignoresSafeArea()
+            
+            if !showAuth {
+                VStack(spacing: 20) {
+                    // Large app icon with animation
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 90))
+                        .foregroundColor(.theme.accent)
+                    
+                    // App name with large bold font
+                    Text("100Days")
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundColor(.theme.text)
+                }
+                .scaleEffect(scale)
+                .opacity(opacity)
+                .onAppear {
+                    // Simple animation sequence
+                    withAnimation(.easeOut(duration: 0.8)) {
+                        opacity = 1.0
+                        scale = 1.0
+                    }
+                    
+                    // Transition to auth screen after delay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                        withAnimation(.easeIn(duration: 0.4)) {
+                            opacity = 0.0
+                            scale = 1.1
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            showAuth = true
+                        }
+                    }
+                }
+            } else {
+                AuthView()
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+// MARK: - Launch Screen Preview
+struct LaunchScreenView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            LaunchScreenView()
+                .preferredColorScheme(.light)
+                .previewDisplayName("Light Mode")
+                
+            LaunchScreenView()
+                .preferredColorScheme(.dark)
+                .previewDisplayName("Dark Mode")
+        }
     }
 }
 
@@ -188,25 +263,33 @@ struct AuthView_Previews: PreviewProvider {
 private extension AuthView {
     // App header with logo and title
     var appHeader: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 18) {
+            // Logo mark with subtle shadow
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 60))
+                .font(.system(size: 70))
                 .foregroundColor(.theme.accent)
+                .shadow(color: Color.theme.accent.opacity(0.2), radius: 10, x: 0, y: 4)
+                .padding(.bottom, 5)
             
-                Text("100Days")
-                .font(.system(size: 36, weight: .bold))
+            // App title
+            Text("100Days")
+                .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
             
-            Text("Track your 100-day challenges")
-                .font(.subheadline)
+            // Tagline
+            Text("Build consistency, transform your life")
+                .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundColor(.theme.subtext)
+                .padding(.top, -5)
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, 30)
+        .padding(.top, 20)
+        .opacity(0.95)
     }
     
     // Main authentication form
     var authForm: some View {
-        VStack(spacing: 24) {
+        VStack(spacing: 28) {
             // Email & Password fields based on auth mode
             switch viewModel.authMode {
             case .emailSignIn, .emailSignUp:
@@ -214,17 +297,27 @@ private extension AuthView {
                 
                 // Sign In/Up button
                 Button(action: submitCredentials) {
-                    Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Sign Up")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.5))
-                        )
+                    HStack(spacing: 12) {
+                        Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Sign Up")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        
+                        if viewModel.isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: CalAIDesignTokens.buttonHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.3))
+                            .shadow(color: isButtonEnabled ? Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
+                    )
                 }
                 .disabled(!isButtonEnabled)
+                .padding(.top, 4)
                 
                 // Forgot password link (sign in mode only)
                 if viewModel.authMode == .emailSignIn {
@@ -233,9 +326,9 @@ private extension AuthView {
                             viewModel.authMode = .forgotPassword
                         }
                     }
-                    .font(.subheadline)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.accent)
-                    .padding(.top, 4)
+                    .padding(.top, 8)
                 }
                 
             case .forgotPassword:
@@ -250,7 +343,7 @@ private extension AuthView {
             // Email field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
-                    .font(.subheadline.bold())
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 TextField("Your email address", text: $viewModel.email)
@@ -259,11 +352,12 @@ private extension AuthView {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .padding()
+                    .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(Color.theme.surface)
-                    .cornerRadius(12)
+                    .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.theme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
                     )
                     .focused($focusedField, equals: Field.email)
                     .submitLabel(.next)
@@ -281,7 +375,7 @@ private extension AuthView {
                 
                 if let error = viewModel.emailError, !viewModel.email.isEmpty {
                     Text(error)
-                        .font(.caption)
+                        .font(.system(size: 13))
                         .foregroundColor(.red)
                 }
             }
@@ -289,18 +383,19 @@ private extension AuthView {
             // Password field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.subheadline.bold())
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 SecureField("Your password", text: $viewModel.password)
                     .textContentType(viewModel.authMode == .emailSignIn ? .password : .newPassword)
                     .autocorrectionDisabled()
                     .padding()
+                    .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(Color.theme.surface)
-                    .cornerRadius(12)
+                    .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.theme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
                     )
                     .focused($focusedField, equals: Field.password)
                     .submitLabel(viewModel.authMode == .emailSignUp ? .next : .go)
@@ -323,7 +418,7 @@ private extension AuthView {
                 
                 if let error = viewModel.passwordError, !viewModel.password.isEmpty {
                     Text(error)
-                        .font(.caption)
+                        .font(.system(size: 13))
                         .foregroundColor(.red)
                 }
             }
@@ -332,18 +427,19 @@ private extension AuthView {
             if viewModel.authMode == .emailSignUp {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Confirm Password")
-                        .font(.subheadline.bold())
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundColor(.theme.text)
                     
                     SecureField("Confirm your password", text: $viewModel.confirmPassword)
                         .textContentType(.newPassword)
                         .autocorrectionDisabled()
                         .padding()
+                        .frame(height: CalAIDesignTokens.buttonHeight)
                         .background(Color.theme.surface)
-                        .cornerRadius(12)
+                        .cornerRadius(CalAIDesignTokens.buttonRadius)
                         .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.theme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                                .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
                         )
                         .focused($focusedField, equals: Field.confirmPassword)
                         .submitLabel(.go)
@@ -360,7 +456,7 @@ private extension AuthView {
                     
                     if let error = viewModel.confirmPasswordError, !viewModel.confirmPassword.isEmpty {
                         Text(error)
-                            .font(.caption)
+                            .font(.system(size: 13))
                             .foregroundColor(.red)
                     }
                 }
@@ -375,45 +471,54 @@ private extension AuthView {
     var forgotPasswordForm: some View {
         VStack(spacing: 24) {
             Text("Reset Password")
-                .font(.title3.bold())
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
                 .foregroundColor(.theme.text)
             
             Text("Enter your email address and we'll send you a link to reset your password")
-                .font(.subheadline)
+                .font(.system(size: 15, weight: .regular, design: .rounded))
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 8)
             
             // Email field
-            TextField("Your email address", text: $viewModel.email)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Email")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+                
+                TextField("Your email address", text: $viewModel.email)
+                    .textContentType(.emailAddress)
+                    .keyboardType(.emailAddress)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
                     .padding()
-                .background(Color.theme.surface)
-                    .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.theme.border, lineWidth: 1)
-                )
-                .focused($focusedField, equals: Field.email)
-                .submitLabel(.go)
+                    .frame(height: CalAIDesignTokens.buttonHeight)
+                    .background(Color.theme.surface)
+                    .cornerRadius(CalAIDesignTokens.buttonRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
+                    )
+                    .focused($focusedField, equals: Field.email)
+                    .submitLabel(.go)
                     .onSubmit {
-                    resetPassword()
-                }
+                        resetPassword()
+                    }
+            }
             
             // Reset button
             Button(action: resetPassword) {
                 Text("Send Reset Link")
-                    .font(.headline)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .fill(!viewModel.email.isEmpty && viewModel.networkConnected ? 
-                                Color.theme.accent : Color.gray.opacity(0.5))
+                                Color.theme.accent : Color.gray.opacity(0.3))
+                            .shadow(color: !viewModel.email.isEmpty && viewModel.networkConnected ? 
+                                Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
                     )
             }
             .disabled(viewModel.email.isEmpty || !viewModel.networkConnected)
@@ -425,7 +530,7 @@ private extension AuthView {
                     viewModel.authMode = .emailSignIn
                 }
             }
-            .font(.subheadline)
+            .font(.system(size: 15, weight: .medium, design: .rounded))
             .foregroundColor(.theme.accent)
             .padding(.top, 8)
         }
@@ -434,72 +539,82 @@ private extension AuthView {
     
     // Social sign in buttons section
     var socialSignInSection: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 24) {
             // "Or continue with" divider
             HStack {
                 Rectangle()
-                    .fill(Color.theme.subtext.opacity(0.3))
+                    .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
                 
                 Text("Or continue with")
-                    .font(.footnote)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.subtext)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 12)
                 
                 Rectangle()
-                    .fill(Color.theme.subtext.opacity(0.3))
+                    .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
             }
+            .padding(.top, 8)
             
-            // Google sign-in
-            Button {
-                guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                      let _ = windowScene.windows.first?.rootViewController else {
-                    print("Failed to get root view controller")
-                    return
-                }
-                
-                viewModel.isLoading = true
-                
-                Task {
-                    await viewModel.signInWithGoogle()
-                }
-            } label: {
-                HStack {
-                    Image("google_logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 20, height: 20)
-                    Text("Sign in with Google")
-                        .font(.headline)
-                        .foregroundColor(.theme.text)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.theme.surface)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.theme.border, lineWidth: 1)
-                )
-            }
-            .disabled(!viewModel.networkConnected)
-            
-            // Apple Sign In - Replace with Apple's official SignInWithAppleButton
-            SignInWithAppleButton(text: .signUp, onRequest: configureAppleRequest, onCompletion: handleAppleSignIn)
-                .frame(maxWidth: .infinity, minHeight: 50)
-                .padding(.horizontal)
-                .contentShape(Rectangle()) // Ensure tap area matches visible area
-                .id("appleSignInButton") // Ensure SwiftUI doesn't reuse the view
-                .accessibility(identifier: "appleSignInButton") // For testing and debugging
-                .onAppear {
-                    // Fix Apple button constraints on appear
-                    DispatchQueue.main.async {
-                        AppFixes.shared.applyAllFixes()
+            // Social auth buttons
+            VStack(spacing: 14) {
+                // Apple Sign In
+                SignInWithAppleButton(text: .continueWith, onRequest: configureAppleRequest, onCompletion: handleAppleSignIn)
+                    .frame(maxWidth: .infinity, minHeight: CalAIDesignTokens.buttonHeight)
+                    .cornerRadius(CalAIDesignTokens.buttonRadius) // Force correct corner radius
+                    .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
+                    .id("appleSignInButton")
+                    .accessibility(identifier: "appleSignInButton")
+                    .onAppear {
+                        // Fix Apple button constraints on appear
+                        DispatchQueue.main.async {
+                            AppFixes.shared.applyAllFixes()
+                        }
                     }
+                
+                // Google sign-in
+                Button {
+                    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                          let _ = windowScene.windows.first?.rootViewController else {
+                        print("Failed to get root view controller")
+                        return
+                    }
+                    
+                    viewModel.isLoading = true
+                    
+                    Task {
+                        await viewModel.signInWithGoogle()
+                    }
+                } label: {
+                    HStack(spacing: 12) {
+                        Image("google_logo")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 20, height: 20)
+                        
+                        Text("Continue with Google")
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                            .foregroundColor(.theme.text)
+                        
+                        Spacer()
+                    }
+                    .padding(.leading, 16)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: CalAIDesignTokens.buttonHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .fill(Color.theme.surface)
+                            .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
+                    )
                 }
+                .buttonStyle(AppScaleButtonStyle(scale: 0.98))
+                .disabled(!viewModel.networkConnected)
+            }
         }
     }
     
@@ -539,43 +654,43 @@ private extension AuthView {
     
     // Loading overlay component
     var loadingOverlay: some View {
-            ZStack {
-                // Semi-transparent background
-                Color.black.opacity(0.5)
-                    .edgesIgnoringSafeArea(.all)
-                
-                VStack(spacing: 20) {
-                    if viewModel.networkConnected {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        
-                        Text("Signing in...")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                    } else {
-                        Image(systemName: "wifi.slash")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                        
-                        Text("Network unavailable")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        
-                        Text("Waiting for connection...")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                    }
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.4)
+                .edgesIgnoringSafeArea(.all)
+            
+            VStack(spacing: 20) {
+                if viewModel.networkConnected {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    
+                    Text("Signing in...")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundColor(.white)
+                } else {
+                    Image(systemName: "wifi.slash")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white)
+                    
+                    Text("Network unavailable")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundColor(.white)
+                    
+                    Text("Waiting for connection...")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
                 }
-                .padding(30)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.black.opacity(0.7))
-                )
-                .shadow(radius: 10)
             }
+            .padding(30)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.black.opacity(0.7))
+            )
+            .shadow(radius: 10)
         }
+    }
     
     // Error banner
     var errorBanner: some View {
@@ -587,7 +702,7 @@ private extension AuthView {
                     .foregroundColor(.white)
                 
                 Text(viewModel.errorMessage)
-                    .font(.subheadline)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundColor(.white)
                 
                 Spacer()
@@ -599,9 +714,11 @@ private extension AuthView {
                         .foregroundColor(.white)
                 }
             }
-                        .padding()
-            .background(Color.red.opacity(0.9))
-            .cornerRadius(10)
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.red.opacity(0.85))
+            )
             .padding(.horizontal)
             .padding(.bottom, 20)
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -612,26 +729,56 @@ private extension AuthView {
     
     // Network status banner
     var networkStatusBanner: some View {
-            VStack {
-                HStack {
-                    Image(systemName: "wifi.slash")
-                        .foregroundColor(.white)
-                    
-                    Text("No Internet Connection")
-                        .font(.caption)
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.red.opacity(0.8))
-                .cornerRadius(8)
+        VStack {
+            HStack {
+                Image(systemName: "wifi.slash")
+                    .foregroundColor(.white)
+                
+                Text("No Internet Connection")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.white)
+                
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.red.opacity(0.8))
+            )
             .padding(.horizontal, 20)
-            .padding(.top, 5)
+            .padding(.top, 8)
             
             Spacer()
         }
+    }
+    
+    // Terms and privacy links at the bottom
+    var termsAndPrivacyLinks: some View {
+        VStack(spacing: 8) {
+            Text("By continuing, you agree to our")
+                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .foregroundColor(.theme.subtext)
+            
+            HStack(spacing: 4) {
+                Button("Terms of Service") {
+                    showTerms = true
+                }
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundColor(.theme.accent)
+                
+                Text("and")
+                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .foregroundColor(.theme.subtext)
+                
+                Button("Privacy Policy") {
+                    showPrivacy = true
+                }
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundColor(.theme.accent)
+            }
+        }
+        .padding(.top, 20)
     }
 }
 

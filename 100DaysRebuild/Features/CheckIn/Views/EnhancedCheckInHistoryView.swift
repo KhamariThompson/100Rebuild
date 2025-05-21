@@ -41,7 +41,7 @@ struct EnhancedCheckInHistoryView: View {
                 VStack(spacing: 0) {
                     // Spacer to push content below the header
                     Color.clear
-                        .frame(height: 110)
+                        .frame(height: CalAIDesignTokens.headerHeight)
                     
                     // Mode Toggle
                     Picker("View Mode", selection: $viewMode) {

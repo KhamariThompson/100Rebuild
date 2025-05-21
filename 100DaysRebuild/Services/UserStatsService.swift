@@ -91,7 +91,7 @@ class UserStatsService: ObservableObject {
 }
 
 /// Model representing a user's aggregate statistics
-struct UserStats {
+struct UserStats: Equatable {
     let totalChallenges: Int
     let completedChallenges: Int
     let currentStreak: Int
@@ -117,6 +117,15 @@ struct UserStats {
     
     var completionPercentageFormatted: String {
         String(format: "%.0f%%", overallCompletionPercentage * 100)
+    }
+    
+    static func == (lhs: UserStats, rhs: UserStats) -> Bool {
+        lhs.totalChallenges == rhs.totalChallenges &&
+        lhs.completedChallenges == rhs.completedChallenges &&
+        lhs.currentStreak == rhs.currentStreak &&
+        lhs.longestStreak == rhs.longestStreak &&
+        lhs.overallCompletionPercentage == rhs.overallCompletionPercentage &&
+        lhs.lastCheckInDate == rhs.lastCheckInDate
     }
 }
 

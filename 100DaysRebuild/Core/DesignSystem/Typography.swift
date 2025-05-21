@@ -4,15 +4,15 @@ import SwiftUI
 /// Provides consistent text styles across the application
 public enum AppTypography {
     public enum FontSize {
-        public static let display: CGFloat = 42
-        public static let largeTitle: CGFloat = 34
-        public static let title1: CGFloat = 28
-        public static let title2: CGFloat = 22
-        public static let title3: CGFloat = 20
-        public static let headline: CGFloat = 17
-        public static let body: CGFloat = 17
-        public static let callout: CGFloat = 16
-        public static let subheadline: CGFloat = 15
+        public static let display: CGFloat = 40
+        public static let largeTitle: CGFloat = 32
+        public static let title1: CGFloat = 26
+        public static let title2: CGFloat = 20
+        public static let title3: CGFloat = 18
+        public static let headline: CGFloat = 16
+        public static let body: CGFloat = 16
+        public static let callout: CGFloat = 15
+        public static let subheadline: CGFloat = 14
         public static let footnote: CGFloat = 13
         public static let caption: CGFloat = 12
         public static let small: CGFloat = 10
@@ -26,12 +26,12 @@ public enum AppTypography {
     }
     
     // Typography styles
-    public static let display = Font.custom(FontSize.display, weight: .bold)
-    public static let largeTitle = Font.custom(FontSize.largeTitle, weight: .bold)
-    public static let title1 = Font.custom(FontSize.title1, weight: .bold)
-    public static let title2 = Font.custom(FontSize.title2, weight: .semibold)
-    public static let title3 = Font.custom(FontSize.title3, weight: .semibold)
-    public static let headline = Font.custom(FontSize.headline, weight: .semibold)
+    public static let display = Font.custom(FontSize.display, weight: .semibold)
+    public static let largeTitle = Font.custom(FontSize.largeTitle, weight: .semibold)
+    public static let title1 = Font.custom(FontSize.title1, weight: .semibold)
+    public static let title2 = Font.custom(FontSize.title2, weight: .medium)
+    public static let title3 = Font.custom(FontSize.title3, weight: .medium)
+    public static let headline = Font.custom(FontSize.headline, weight: .medium)
     public static let body = Font.custom(FontSize.body, weight: .regular)
     public static let callout = Font.custom(FontSize.callout, weight: .regular)
     public static let subheadline = Font.custom(FontSize.subheadline, weight: .regular)
@@ -46,11 +46,11 @@ public enum AppTypography {
     
     // Dynamic Type Styles
     // These styles automatically adapt to user's text size preferences
-    public static let dynamicDisplay = Font.system(.largeTitle, design: .rounded).weight(.bold)
-    public static let dynamicLargeTitle = Font.system(.largeTitle, design: .rounded).weight(.bold)
-    public static let dynamicTitle1 = Font.system(.title, design: .rounded).weight(.bold)
-    public static let dynamicTitle2 = Font.system(.title2, design: .rounded).weight(.semibold)
-    public static let dynamicTitle3 = Font.system(.title3, design: .rounded).weight(.semibold)
+    public static let dynamicDisplay = Font.system(.largeTitle, design: .rounded).weight(.semibold)
+    public static let dynamicLargeTitle = Font.system(.largeTitle, design: .rounded).weight(.semibold)
+    public static let dynamicTitle1 = Font.system(.title, design: .rounded).weight(.semibold)
+    public static let dynamicTitle2 = Font.system(.title2, design: .rounded).weight(.medium)
+    public static let dynamicTitle3 = Font.system(.title3, design: .rounded).weight(.medium)
     public static let dynamicHeadline = Font.system(.headline, design: .rounded)
     public static let dynamicBody = Font.system(.body, design: .rounded)
     public static let dynamicCallout = Font.system(.callout, design: .rounded)
@@ -102,15 +102,15 @@ public extension Font {
     }
     
     // Convenience methods to create fonts with specific sizes and weights
-    static func displayRounded(weight: Font.Weight = .regular) -> Font {
+    static func displayRounded(weight: Font.Weight = .semibold) -> Font {
         return .system(size: AppTypography.FontSize.display, weight: weight, design: .rounded)
     }
     
-    static func titleRounded(weight: Font.Weight = .regular) -> Font {
+    static func titleRounded(weight: Font.Weight = .semibold) -> Font {
         return .system(size: AppTypography.FontSize.title1, weight: weight, design: .rounded)
     }
     
-    static func headlineRounded(weight: Font.Weight = .regular) -> Font {
+    static func headlineRounded(weight: Font.Weight = .medium) -> Font {
         return .system(size: AppTypography.FontSize.headline, weight: weight, design: .rounded)
     }
     

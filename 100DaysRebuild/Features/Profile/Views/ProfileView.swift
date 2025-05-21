@@ -16,7 +16,7 @@ struct ProfileView: View {
     @State private var isShowingSettings = false
     @State private var isShowingAnalytics = false
     @State private var isShowingNewChallenge = false
-    @State private var isShowingShareSheet = false
+    @State private var isShowingUsernamePrompt = false
     @FocusState private var isUsernameFocused: Bool
     @State private var scrollOffset: CGFloat = 0
     
@@ -29,7 +29,7 @@ struct ProfileView: View {
     
     var body: some View {
         NavigationView {
-            ZStack(alignment: .top) {
+            ZStack {
                 // Background
                 Color.theme.background
                     .ignoresSafeArea()
@@ -48,90 +48,58 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
                 } 
-                // Main content
+                // Main content with title inside ScrollView (scrolls with content)
                 else {
                     ScrollView {
-                        VStack(spacing: 0) {
-                            // Spacer to push content below the header
-                            Color.clear
-                                .frame(height: 110)
-                            
-                            // Profile Header
-                            VStack(spacing: AppSpacing.m) {
-                                profileImageSection
+                        VStack(spacing: AppSpacing.m) {
+                            // Title with gradient inside the ScrollView
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Profile")
+                                    .font(.largeTitle)
+                                    .bold()
+                                    .foregroundStyle(profileGradient)
                                 
-                                if viewModel.isEditingUsername {
-                                    usernameEditSection
-                                } else {
-                                    userInfoSection
+                                // Subtitle if username is available
+                                if !viewModel.username.isEmpty {
+                                    Text("@\(viewModel.username)")
+                                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                                        .foregroundColor(.theme.subtext)
                                 }
                             }
-                            .padding(.vertical, AppSpacing.m)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                            .padding(.top, AppSpacing.m)
                             
-                            // Identity-Focused Stats
-                            identityStatsSection
+                            // Hero Section
+                            profileHeroSection
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                                .padding(.bottom, AppSpacing.l)
                             
-                            // Quick Actions Section
-                            quickActionsSection
+                            // Stats Section - Horizontal Scrolling
+                            statsScrollSection
+                                .padding(.bottom, AppSpacing.l)
                             
-                            // Last Active Challenge
+                            // Action Bar - Horizontal
+                            horizontalActionBar
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                                .padding(.bottom, AppSpacing.l)
+                            
+                            // Last Active Challenge - Condensed
                             if let lastActiveChallenge = viewModel.lastActiveChallenge {
-                                lastActiveChallengeSection(challenge: lastActiveChallenge)
+                                condensedChallengePreview(challenge: lastActiveChallenge)
+                                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                             } else {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("No Active Challenge")
-                                        .font(.headline)
-                                        .padding(.horizontal)
-                                    
-                                    HStack {
-                                        Spacer()
-                                        
-                                        VStack(spacing: 16) {
-                                            Image(systemName: "flag.slash")
-                                                .font(.system(size: 40))
-                                                .foregroundColor(.theme.subtext)
-                                            
-                                            Text("You don't have any active challenges")
-                                                .font(.subheadline)
-                                                .foregroundColor(.theme.subtext)
-                                                .multilineTextAlignment(.center)
-                                            
-                                            Button(action: {
-                                                // Navigate to Challenges tab
-                                                router.changeTab(to: 0)
-                                                // Delay before showing new challenge sheet
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                                    isShowingNewChallenge = true
-                                                }
-                                            }) {
-                                                Text("Start a Challenge")
-                                                    .font(.headline)
-                                                    .foregroundColor(.white)
-                                                    .padding(.vertical, 12)
-                                                    .padding(.horizontal, 30)
-                                                    .background(
-                                                        RoundedRectangle(cornerRadius: 12)
-                                                            .fill(Color.theme.accent)
-                                                    )
-                                            }
-                                        }
-                                        .padding()
-                                        
-                                        Spacer()
-                                    }
-                                    .padding(.vertical)
-                                    .background(Color.theme.surface)
-                                    .cornerRadius(12)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-                                    .padding(.horizontal)
-                                }
+                                noActiveChallenge
+                                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                             }
                             
                             // Add some bottom padding for better scrolling
                             Color.clear.frame(height: 40)
                         }
-                        .padding(.horizontal)
-                        .trackScrollOffset($scrollOffset)
+                    }
+                    .safeAreaInset(edge: .top) {
+                        // Spacer to ensure content doesn't appear under the header
+                        Color.clear.frame(height: 0)
                     }
                     .overlay {
                         if viewModel.isLoading && !viewModel.isInitialLoad {
@@ -150,39 +118,27 @@ struct ProfileView: View {
                         }
                     }
                 }
-                
-                // Overlay the dynamic header
-                if !viewModel.isInitialLoad {
-                    ScrollAwareHeaderView(
-                        title: "Profile",
-                        scrollOffset: $scrollOffset,
-                        subtitle: userSession.currentUser?.displayName ?? userSession.currentUser?.email ?? "",
-                        accentGradient: profileGradient
-                    )
-                }
             }
+            .navigationBarHidden(true) // Hide navigation bar since we have our own header
             .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
             .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
-            .navigationBarItems(trailing: 
-                Button(action: {
-                    print("Settings button tapped")
-                    
-                    // Add haptic feedback for immediate response
-                    let impactGenerator = UIImpactFeedbackGenerator(style: .medium)
-                    impactGenerator.impactOccurred()
-                    
-                    // Then show settings
-                    isShowingSettings = true
-                }) {
-                    Image(systemName: "gear")
-                        .font(.title3)
-                        .foregroundColor(.theme.accent)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(PlainButtonStyle())
-                .accessibilityLabel("Settings")
-            )
+            .alert(isPresented: Binding<Bool>(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.error = nil } }
+            )) {
+                Alert(
+                    title: Text("Error"),
+                    message: Text(viewModel.error ?? "Unknown error"),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+            .fullScreenCover(isPresented: $isShowingUsernamePrompt) {
+                UsernamePromptView(username: $viewModel.newUsername, onSave: {
+                    Task {
+                        await viewModel.saveUsername()
+                    }
+                })
+            }
             .fixedSheet(isPresented: $isShowingSettings) {
                 SettingsView()
             }
@@ -195,21 +151,6 @@ struct ProfileView: View {
                 Text("New Challenge")
                     .font(.title)
                     .padding()
-            }
-            .fixedSheet(isPresented: $isShowingShareSheet) {
-                let username = viewModel.username.isEmpty ? (userSession.currentUser?.displayName ?? "User") : viewModel.username
-                let shareText = "I'm tracking my 100-day challenges using the 100Days app! Follow me at @\(username) or check out https://100days.site"
-                ShareSheet(items: [shareText])
-            }
-            .alert(isPresented: Binding<Bool>(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Alert(
-                    title: Text("Error"),
-                    message: Text(viewModel.error ?? "Unknown error"),
-                    dismissButton: .default(Text("OK"))
-                )
             }
             .onAppear {
                 // Mark tab as changing when this view appears
@@ -225,6 +166,30 @@ struct ProfileView: View {
                         router.tabIsChanging = false
                     }
                 }
+                
+                // Show username prompt if no username is set
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if !viewModel.isInitialLoad && viewModel.username.isEmpty {
+                        isShowingUsernamePrompt = true
+                    }
+                }
+                
+                // Add observer for profile photo updates
+                NotificationCenter.default.addObserver(
+                    forName: Notification.Name("UserProfilePhotoUpdated"),
+                    object: nil,
+                    queue: .main
+                ) { [weak viewModel] notification in
+                    if let url = notification.object as? URL {
+                        Task {
+                            await viewModel?.loadImageFromURL(url)
+                        }
+                    }
+                }
+            }
+            .onDisappear {
+                // Remove notification observers
+                NotificationCenter.default.removeObserver(self, name: Notification.Name("UserProfilePhotoUpdated"), object: nil)
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
@@ -232,8 +197,289 @@ struct ProfileView: View {
     
     // MARK: - UI Components
     
-    private var profileImageSection: some View {
-        ZStack {
+    // Hero Section with avatar, username, and join date
+    private var profileHeroSection: some View {
+        VStack(spacing: 12) { // Reduced spacing between elements
+            ZStack {
+                // Profile Image
+                profileImageView
+                
+                // Edit photo button overlay
+                Circle()
+                    .fill(Color.black.opacity(0.4))
+                    .frame(width: 100, height: 100)
+                    .overlay(
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(.white)
+                    )
+                    .opacity(0.7)
+                    .photoSourcePicker(
+                        showSourceOptions: $viewModel.showPhotoSourceOptions,
+                        showCameraPicker: $viewModel.showCameraPicker,
+                        photosPickerSelection: $viewModel.selectedPhoto
+                    )
+                    .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
+                        if newValue != nil {
+                            viewModel.updateProfilePhoto()
+                        }
+                    }
+            }
+            
+            // Username display with @ symbol
+            Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
+                .font(AppTypography.title2)
+                .bold()
+                .foregroundColor(.theme.text)
+                .padding(.top, 4) // Reduced padding
+            
+            // Join date only - streak info removed
+            Text("Joined \(getMemberSinceDate())")
+                .font(AppTypography.footnote)
+                .foregroundColor(.theme.subtext)
+            
+            // Edit profile button
+            Button(action: { 
+                isShowingSettings = true
+            }) {
+                Label("Edit Profile", systemImage: "pencil")
+                    .font(AppTypography.callout)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .stroke(Color.theme.accent, lineWidth: 1.5)
+                    )
+                    .foregroundColor(.theme.accent)
+            }
+            .padding(.top, 4) // Reduced padding
+        }
+        .padding(.vertical, AppSpacing.s) // Reduced vertical padding
+        .padding(.horizontal, AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow, radius: 4, x: 0, y: 2)
+        )
+    }
+    
+    // Stats horizontal scroll area
+    private var statsScrollSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: AppSpacing.s) {
+                // Member Since Stat
+                ProfileStatCard(
+                    icon: "calendar",
+                    value: viewModel.memberSinceDate?.formatAsMonthYear() ?? "N/A",
+                    label: "Member Since",
+                    iconColor: .blue
+                )
+                
+                // Active Challenges Stat
+                ProfileStatCard(
+                    icon: "flag.fill",
+                    value: "\(ChallengeStore.shared.getActiveChallenges().count)",
+                    label: "Active Challenges",
+                    iconColor: .green
+                )
+                
+                // Current Streak Stat
+                ProfileStatCard(
+                    icon: "flame.fill",
+                    value: "\(viewModel.currentStreak)",
+                    label: "Current Streak",
+                    iconColor: .orange
+                )
+            }
+            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+        }
+    }
+    
+    // Action Bar - Horizontal layout with capsule buttons
+    private var horizontalActionBar: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            Text("Quick Actions")
+                .font(AppTypography.headline)
+            
+            HStack(spacing: AppSpacing.m) {
+                // Analytics button
+                ActionButton(title: "View Analytics", icon: "chart.pie.fill", color: .blue) {
+                    // Navigate to Progress tab and mark for showing analytics
+                    router.changeTab(to: 1)
+                    // Use notification to trigger the action in the target tab
+                    NotificationCenter.default.post(
+                        name: Notification.Name("ShowProgressAnalytics"),
+                        object: nil
+                    )
+                }
+                
+                // Create challenge button
+                ActionButton(title: "Create Challenge", icon: "plus", color: .green) {
+                    // Navigate to Challenges tab and trigger new challenge
+                    router.changeTab(to: 0)
+                    // Allow time for the tab to switch
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        isShowingNewChallenge = true
+                    }
+                }
+                
+                // Settings button
+                ActionButton(title: "Settings", icon: "gear", color: .gray) {
+                    isShowingSettings = true
+                }
+            }
+        }
+    }
+    
+    // Condensed Challenge Preview without circular progress
+    private func condensedChallengePreview(challenge: Challenge) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            Text("Current Challenge")
+                .font(AppTypography.headline)
+            
+            Button(action: {
+                // Navigate to the challenge detail
+                router.changeTab(to: 0)
+                // Post notification to show this specific challenge
+                NotificationCenter.default.post(
+                    name: Notification.Name("ShowChallenge"),
+                    object: challenge.id
+                )
+            }) {
+                VStack(alignment: .leading, spacing: AppSpacing.s) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(challenge.title)
+                                .font(AppTypography.callout)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.theme.text)
+                            
+                            Text("Day \(challenge.daysCompleted) of 100")
+                                .font(AppTypography.footnote)
+                                .foregroundColor(.theme.subtext)
+                        }
+                        
+                        Spacer()
+                        
+                        // Day count or completed badge
+                        if challenge.isCompleted {
+                            Text("Completed")
+                                .font(AppTypography.caption)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.green.opacity(0.2))
+                                )
+                                .foregroundColor(.green)
+                        } else {
+                            Text("\(challenge.daysCompleted)%")
+                                .font(AppTypography.callout)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.theme.accent)
+                        }
+                    }
+                    
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.theme.subtext.opacity(0.2))
+                                .frame(height: 6)
+                                .cornerRadius(3)
+                            
+                            Rectangle()
+                                .fill(Color.theme.accent)
+                                .frame(width: max(0, min(CGFloat(challenge.progressPercentage) * geometry.size.width, geometry.size.width)), height: 6)
+                                .cornerRadius(3)
+                        }
+                    }
+                    .frame(height: 6)
+                    
+                    // Last check-in time
+                    if let lastCheckIn = challenge.lastCheckInDate {
+                        HStack {
+                            Image(systemName: "clock")
+                                .font(.system(size: 12))
+                                .foregroundColor(.theme.subtext)
+                            
+                            Text("Last check-in \(timeAgoFormatter.localizedString(for: lastCheckIn, relativeTo: Date()))")
+                                .font(AppTypography.caption)
+                                .foregroundColor(.theme.subtext)
+                        }
+                    }
+                }
+                .padding(AppSpacing.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .fill(Color.theme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .stroke(Color.theme.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+    
+    // No active challenge view
+    private var noActiveChallenge: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            Text("No Active Challenge")
+                .font(AppTypography.headline)
+            
+            Button(action: {
+                // Navigate to Challenges tab
+                router.changeTab(to: 0)
+                // Delay before showing new challenge sheet
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isShowingNewChallenge = true
+                }
+            }) {
+                VStack(spacing: AppSpacing.m) {
+                    Image(systemName: "flag.slash")
+                        .font(.system(size: 32))
+                        .foregroundColor(.theme.subtext)
+                    
+                    Text("Start your first 100-day challenge")
+                        .font(AppTypography.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.theme.text)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Start Challenge")
+                        .font(AppTypography.callout)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 24)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.accent)
+                        )
+                }
+                .padding(AppSpacing.m)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .fill(Color.theme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .stroke(Color.theme.border, lineWidth: 1)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+    }
+    
+    // Profile image view component
+    private var profileImageView: some View {
+        Group {
             if viewModel.isLoadingImage {
                 ProgressView()
                     .scaleEffect(1.5)
@@ -245,36 +491,10 @@ struct ProfileView: View {
                     .circularAvatarStyle(size: 100)
                     .successCheckmark(isShowing: viewModel.showSuccessAnimation)
             } else {
-                // Use AsyncImage with the profile picture if available in UserSession
+                // Use ProfilePictureView if available in UserSession
                 if let photoURL = userSession.photoURL {
-                    CachedAsyncImage(url: photoURL) { phase in
-                        switch phase {
-                        case .empty:
-                            ZStack {
-                                Circle()
-                                    .fill(Color.theme.surface)
-                                    .frame(width: 100, height: 100)
-                                
-                                ProgressView()
-                                    .scaleEffect(1.2)
-                            }
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .circularAvatarStyle(size: 100)
-                        case .failure:
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 100))
-                                .foregroundColor(.theme.accent)
-                        @unknown default:
-                            // Handle any future cases that might be added to AsyncImagePhase
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 100))
-                                .foregroundColor(.theme.accent)
-                        }
-                    }
-                    .successCheckmark(isShowing: viewModel.showSuccessAnimation)
+                    ProfilePictureView(url: photoURL, size: 100)
+                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 100))
@@ -282,213 +502,158 @@ struct ProfileView: View {
                         .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 }
             }
-            
-            // Edit photo button overlay
-            Circle()
-                .fill(Color.black.opacity(0.4))
-                .frame(width: 100, height: 100)
-                .overlay(
-                    Image(systemName: "camera.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.white)
-                )
-                .opacity(0.7)
-                .photoSourcePicker(
-                    showSourceOptions: $viewModel.showPhotoSourceOptions,
-                    showCameraPicker: $viewModel.showCameraPicker,
-                    photosPickerSelection: $viewModel.selectedPhoto
-                )
-                .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
-                    if newValue != nil {
-                        viewModel.updateProfilePhoto()
-                    }
-                }
         }
     }
     
-    private var userInfoSection: some View {
-        VStack(spacing: 4) {
-            Text(viewModel.username.isEmpty ? (userSession.username ?? "No username") : viewModel.username)
-                .font(.title)
-                .bold()
-            
-            Text(userSession.currentUser?.email ?? "")
-                .font(.subheadline)
-                .foregroundColor(.gray)
-            
-            Button(action: { 
-                viewModel.isEditingUsername = true
-                viewModel.newUsername = viewModel.username
+    // MARK: - Helper Components
+    
+    // Stat badge for the horizontal scroll section
+    struct ProfileStatCard: View {
+        let icon: String
+        let value: String
+        let label: String
+        let iconColor: Color
+        
+        var body: some View {
+            VStack(alignment: .center, spacing: 4) {
+                // Icon in a circle
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.15))
+                        .frame(width: 44, height: 44)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(iconColor)
+                }
+                .padding(.bottom, 4)
                 
-                // Delay focus to wait for the text field to appear
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    isUsernameFocused = true
-                }
-            }) {
-                Label("Edit Profile", systemImage: "pencil")
-                    .font(.headline)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color.theme.accent, lineWidth: 1.5)
-                    )
-                    .foregroundColor(.theme.accent)
+                // Value
+                Text(value)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                
+                // Label
+                Text(label)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
             }
-            .padding(.top, 10)
+            .frame(minWidth: 100)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+            )
         }
     }
     
-    private var usernameEditSection: some View {
-        VStack(spacing: 12) {
-            TextField("Username", text: $viewModel.newUsername)
-                .font(.title2)
-                .multilineTextAlignment(.center)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .focused($isUsernameFocused)
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-                .padding(.horizontal, 50)
-                .onSubmit {
-                    viewModel.checkUsernameAvailability()
+    // Action button for the horizontal action bar
+    struct ActionButton: View {
+        let title: String
+        let icon: String
+        let color: Color
+        let action: () -> Void
+        
+        var body: some View {
+            Button(action: action) {
+                HStack {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .medium))
+                    
+                    Text(title)
+                        .font(AppTypography.footnote)
+                        .fontWeight(.medium)
                 }
-                .onChange(of: viewModel.newUsername) { oldValue, newValue in
-                    if !newValue.isEmpty && newValue != viewModel.username {
-                        viewModel.checkUsernameAvailability()
-                    }
-                }
-            
-            if viewModel.showUsernameError {
-                Text(viewModel.usernameError)
-                    .font(.caption)
-                    .foregroundColor(.red)
-                    .padding(.top, -8)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .foregroundColor(color)
+                .background(
+                    Capsule()
+                        .stroke(color, lineWidth: 1.5)
+                )
             }
-            
-            HStack(spacing: 20) {
-                Button(action: {
-                    viewModel.cancelUsernameEdit()
-                }) {
-                    Text("Cancel")
-                        .font(.headline)
+            .buttonStyle(AppScaleButtonStyle())
+        }
+    }
+    
+    // Username Prompt Full-Screen Modal
+    struct UsernamePromptView: View {
+        @Binding var username: String
+        var onSave: () -> Void
+        @Environment(\.dismiss) private var dismiss
+        
+        var body: some View {
+            ZStack {
+                Color.theme.background.ignoresSafeArea()
+                
+                VStack(spacing: AppSpacing.l) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 70))
+                        .foregroundColor(.theme.accent)
+                        .padding(.bottom, AppSpacing.m)
+                    
+                    Text("Choose Your Username")
+                        .font(AppTypography.title2)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("This will be your display name throughout the app.")
+                        .font(AppTypography.body)
                         .foregroundColor(.theme.subtext)
-                        .padding(.horizontal, 15)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.theme.subtext, lineWidth: 1.5)
-                        )
-                }
-                
-                Button(action: {
-                    Task {
-                        await viewModel.saveUsername()
-                    }
-                }) {
-                    if viewModel.isLoading {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .padding(.horizontal, 15)
-                            .padding(.vertical, 8)
-                    } else {
-                        Text("Save")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 15)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(viewModel.showUsernameError ? Color.gray : Color.theme.accent)
-                            )
-                    }
-                }
-                .disabled(viewModel.newUsername.isEmpty || viewModel.showUsernameError || viewModel.isLoading)
-            }
-        }
-    }
-    
-    // MARK: - New Identity-Focused Sections
-    
-    private var identityStatsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Your Stats")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            HStack(spacing: 12) {
-                // Member Since Card
-                IdentityStatCard(
-                    title: "Member Since", 
-                    value: getMemberSinceDate(), 
-                    icon: "calendar"
-                )
-                
-                // Total Challenges
-                IdentityStatCard(
-                    title: "Active Challenges", 
-                    value: "\(viewModel.totalChallenges)", 
-                    icon: "flag.fill"
-                )
-                
-                // Current Streak
-                IdentityStatCard(
-                    title: "Current Streak", 
-                    value: "\(viewModel.currentStreak)", 
-                    icon: "flame.fill"
-                )
-            }
-            .padding(.horizontal)
-        }
-    }
-    
-    // Quick Actions Section with real features
-    private var quickActionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Quick Actions")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            HStack {
-                ActionButton(
-                    title: "View Analytics", 
-                    icon: "chart.pie.fill", 
-                    action: {
-                        // Navigate to Progress tab and mark for showing analytics
-                        router.changeTab(to: 1)
-                        // Use notification to trigger the action in the target tab
-                        NotificationCenter.default.post(
-                            name: Notification.Name("ShowProgressAnalytics"),
-                            object: nil
-                        )
-                    }
-                )
-                
-                ActionButton(
-                    title: "Create Challenge", 
-                    icon: "flag.fill", 
-                    action: {
-                        // Navigate to Challenges tab and trigger new challenge
-                        router.changeTab(to: 0)
-                        // Allow time for the tab to switch
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            isShowingNewChallenge = true
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, AppSpacing.xl)
+                    
+                    VStack(spacing: AppSpacing.s) {
+                        HStack {
+                            Text("@")
+                                .font(AppTypography.title3)
+                                .foregroundColor(.theme.subtext)
+                            
+                            TextField("username", text: $username)
+                                .font(AppTypography.title3)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
                         }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                .fill(Color.theme.surface)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                .stroke(Color.theme.border, lineWidth: 1)
+                        )
+                        
+                        Button(action: {
+                            onSave()
+                            dismiss()
+                        }) {
+                            Text("Save Username")
+                                .font(AppTypography.callout)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(
+                                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                        .fill(username.isEmpty ? Color.gray : Color.theme.accent)
+                                )
+                        }
+                        .disabled(username.isEmpty)
                     }
-                )
-                
-                ActionButton(
-                    title: "Settings", 
-                    icon: "gear", 
-                    action: {
-                        isShowingSettings = true
-                    }
-                )
+                    .padding(.horizontal, AppSpacing.xl)
+                    .padding(.top, AppSpacing.m)
+                }
             }
-            .padding(.horizontal)
         }
     }
     
-    // New function to get formatted member since date directly from Auth
+    // MARK: - Helper Methods
+    
+    // Format the member since date
     private func getMemberSinceDate() -> String {
         // First try to get date from ViewModel (Firestore data)
         if let memberSinceDate = viewModel.memberSinceDate {
@@ -508,216 +673,77 @@ struct ProfileView: View {
         return "Unavailable"
     }
     
-    private func lastActiveChallengeSection(challenge: Challenge) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Current Challenge")
-                .font(.headline)
-                .padding(.horizontal)
-            
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(challenge.title)
-                        .font(.title3)
-                        .bold()
-                    
-                    Spacer()
-                    
-                    if challenge.isCompleted {
-                        Text("Completed")
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.green.opacity(0.2))
-                            )
-                            .foregroundColor(.green)
-                    } else {
-                        Text("\(challenge.daysCompleted)/100")
-                            .font(.callout)
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-                
-                // Progress bar
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        Rectangle()
-                            .fill(Color.theme.subtext.opacity(0.2))
-                            .frame(height: 8)
-                            .cornerRadius(4)
-                        
-                        Rectangle()
-                            .fill(Color.theme.accent)
-                            .frame(width: max(0, min(CGFloat(challenge.progressPercentage) * geometry.size.width, geometry.size.width)), height: 8)
-                            .cornerRadius(4)
-                    }
-                }
-                .frame(height: 8)
-                
-                HStack {
-                    Label("Started \(dateFormatter.string(from: challenge.startDate))", systemImage: "calendar")
-                        .font(.caption)
-                        .foregroundColor(.theme.subtext)
-                    
-                    Spacer()
-                    
-                    if let lastCheckIn = challenge.lastCheckInDate {
-                        Label("Last check-in \(relativeTimeFormatter.localizedString(for: lastCheckIn, relativeTo: Date()))", systemImage: "clock")
-                            .font(.caption)
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-            }
-            .padding()
-            .background(Color.theme.surface)
-            .cornerRadius(12)
-            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-            .padding(.horizontal)
-        }
-    }
-    
-    // MARK: - Action Button Component
-    
-    struct ActionButton: View {
-        let title: String
-        let icon: String
-        let action: () -> Void
-        var color: Color = .theme.accent
-        
-        var body: some View {
-            Button(action: action) {
-                VStack(spacing: AppSpacing.s) {
-                    Image(systemName: icon)
-                        .font(.system(size: AppSpacing.iconSizeMedium))
-                        .foregroundColor(color)
-                    
-                    Text(title)
-                        .font(AppTypography.callout)
-                        .fontWeight(.medium)
-                        .foregroundColor(.theme.text)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppSpacing.buttonVerticalPadding)
-                .background(
-                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
-                )
-            }
-            .buttonStyle(AppScaleButtonStyle())
-        }
-    }
-    
-    // MARK: - Utility UI Components
-    
-    struct IdentityStatCard: View {
-        let title: String
-        let value: String
-        let icon: String
-        
-        var body: some View {
-            VStack(spacing: AppSpacing.s) {
-                Image(systemName: icon)
-                    .font(.system(size: AppSpacing.iconSizeMedium))
-                    .foregroundColor(.theme.accent)
-                
-                if title == "Member Since" {
-                    Text(value)
-                        .font(AppTypography.callout)
-                        .bold()
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text(value)
-                        .font(AppTypography.title2)
-                        .bold()
-                }
-                
-                Text(title)
-                    .font(AppTypography.caption)
-                    .foregroundColor(.theme.subtext)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.m)
-            .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
-            )
-        }
-    }
-    
-    // MARK: - Helper Properties
-    
-    private var dateFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }
-    
-    private var relativeTimeFormatter: RelativeDateTimeFormatter {
+    // Relative time formatter for "time ago" strings
+    private var timeAgoFormatter: RelativeDateTimeFormatter {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter
     }
 }
 
-struct ProfileProLockedView<Content: View>: View {
-    let content: Content
-    @EnvironmentObject var subscriptionService: SubscriptionService
-    @State private var isShowingPaywall = false
-    
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-    
-    var body: some View {
-        ZStack {
-            content
-                .blur(radius: subscriptionService.isProUser ? 0 : 3)
-                .opacity(subscriptionService.isProUser ? 1 : 0.5)
-            
-            if !subscriptionService.isProUser {
-                Button(action: {
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                    isShowingPaywall = true
-                }) {
-                    VStack(spacing: AppSpacing.s) {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: AppSpacing.iconSizeMedium))
-                            .foregroundColor(.theme.accent)
-                        
-                        Text("Pro Feature")
-                            .font(AppTypography.headline)
-                            .foregroundColor(.theme.text)
-                        
-                        Text("Upgrade to unlock")
-                            .font(AppTypography.subheadline)
-                            .foregroundColor(.theme.subtext)
-                    }
-                    .padding(AppSpacing.m)
-                    .background(
-                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                            .fill(Color.theme.surface)
-                            .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 4)
-                    )
-                }
-                .buttonStyle(AppScaleButtonStyle())
-            }
-        }
-        .sheet(isPresented: $isShowingPaywall) {
-            PaywallView()
-        }
-    }
-}
-
+// MARK: - Preview Provider
 struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
         ProfileView()
             .environmentObject(UserSession.shared)
             .environmentObject(SubscriptionService.shared)
             .environmentObject(NotificationService.shared)
+            .environmentObject(TabViewRouter())
+    }
+}
+
+// MARK: - Helper Extensions
+
+// New helper extension for formatting date as month and year
+extension Date {
+    func formatAsMonthYear() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: self)
+    }
+}
+
+// MARK: - Static Components
+
+// StatCard view for showing stats with icon
+struct ProfileStatCard: View {
+    let icon: String
+    let value: String
+    let label: String
+    let iconColor: Color
+    
+    var body: some View {
+        VStack(alignment: .center, spacing: 4) {
+            // Icon in a circle
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(iconColor)
+            }
+            .padding(.bottom, 4)
+            
+            // Value
+            Text(value)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundColor(.theme.text)
+            
+            // Label
+            Text(label)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+        }
+        .frame(minWidth: 100)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+        )
     }
 } 

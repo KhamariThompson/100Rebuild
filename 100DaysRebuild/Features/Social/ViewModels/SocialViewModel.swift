@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import Network // For NetworkMonitor
 
 @MainActor
 class SocialViewModel: ObservableObject {
@@ -22,6 +23,9 @@ class SocialViewModel: ObservableObject {
     // Social data
     @Published var friends: [Friend] = []
     @Published var communityChallenges: [CommunityChallenge] = []
+    @Published var socialFeed: [SocialFeedItem] = [] // Empty array for future implementation
+    @Published var isOffline = false // Track offline status
+    @Published var error: String? = nil // For displaying errors
     
     // Dependencies
     private let firestore = Firestore.firestore()
@@ -35,9 +39,34 @@ class SocialViewModel: ObservableObject {
     }
     
     init() {
+        // Check initial network status
+        isOffline = !NetworkMonitor.shared.isConnected
+        
+        // Setup network status observer
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(networkStatusChanged),
+            name: NetworkMonitor.networkStatusChanged,
+            object: nil
+        )
+        
+        // Load initial data
         Task {
-            await loadUserUsername()
+            await refreshData()
         }
+    }
+    
+    // Handle network status changes
+    @objc private func networkStatusChanged(_ notification: Notification) {
+        if let isConnected = notification.userInfo?["isConnected"] as? Bool {
+            DispatchQueue.main.async {
+                self.isOffline = !isConnected
+            }
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Public Methods
@@ -165,6 +194,33 @@ class SocialViewModel: ObservableObject {
         isLoading = false
     }
     
+    /// Refreshes all social data
+    func refreshData() async {
+        isLoading = true
+        error = nil
+        errorMessage = nil
+        
+        // Check internet connectivity
+        isOffline = !NetworkMonitor.shared.isConnected
+        
+        do {
+            // Load username first
+            await loadUserUsername()
+            
+            // In the future, this would load real social data
+            // For now, just simulate a delay and set empty data
+            if !isOffline {
+                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+                socialFeed = [] // Empty for now until social features are implemented
+            }
+        } catch {
+            self.error = error.localizedDescription
+            self.errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+    
     // MARK: - Private Methods
     
     /// Filters username to only contain alphanumeric characters
@@ -222,5 +278,60 @@ class SocialViewModel: ObservableObject {
         }
         
         return true // Username is available
+    }
+    
+    // MARK: - Models
+    
+    /// Simple model for a social feed item (placeholder for future implementation)
+    struct SocialFeedItem: Identifiable {
+        let id = UUID()
+        let userId: String
+        let username: String
+        let content: String
+        let timestamp: Date
+        let likes: Int
+        let userProfileImageUrl: URL?
+        
+        init(userId: String, username: String, content: String, timestamp: Date, likes: Int = 0, userProfileImageUrl: URL? = nil) {
+            self.userId = userId
+            self.username = username
+            self.content = content
+            self.timestamp = timestamp
+            self.likes = likes
+            self.userProfileImageUrl = userProfileImageUrl
+        }
+    }
+    
+    /// Simple model for a friend connection (placeholder for future implementation)
+    struct Friend: Identifiable {
+        let id: String
+        let username: String
+        let displayName: String
+        let profileImageUrl: URL?
+        
+        init(id: String, username: String, displayName: String, profileImageUrl: URL? = nil) {
+            self.id = id
+            self.username = username
+            self.displayName = displayName
+            self.profileImageUrl = profileImageUrl
+        }
+    }
+    
+    /// Simple model for a community challenge (placeholder for future implementation)
+    struct CommunityChallenge: Identifiable {
+        let id = UUID()
+        let title: String
+        let description: String
+        let creatorUsername: String
+        let participants: Int
+        let startDate: Date
+        
+        init(title: String, description: String, creatorUsername: String, participants: Int = 0, startDate: Date = Date()) {
+            self.title = title
+            self.description = description
+            self.creatorUsername = creatorUsername
+            self.participants = participants
+            self.startDate = startDate
+        }
     }
 } 

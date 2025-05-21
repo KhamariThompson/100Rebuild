@@ -63,7 +63,7 @@ extension UIImage {
     }
     
     /// Create a circular cropped image
-    func circleCropped() -> UIImage {
+    func circleCropped() -> UIImage? {
         let shortestSide = min(size.width, size.height)
         let squareSize = CGSize(width: shortestSide, height: shortestSide)
         
@@ -75,7 +75,7 @@ extension UIImage {
             height: shortestSide
         )
         
-        guard let cgImage = self.cgImage?.cropping(to: squareRect) else { return self }
+        guard let cgImage = self.cgImage?.cropping(to: squareRect) else { return nil }
         let squareImage = UIImage(cgImage: cgImage)
         
         // Now create circular image
@@ -151,43 +151,82 @@ struct ProfilePictureView: View {
     let url: URL?
     let size: CGFloat
     @State private var imageLoadingError = false
+    @State private var cachedImage: UIImage?
     
     var body: some View {
-        CachedAsyncImage(url: url) { phase in
-            switch phase {
-            case .empty:
-                ZStack {
-                    Circle()
-                        .fill(Color.theme.surface)
-                        .frame(width: size, height: size)
-                    
-                    ProgressView()
-                        .frame(width: size, height: size)
-                }
-            case .success(let image):
-                image
+        Group {
+            if let cachedImage = cachedImage {
+                Image(uiImage: cachedImage)
                     .resizable()
                     .scaledToFill()
                     .circularAvatarStyle(size: size)
-                    .onAppear {
-                        imageLoadingError = false
+            } else {
+                CachedAsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ZStack {
+                            Circle()
+                                .fill(Color.theme.surface)
+                                .frame(width: size, height: size)
+                            
+                            ProgressView()
+                                .frame(width: size, height: size)
+                        }
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .circularAvatarStyle(size: size)
+                            .onAppear {
+                                imageLoadingError = false
+                                // Cache the loaded image
+                                if let uiImage = image.asUIImage() {
+                                    self.cachedImage = uiImage
+                                    ImageCacheManager.shared.setImage(uiImage, forKey: url?.absoluteString ?? "")
+                                }
+                            }
+                    case .failure:
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: size))
+                            .foregroundColor(.theme.accent)
+                            .onAppear {
+                                imageLoadingError = true
+                                print("Failed to load profile image: \(url?.absoluteString ?? "nil")")
+                            }
+                    @unknown default:
+                        Image(systemName: "person.circle.fill")
+                            .font(.system(size: size))
+                            .foregroundColor(.theme.accent)
                     }
-            case .failure:
-                Image(systemName: "person.circle.fill")
-                    .font(.system(size: size))
-                    .foregroundColor(.theme.accent)
-                    .onAppear {
-                        imageLoadingError = true
-                        print("Failed to load profile image: \(url?.absoluteString ?? "nil")")
-                    }
-            @unknown default:
-                // Handle any future cases that might be added
-                Image(systemName: "person.circle.fill")
-                    .font(.system(size: size))
-                    .foregroundColor(.theme.accent)
+                }
+                .transition(.opacity.combined(with: .scale))
             }
         }
-        .transition(.opacity.combined(with: .scale))
+        .onAppear {
+            // Try to load from cache first
+            if let urlString = url?.absoluteString,
+               let cached = ImageCacheManager.shared.image(forKey: urlString) {
+                self.cachedImage = cached
+            }
+        }
+    }
+}
+
+// Helper extension to convert SwiftUI Image to UIImage
+extension Image {
+    func asUIImage() -> UIImage? {
+        let controller = UIHostingController(rootView: self)
+        let view = controller.view
+        
+        let targetSize = controller.view.intrinsicContentSize
+        view?.bounds = CGRect(origin: .zero, size: targetSize)
+        view?.backgroundColor = .clear
+        
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        
+        return renderer.image { _ in
+            view?.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
+        }
     }
 }
 
@@ -221,8 +260,8 @@ struct CachedAsyncImage<Content: View>: View {
                     transaction: transaction
                 ) { phase in
                     // First check for success to trigger caching
-                    if case .success(_) = phase {
-                        cacheImageInBackground(url: url)
+                    if case .success(let image) = phase {
+                        cacheImageInBackground(url: url, image: image)
                     }
                     
                     // Then return the content
@@ -234,13 +273,13 @@ struct CachedAsyncImage<Content: View>: View {
         }
     }
     
-    private func cacheImageInBackground(url: URL) {
+    private func cacheImageInBackground(url: URL, image: Image) {
         Task { @MainActor in
-            // Use a proper implementation for caching
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                if let uiImage = UIImage(data: data) {
+                // Convert SwiftUI Image to UIImage for caching
+                if let uiImage = image.asUIImage() {
                     ImageCacheManager.shared.setImage(uiImage, forKey: url.absoluteString)
+                    print("Successfully cached image for URL: \(url.absoluteString)")
                 }
             } catch {
                 print("Failed to cache image: \(error)")

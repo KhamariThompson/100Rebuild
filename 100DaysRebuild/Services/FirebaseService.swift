@@ -19,6 +19,7 @@ enum FirebaseError: Error, LocalizedError {
     case networkOffline
     case cooldownPeriod(hoursRemaining: Int)
     case usernameAlreadyExists
+    case notAuthenticated
     
     var errorDescription: String? {
         switch self {
@@ -42,6 +43,8 @@ enum FirebaseError: Error, LocalizedError {
             return "Username change cooldown period: \(hoursRemaining) hours remaining"
         case .usernameAlreadyExists:
             return "Username already exists"
+        case .notAuthenticated:
+            return "You must be signed in to perform this action"
         }
     }
 }
@@ -723,18 +726,83 @@ class FirebaseService {
             throw FirebaseError.notConfigured
         }
         
+        guard isNetworkAvailable else {
+            throw FirebaseError.networkOffline
+        }
+        
+        print("Starting profile image upload for user: \(userId), data size: \(data.count) bytes")
+        
         do {
+            // Create a reference to the profile image path
             let storageRef = storage.reference()
             let profileImageRef = storageRef.child("\(CollectionPath.profile)/\(userId)/profile.jpg")
             
+            // Set metadata with correct content type
             let metadata = StorageMetadata()
             metadata.contentType = "image/jpeg"
             
+            print("Uploading to path: \(profileImageRef.fullPath)")
+            
+            // Upload the data
             _ = try await profileImageRef.putDataAsync(data, metadata: metadata)
-            return try await profileImageRef.downloadURL()
+            
+            // Get the download URL, with retry logic
+            let downloadURL = try await getDownloadURL(from: profileImageRef, maxRetries: 3)
+            
+            print("Successfully uploaded profile image. Download URL: \(downloadURL.absoluteString)")
+            
+            return downloadURL
         } catch {
+            print("Storage error during profile image upload: \(error.localizedDescription)")
+            
+            // Specific error handling
+            let nsError = error as NSError
+            let errorCode = StorageErrorCode(rawValue: nsError.code)
+            switch errorCode {
+            case .unauthenticated:
+                print("Storage error: User is not authenticated for this operation")
+            case .unauthorized:
+                print("Storage error: User does not have permission to access this reference")
+            case .retryLimitExceeded:
+                print("Storage error: Retry limit exceeded")
+            case .cancelled:
+                print("Storage error: User cancelled the operation")
+            case .unknown:
+                print("Storage error: Unknown error occurred")
+            case .none:
+                print("Storage error: \(nsError.localizedDescription)")
+            @unknown default:
+                print("Storage error: Unrecognized error code")
+            }
+            
             throw FirebaseError.storageError(error)
         }
+    }
+    
+    // Helper method for getting download URL with retries
+    private func getDownloadURL(from reference: StorageReference, maxRetries: Int) async throws -> URL {
+        var retryCount = 0
+        var lastError: Error?
+        
+        // Retry loop
+        while retryCount < maxRetries {
+            do {
+                return try await reference.downloadURL()
+            } catch {
+                lastError = error
+                retryCount += 1
+                
+                // Wait before retry (exponential backoff)
+                let delay = TimeInterval(pow(2.0, Double(retryCount))) * 0.1
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                
+                print("Retry \(retryCount)/\(maxRetries) for getting download URL")
+            }
+        }
+        
+        // If we got here, all retries failed
+        throw lastError ?? NSError(domain: "FirebaseService", code: 500, 
+                            userInfo: [NSLocalizedDescriptionKey: "Failed to get download URL after \(maxRetries) attempts"])
     }
     
     func deleteProfileImage(userId: String) async throws {

@@ -187,20 +187,21 @@ struct AppThemeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .preferredColorScheme(themeManager.effectiveColorScheme())
-            .onChange(of: themeManager.currentTheme) { _, newValue in
+            .environment(\.colorScheme, themeManager.effectiveColorScheme() ?? .light)
+            .onAppear {
+                // Store the initial theme to avoid animation when view first appears
+                if lastTheme == nil {
+                    lastTheme = themeManager.currentTheme
+                }
+            }
+            .onChange(of: themeManager.currentTheme) { oldValue, newValue in
                 // Only apply animation if this isn't the first appearance
-                if lastTheme != nil {
+                if lastTheme != nil && oldValue != newValue {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         lastTheme = newValue
                     }
                 } else {
                     lastTheme = newValue
-                }
-            }
-            .onAppear {
-                // Initialize the last theme on first appearance
-                if lastTheme == nil {
-                    lastTheme = themeManager.currentTheme
                 }
             }
     }

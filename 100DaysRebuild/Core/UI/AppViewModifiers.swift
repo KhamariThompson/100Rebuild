@@ -120,13 +120,7 @@ struct FixNavigationLayoutModifier: ViewModifier {
         content
             .navigationViewStyle(StackNavigationViewStyle())
             .navigationBarTitleDisplayMode(.inline)
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .preference(key: SafeAreaKey.self, value: geo.safeAreaInsets.top)
-                        .onPreferenceChange(SafeAreaKey.self) { _ in }
-                }
-            )
+            .background(Color.theme.background.ignoresSafeArea()) // Ensure background color during transitions is consistent
     }
 }
 

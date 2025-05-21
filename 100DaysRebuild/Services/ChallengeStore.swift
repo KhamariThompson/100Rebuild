@@ -19,7 +19,6 @@ class ChallengeStore: ObservableObject {
     
     // Challenge data metrics
     @Published private(set) var totalChallenges: Int = 0
-    @Published private(set) var activeChallenges: Int = 0
     @Published private(set) var completedChallenges: Int = 0
     @Published private(set) var currentStreak: Int = 0
     @Published private(set) var longestStreak: Int = 0
@@ -274,7 +273,7 @@ class ChallengeStore: ObservableObject {
     private func updateMetrics() {
         // Count metrics
         totalChallenges = challenges.count
-        activeChallenges = challenges.filter { !$0.isArchived }.count
+        // activeChallenges is now calculated dynamically via getActiveChallenges()
         completedChallenges = challenges.filter { $0.isCompleted }.count
         
         // Find current streak
@@ -305,6 +304,9 @@ class ChallengeStore: ObservableObject {
             .filter { !$0.isArchived }
             .sorted { $0.lastModified > $1.lastModified }
             .first
+            
+        // Notify observers about the updated metrics
+        NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
     }
     
     /// Load challenges from local cache

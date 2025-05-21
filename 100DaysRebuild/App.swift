@@ -832,8 +832,8 @@ struct AppContentView: View {
                     .environmentObject(themeManager)
                     .applyLayoutFixes()
             } else {
-                // Only use AuthView for login/signup
-                AuthView()
+                // Use the new CalAI-styled welcome screen
+                WelcomeView()
                     .environmentObject(userSession)
                     .environmentObject(subscriptionService)
                     .environmentObject(notificationService)

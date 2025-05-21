@@ -11,12 +11,9 @@ class TabViewRouter: ObservableObject {
         if tab != selectedTab {
             previousTab = selectedTab
             selectedTab = tab
-            tabIsChanging = true
             
-            // Add a small delay for viewModel to initialize before showing UI
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                self.tabIsChanging = false
-            }
+            // No delay is needed - this causes the black flash during tab transitions
+            tabIsChanging = false
         }
     }
 }
@@ -37,68 +34,128 @@ struct MainAppView: View {
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
     @State private var showPaywall = false
+    @State private var showAddAction = false
+    @State private var safeAreaBottom: CGFloat = 0
     
     // Accessibility settings
     @AppStorage("isLargeTextEnabled") private var isLargeTextEnabled = false
     @AppStorage("isHighContrastEnabled") private var isHighContrastEnabled = false
     
+    // Tab items for CalAI style tab bar
+    private let tabItems = [
+        CalAITabBar.TabItem(icon: "house", text: "Home"),
+        CalAITabBar.TabItem(icon: "chart.bar", text: "Progress"),
+        CalAITabBar.TabItem(icon: "person.2", text: "Social"),
+        CalAITabBar.TabItem(icon: "person", text: "Profile")
+    ]
+    
     var body: some View {
-        NavigationView {
-            ZStack {
+        GeometryReader { geometry in
+            ZStack(alignment: .bottom) {
                 // Background color covering entire screen
                 Color.theme.background
                     .ignoresSafeArea()
                     .zIndex(-1) // Ensure background is at the bottom
                 
-                // Main tab view showing tabs
+                // Main TabView
                 TabView(selection: $router.selectedTab) {
                     ChallengesView()
-                        .tabItem {
-                            Image(systemName: "flag.fill")
-                                .renderingMode(.template)
-                                .foregroundColor(.theme.accent)
-                            Text("Challenges")
-                        }
                         .tag(0)
                     
                     ProgressView()
                         .environmentObject(viewModel)
-                        .tabItem {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .renderingMode(.template)
-                                .foregroundColor(.theme.accent)
-                            Text("Progress")
-                        }
                         .tag(1)
                     
                     MainApp_SocialTabView()
-                        .tabItem {
-                            Image(systemName: "person.2.fill")
-                                .renderingMode(.template)
-                                .foregroundColor(.theme.accent)
-                            Text("Social")
-                        }
                         .tag(2)
                     
                     ProfileView()
-                        .tabItem {
-                            Image(systemName: "person.fill")
-                                .renderingMode(.template)
-                                .foregroundColor(.theme.accent)
-                            Text("Profile")
-                        }
                         .tag(3)
                 }
-                .accentColor(Color.theme.accent) // Set explicit accent color for tab items
-                .onChange(of: router.selectedTab) { newValue in
-                    router.changeTab(to: newValue)
+                .zIndex(1) // Main content above background
+                
+                // Tab bar positioned at the bottom
+                VStack(spacing: 0) {
+                    Spacer()
+                    
+                    // Tab bar content
+                    ZStack(alignment: .top) {
+                        // Background with blur effect to match Cal AI style
+                        Rectangle()
+                            .fill(Color.theme.surface.opacity(0.95))
+                            .background(
+                                // Add subtle blur for depth
+                                Rectangle()
+                                    .fill(Material.ultraThinMaterial)
+                            )
+                            .overlay(
+                                // Add a thin divider line at the top for definition
+                                Rectangle()
+                                    .frame(height: 0.5)
+                                    .foregroundColor(Color.theme.border.opacity(0.3)),
+                                alignment: .top
+                            )
+                            .shadow(color: Color.theme.shadow.opacity(0.03), radius: 0.5, x: 0, y: -0.5)
+                        
+                        // Floating action button - positioned to overlay without pushing tab bar up
+                        Button(action: {
+                            hapticFeedback(.medium)
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                showAddAction = true
+                            }
+                        }) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 50, height: 50)
+                                .background(
+                                    Circle()
+                                        .fill(Color.theme.accent)
+                                )
+                                .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
+                        }
+                        .offset(y: -25) // Positioned to overlay properly without pushing content
+                        .zIndex(2) // Ensures it appears above tab bar
+                        
+                        // Tab items with icons and labels
+                        HStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            
+                            ForEach(Array(tabItems.enumerated()), id: \.offset) { index, item in
+                                Button(action: {
+                                    // Remove animation that may be causing flickering
+                                    router.selectedTab = index
+                                    hapticFeedback(.light)
+                                }) {
+                                    VStack(spacing: 4) {
+                                        Image(systemName: item.icon)
+                                            .font(.system(size: 20, weight: router.selectedTab == index ? .semibold : .regular))
+                                            .foregroundColor(router.selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
+                                        
+                                        Text(item.text)
+                                            .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium, design: .rounded))
+                                            .foregroundColor(router.selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
+                                    }
+                                    .frame(height: CalAIDesignTokens.tabBarHeight)
+                                    .frame(maxWidth: .infinity)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(TabBarButtonStyle())
+                                
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                    .frame(height: CalAIDesignTokens.tabBarHeight)
+                    
+                    // Extra space that extends to the bottom safe area
+                    Rectangle()
+                        .fill(Color.theme.surface.opacity(0.95))
+                        .frame(height: safeAreaBottom)
                 }
-                .zIndex(1) // Ensure tab view is above background but below overlays
-                .environmentObject(router)
-                .environmentObject(subscriptionService)
-                .environmentObject(notificationService)
-                .environmentObject(userStatsService)
-                .environmentObject(themeManager)
+                .ignoresSafeArea(edges: .bottom)
+                .zIndex(2)
                 
                 // Paywall overlay with theme awareness
                 if subscriptionService.showPaywall {
@@ -117,69 +174,225 @@ struct MainAppView: View {
                         .transition(.opacity)
                         .zIndex(101)
                 }
+                
+                // Add action sheet with spring animation
+                if showAddAction {
+                    addActionOverlay
+                        .transition(.opacity)
+                        .zIndex(102)
+                }
+            }
+            .onAppear {
+                // Get the safe area bottom value
+                DispatchQueue.main.async {
+                    safeAreaBottom = geometry.safeAreaInsets.bottom
+                }
+            }
+            .onChange(of: geometry.safeAreaInsets.bottom) { newValue in
+                // Update if safe area changes (rotation)
+                safeAreaBottom = newValue
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
+                withAnimation {
+                    showNotificationSettings = true
+                }
+            }
+            .onReceive(subscriptionService.$showPaywall) { newValue in
+                withAnimation {
+                    showPaywall = newValue
+                }
             }
         }
+        .environmentObject(router)
+        .environmentObject(subscriptionService)
+        .environmentObject(notificationService)
+        .environmentObject(userStatsService)
+        .environmentObject(themeManager)
         .navigationViewStyle(StackNavigationViewStyle()) // Important for consistent navigation style
         .background(Color.theme.background) // Additional background to ensure no transparency
-        .onAppear {
-            setupTabBarAppearance()
-            
-            // Only display the paywall sheet if needed
-            showPaywall = subscriptionService.showPaywall
-            
-            // Load UserStatsService data when app starts
-            Task {
-                await userStatsService.fetchUserStats()
-            }
-        }
-        // Listen for subscriptionService changes
-        .onChange(of: subscriptionService.showPaywall) { newValue in
-            showPaywall = newValue
-        }
-        // Listen for notification settings request
-        .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
-            withAnimation {
-                showNotificationSettings = true
-            }
-        }
-        // Apply accessibility settings but don't apply explicit theme here
-        // Theme is now handled by ThemeManager through withAppTheme() modifier
-        .environment(\.sizeCategory, isLargeTextEnabled ? .accessibilityExtraLarge : .large)
     }
     
-    private func setupTabBarAppearance() {
-        // Configure tab bar appearance
-        let tabBarAppearance = UITabBarAppearance()
-        tabBarAppearance.configureWithDefaultBackground()
-        
-        // Fix tab bar appearance for iOS 15 and later
-        if #available(iOS 15.0, *) {
-            UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+    // MARK: - Helper Views
+    
+    private var addActionOverlay: some View {
+        ZStack {
+            // Dimmed background with tap-to-dismiss
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showAddAction = false
+                    }
+                }
+            
+            // Floating action sheet
+            VStack(spacing: 16) {
+                // Sheet handle for better UX - subtle line indicating draggability
+                Capsule()
+                    .fill(Color.theme.subtext.opacity(0.3))
+                    .frame(width: 40, height: 4)
+                    .padding(.top, 12)
+                
+                // Action items with icons, titles and subtitles
+                ActionSheetItem(
+                    icon: "flag.fill",
+                    title: "New Challenge",
+                    subtitle: "Start a fresh 100-day goal",
+                    isPrimary: true
+                ) {
+                    hapticFeedback(.medium)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showAddAction = false
+                    }
+                    // Navigate to add challenge view - don't wrap in animation
+                    router.selectedTab = 0 // Switch to Challenges tab directly
+                    // Show the new challenge view (in implementation would add logic to show proper sheet)
+                }
+                
+                ActionSheetItem(
+                    icon: "checkmark.circle.fill",
+                    title: "Check In",
+                    subtitle: "Log your progress for today",
+                    isPrimary: false
+                ) {
+                    hapticFeedback(.medium)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showAddAction = false
+                        // Show log entry flow
+                        // Implementation would navigate to appropriate screen
+                    }
+                }
+                
+                // Pro-locked feature (grayed out)
+                ActionSheetItem(
+                    icon: "person.3.fill",
+                    title: "Group Challenge",
+                    subtitle: "Complete goals with friends",
+                    isPrimary: false,
+                    isLocked: true
+                ) {
+                    hapticFeedback(.medium)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showAddAction = false
+                        // Would show paywall
+                        subscriptionService.showPaywall = true
+                    }
+                }
+                
+                // Cancel button
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        showAddAction = false
+                    }
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundColor(.theme.subtext)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                }
+                .padding(.top, 8)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.theme.background)
+                    .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+            )
+            .frame(width: UIScreen.main.bounds.width * 0.9) // 90% of screen width
+            // Animate from bottom with spring motion
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-        
-        // Apply to standard appearance
-        UITabBar.appearance().standardAppearance = tabBarAppearance
-        
-        // Set tint color for tab bar items - ensure it's using the accent color
-        UITabBar.appearance().tintColor = UIColor(Color.theme.accent)
-        
-        // Make unselected items visible with a consistent inactive color
-        UITabBar.appearance().unselectedItemTintColor = UIColor(Color.theme.tabInactive)
-        
-        // Fix for NavigationView layout constraint issues
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = UIColor(Color.theme.background)
-        appearance.shadowColor = nil // Remove shadow line
-        
-        // Use this appearance for all navigation bars
-        UINavigationBar.appearance().standardAppearance = appearance
-        UINavigationBar.appearance().scrollEdgeAppearance = appearance
-        UINavigationBar.appearance().compactAppearance = appearance
+    }
+    
+    // Helper function for consistent haptic feedback
+    private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.impactOccurred()
     }
 }
 
-// These wrapper views ensure each tab has its own navigation context
+// MARK: - Action Sheet Components
+
+/// Custom action sheet item with icon, title, subtitle and optional locked state
+struct ActionSheetItem: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isPrimary: Bool
+    var isLocked: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                // Icon
+                ZStack {
+                    Circle()
+                        .fill(isPrimary ? Color.theme.accent : Color.theme.surface)
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            !isPrimary ? Circle()
+                                .stroke(Color.theme.accent, lineWidth: 1.5) : nil
+                        )
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(isPrimary ? .white : .theme.accent)
+                }
+                
+                // Title and subtitle
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(isLocked ? .theme.subtext.opacity(0.6) : .theme.text)
+                    
+                    Text(subtitle)
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(isLocked ? .theme.subtext.opacity(0.5) : .theme.subtext)
+                }
+                
+                Spacer()
+                
+                // Lock icon for pro-locked features
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.theme.subtext.opacity(0.6))
+                }
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.theme.surface)
+            )
+        }
+        .disabled(isLocked)
+        .buttonStyle(SpringPressButtonStyle())
+    }
+}
+
+// Button style for spring animation on press
+struct SpringPressButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+// Button style for tab items
+private struct TabBarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
 struct MainApp_ChallengesTabView: View {
     var body: some View {
         ChallengesView()

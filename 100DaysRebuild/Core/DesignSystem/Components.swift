@@ -30,11 +30,11 @@ public enum AppComponents {
                         .conditionalOverlay(includeBorder) {
                             RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                 .stroke(Color.theme.border, lineWidth: 1)
-                                .opacity(colorScheme == .dark ? 0.3 : 0.1)
+                                .opacity(colorScheme == .dark ? 0.2 : 0.08)
                         }
                         .shadow(
                             color: hasShadow ? Color.theme.shadow : .clear,
-                            radius: colorScheme == .dark ? 10 : 6,
+                            radius: colorScheme == .dark ? 8 : 4,
                             x: 0,
                             y: 2
                         )
@@ -56,12 +56,13 @@ public enum AppComponents {
                 .padding(AppSpacing.cardPadding)
                 .background(
                     RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                        .fill(Color.theme.surface.opacity(colorScheme == .dark ? 0.4 : 0.8))
+                        .fill(Color.theme.surface.opacity(colorScheme == .dark ? 0.3 : 0.7))
                         .background(
                             RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                                 .stroke(Color.theme.border, lineWidth: 1)
+                                .opacity(colorScheme == .dark ? 0.2 : 0.08)
                         )
-                        .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
+                        .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
                         .blur(radius: 0.5)
                 )
         }
@@ -86,7 +87,7 @@ public enum AppComponents {
                 .background(
                     RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                         .fill(gradient)
-                        .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
+                        .shadow(color: Color.theme.shadow, radius: 6, x: 0, y: 2)
                 )
         }
     }
@@ -96,7 +97,7 @@ public enum AppComponents {
         private var color: Color
         private var verticalPadding: CGFloat
         
-        public init(color: Color = Color.theme.subtext.opacity(0.3), verticalPadding: CGFloat = 8) {
+        public init(color: Color = Color.theme.subtext.opacity(0.2), verticalPadding: CGFloat = 8) {
             self.color = color
             self.verticalPadding = verticalPadding
         }
@@ -159,28 +160,33 @@ public enum AppComponents {
         }
     }
     
-    /// Progress bar with customizable colors
+    /// Progress bar with customizable colors - minimal CalAI style
     public struct ProgressBar: View {
         let value: Double
         let color: Color
         let height: CGFloat
+        let showBackground: Bool
         
         public init(
             value: Double,
             color: Color = Color.theme.accent,
-            height: CGFloat = AppSpacing.xs
+            height: CGFloat = AppSpacing.xs,
+            showBackground: Bool = true
         ) {
             self.value = max(0, min(1, value))
             self.color = color
             self.height = height
+            self.showBackground = showBackground
         }
         
         public var body: some View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: height / 2)
-                        .fill(Color.theme.border)
-                        .frame(height: height)
+                    if showBackground {
+                        RoundedRectangle(cornerRadius: height / 2)
+                            .fill(Color.theme.border.opacity(0.3))
+                            .frame(height: height)
+                    }
                     
                     RoundedRectangle(cornerRadius: height / 2)
                         .fill(color)
@@ -188,6 +194,107 @@ public enum AppComponents {
                 }
             }
             .frame(height: height)
+        }
+    }
+    
+    /// Circular progress ring in CalAI style
+    public struct CircularProgressRing: View {
+        let progress: Double
+        let ringWidth: CGFloat
+        let size: CGFloat
+        let color: Color
+        let backgroundColor: Color
+        
+        public init(
+            progress: Double,
+            ringWidth: CGFloat = AppSpacing.progressRingStrokeWidth,
+            size: CGFloat = AppSpacing.circularProgressSize,
+            color: Color = Color.theme.accent,
+            backgroundColor: Color = Color.theme.border.opacity(0.3)
+        ) {
+            self.progress = max(0, min(1, progress))
+            self.ringWidth = ringWidth
+            self.size = size
+            self.color = color
+            self.backgroundColor = backgroundColor
+        }
+        
+        public var body: some View {
+            ZStack {
+                // Background circle
+                Circle()
+                    .stroke(lineWidth: ringWidth)
+                    .foregroundColor(backgroundColor)
+                
+                // Progress circle
+                Circle()
+                    .trim(from: 0, to: CGFloat(progress))
+                    .stroke(style: StrokeStyle(
+                        lineWidth: ringWidth,
+                        lineCap: .round
+                    ))
+                    .foregroundColor(color)
+                    .rotationEffect(Angle(degrees: -90))
+                    .animation(.easeInOut(duration: 1.0), value: progress)
+            }
+            .frame(width: size, height: size)
+        }
+    }
+    
+    /// Metric card in CalAI style
+    public struct MetricCard<Content: View>: View {
+        let title: String
+        let value: String
+        let content: Content?
+        let accentColor: Color
+        
+        public init(
+            title: String,
+            value: String,
+            accentColor: Color = Color.theme.accent,
+            @ViewBuilder content: () -> Content
+        ) {
+            self.title = title
+            self.value = value
+            self.content = content()
+            self.accentColor = accentColor
+        }
+        
+        public init(
+            title: String,
+            value: String,
+            accentColor: Color = Color.theme.accent
+        ) where Content == EmptyView {
+            self.title = title
+            self.value = value
+            self.content = nil
+            self.accentColor = accentColor
+        }
+        
+        public var body: some View {
+            VStack(alignment: .center, spacing: AppSpacing.xs) {
+                // Title
+                Text(title)
+                    .font(AppTypography.caption)
+                    .foregroundColor(Color.theme.subtext)
+                
+                // Value
+                Text(value)
+                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                    .foregroundColor(Color.theme.text)
+                
+                // Optional content
+                if let content = content {
+                    content
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(AppSpacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow, radius: 4, x: 0, y: 1)
+            )
         }
     }
 } 

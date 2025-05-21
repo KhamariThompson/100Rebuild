@@ -17,37 +17,37 @@ public enum AppSpacing {
     /// Medium spacing (16pt)
     public static let m: CGFloat = 16
     
-    /// Large spacing (24pt)
-    public static let l: CGFloat = 24
+    /// Large spacing (20pt) - Changed from 24pt to match CalAI's more compact spacing
+    public static let l: CGFloat = 20
     
-    /// Extra large spacing (32pt)
-    public static let xl: CGFloat = 32
+    /// Extra large spacing (28pt) - Changed from 32pt to match CalAI
+    public static let xl: CGFloat = 28
     
-    /// Extra extra large spacing (48pt)
-    public static let xxl: CGFloat = 48
+    /// Extra extra large spacing (40pt) - Changed from 48pt to match CalAI
+    public static let xxl: CGFloat = 40
     
     // MARK: - Component-Specific Spacing
     
     /// Standard padding inside cards
     public static let cardPadding: CGFloat = 16
     
-    /// Standard corner radius for cards
-    public static let cardCornerRadius: CGFloat = 16
+    /// Standard corner radius for cards - Increased to match CalAI's rounder corners
+    public static let cardCornerRadius: CGFloat = 20
     
-    /// Spacing between sections
-    public static let sectionSpacing: CGFloat = 24
+    /// Spacing between sections - Reduced to match CalAI's tighter layout
+    public static let sectionSpacing: CGFloat = 20
     
     /// Spacing between items in a stack
     public static let itemSpacing: CGFloat = 12
     
     /// Spacing for lists and grouped content
-    public static let listSpacing: CGFloat = 16
+    public static let listSpacing: CGFloat = 14
     
     /// Horizontal screen padding
-    public static let screenHorizontalPadding: CGFloat = 20
+    public static let screenHorizontalPadding: CGFloat = 16
     
-    /// Vertical padding for buttons
-    public static let buttonVerticalPadding: CGFloat = 16
+    /// Vertical padding for buttons - Reduced slightly to match CalAI
+    public static let buttonVerticalPadding: CGFloat = 14
     
     /// Horizontal padding for buttons
     public static let buttonHorizontalPadding: CGFloat = 20
@@ -55,11 +55,25 @@ public enum AppSpacing {
     // MARK: - Specialized Spacing
     
     /// Small icon size
-    public static let iconSizeSmall: CGFloat = 18
+    public static let iconSizeSmall: CGFloat = 16
     
     /// Medium icon size
-    public static let iconSizeMedium: CGFloat = 24
+    public static let iconSizeMedium: CGFloat = 22
     
     /// Large icon size
-    public static let iconSizeLarge: CGFloat = 32
+    public static let iconSizeLarge: CGFloat = 28
+    
+    // MARK: - CalAI-Specific Components
+    
+    /// Thin progress ring stroke width
+    public static let progressRingStrokeWidth: CGFloat = 4
+    
+    /// Medium progress ring stroke width
+    public static let progressRingStrokeMedium: CGFloat = 6
+    
+    /// Circular progress ring size (standard)
+    public static let circularProgressSize: CGFloat = 120
+    
+    /// Circular progress ring size (small)
+    public static let circularProgressSizeSmall: CGFloat = 80
 } 

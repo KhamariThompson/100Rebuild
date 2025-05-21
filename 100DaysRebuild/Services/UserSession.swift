@@ -462,19 +462,55 @@ class UserSession: ObservableObject {
         _ = await AuthService.shared.signOut()
     }
     
+    // Add a non-throwing sign out method to ensure we always sign out
     func signOutWithoutThrowing() async {
-        // Check if user is anonymous - prevents errors with anonymous users
-        if Auth.auth().currentUser?.isAnonymous == true {
-            print("UserSession: Current user is anonymous, skipping sign out")
-            return
-        }
-        
         do {
+            // Try to sign out using Firebase Auth
             try auth.signOut()
-            // Auth state listener will handle the state update
+            
+            // Reset local state immediately rather than waiting for auth listener
+            await MainActor.run {
+                authState = .signedOut
+                currentUser = nil
+                isAuthenticated = false
+                username = nil
+                photoURL = nil
+                hasCompletedOnboarding = false
+                errorMessage = nil
+            }
+            
+            // Force post a notification about auth state change
+            NotificationCenter.default.post(
+                name: NSNotification.Name("AuthStateChanged"),
+                object: nil
+            )
+            
+            // Ensure the auth state listener is properly set up
+            setupAuthStateListener()
+            
+            print("UserSession: Successfully signed out user")
         } catch {
-            print("Error signing out: \(error.localizedDescription)")
-            errorMessage = "Error signing out: \(error.localizedDescription)"
+            // Even if Firebase sign out fails, reset local state
+            print("UserSession: Error during sign out - \(error.localizedDescription)")
+            
+            await MainActor.run {
+                authState = .signedOut  // Force to signed out state
+                currentUser = nil
+                isAuthenticated = false
+                username = nil
+                photoURL = nil
+                hasCompletedOnboarding = false
+                errorMessage = nil
+            }
+            
+            // Force post a notification about auth state change
+            NotificationCenter.default.post(
+                name: NSNotification.Name("AuthStateChanged"),
+                object: nil
+            )
+            
+            // Ensure the auth state listener is properly set up
+            setupAuthStateListener()
         }
     }
     
@@ -582,26 +618,34 @@ class UserSession: ObservableObject {
     }
     
     func updateProfilePhoto(_ url: URL) async throws {
-        guard isNetworkAvailable else {
-            throw NSError(domain: "UserSession", code: 100, 
-                         userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."])
+        guard let userId = currentUser?.uid else {
+            throw FirebaseError.notAuthenticated
         }
         
-        guard let userId = currentUser?.uid else {
-            throw NSError(domain: "UserSession", code: 101, 
-                         userInfo: [NSLocalizedDescriptionKey: "No user is signed in."])
+        guard isNetworkAvailable else {
+            throw FirebaseError.networkOffline
         }
         
         do {
-            try await firestore
-                .collection("users")
-                .document(userId)
-                .setData(["photoURL": url.absoluteString], merge: true)
+            // Update Firestore document
+            try await firestore.collection(CollectionPath.users).document(userId).updateData([
+                "photoURL": url.absoluteString
+            ])
             
-            self.photoURL = url
+            // Update Firebase Auth profile
+            let changeRequest = currentUser?.createProfileChangeRequest()
+            changeRequest?.photoURL = url
+            try await changeRequest?.commitChanges()
+            
+            // Update local state
+            await MainActor.run {
+                self.photoURL = url
+            }
+            
+            print("Successfully updated profile photo URL in Firestore and Auth")
         } catch {
-            errorMessage = "Error updating profile photo: \(error.localizedDescription)"
-            throw error
+            print("Error updating profile photo: \(error)")
+            throw FirebaseError.firestoreError(error)
         }
     }
     

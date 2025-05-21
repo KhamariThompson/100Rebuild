@@ -9,44 +9,43 @@ struct UsernameSetupView: View {
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.theme.accent.opacity(0.1),
-                    Color.theme.background
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Clean minimal background
+            Color.theme.background.ignoresSafeArea()
             
-            VStack(spacing: 24) {
-                VStack(spacing: 12) {
+            VStack(spacing: 30) {
+                // Header section with icon
+                VStack(spacing: 16) {
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 70))
+                        .foregroundColor(.theme.accent)
+                        .padding(.bottom, 5)
+                    
                     Text("Choose Your Username")
-                        .font(.title2.bold())
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(Color.theme.text)
                     
                     Text("This will be your display name in the app")
-                        .font(.subheadline)
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
                         .foregroundColor(Color.theme.subtext)
                         .multilineTextAlignment(.center)
                 }
-                .padding(.top, 24)
+                .padding(.top, 40)
                 
-                VStack(spacing: 8) {
-                    TextField("Username", text: $viewModel.username)
+                // Username input with clean styling
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Username")
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundColor(.theme.text)
+                    
+                    TextField("Choose a unique username", text: $viewModel.username)
+                        .font(.system(size: 16, design: .rounded))
                         .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(colorScheme == .dark 
-                                    ? Color(.secondarySystemBackground) 
-                                    : Color(.systemBackground))
-                                .shadow(
-                                    color: Color.primary.opacity(0.05),
-                                    radius: 3,
-                                    x: 0,
-                                    y: 2
-                                )
+                        .frame(height: CalAIDesignTokens.buttonHeight)
+                        .background(Color.theme.surface)
+                        .cornerRadius(CalAIDesignTokens.buttonRadius)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                                .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
                         )
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
@@ -68,16 +67,18 @@ struct UsernameSetupView: View {
                     
                     if let error = viewModel.error {
                         Text(error)
+                            .font(.system(size: 13))
                             .foregroundColor(Color.theme.error)
-                            .font(.caption)
                             .padding(.top, 4)
                             .padding(.horizontal, 4)
                     }
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
                 
                 Spacer()
                 
+                // Continue button with consistent styling
                 Button(action: {
                     Task {
                         await viewModel.saveUsername()
@@ -92,67 +93,54 @@ struct UsernameSetupView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .frame(height: CalAIDesignTokens.buttonHeight)
                     } else if viewModel.showSuccess {
                         HStack {
                             Text("Username Set!")
+                                .font(.system(size: 17, weight: .semibold, design: .rounded))
                             Image(systemName: "checkmark.circle.fill")
                         }
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .frame(height: CalAIDesignTokens.buttonHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
+                            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                                 .fill(Color.theme.success)
                                 .shadow(
-                                    color: Color.theme.success.opacity(0.3),
-                                    radius: 8,
+                                    color: Color.theme.success.opacity(0.15),
+                                    radius: 4,
                                     x: 0,
-                                    y: 4
+                                    y: 1
                                 )
                         )
                     } else {
                         Text("Continue")
-                            .font(.headline)
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
+                            .frame(height: CalAIDesignTokens.buttonHeight)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                                     .fill(
                                         viewModel.isValid
-                                            ? LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.theme.accent,
-                                                    Color.theme.accent.opacity(0.8)
-                                                ]),
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                            : LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.gray.opacity(0.6),
-                                                    Color.gray.opacity(0.4)
-                                                ]),
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
+                                            ? Color.theme.accent
+                                            : Color.gray.opacity(0.3)
                                     )
                                     .shadow(
                                         color: viewModel.isValid 
-                                            ? Color.theme.accent.opacity(0.3) 
+                                            ? Color.theme.accent.opacity(0.15) 
                                             : Color.clear,
-                                        radius: 8,
+                                        radius: 4,
                                         x: 0,
-                                        y: 4
+                                        y: 1
                                     )
                             )
                     }
                 }
-                .buttonStyle(AppScaleButtonStyle())
+                .buttonStyle(AppScaleButtonStyle(scale: 0.98))
                 .disabled(viewModel.username.isEmpty || viewModel.isLoading || !viewModel.isValid)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 32)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 40)
             }
         }
         .onAppear {

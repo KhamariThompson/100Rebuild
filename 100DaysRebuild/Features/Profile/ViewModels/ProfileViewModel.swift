@@ -95,7 +95,7 @@ class ProfileViewModel: ObservableObject {
     
     private func syncWithChallengeStore() {
         // Update stats from the challenge store
-        self.totalChallenges = challengeStore.totalChallenges
+        self.totalChallenges = challengeStore.getActiveChallenges().count
         self.completedChallenges = challengeStore.completedChallenges
         self.currentStreak = challengeStore.currentStreak
         
@@ -115,6 +115,12 @@ class ProfileViewModel: ObservableObject {
                 return
             }
             
+            // First, check if photoURL is already available in UserSession
+            if let photoURL = userSession.photoURL {
+                self.imageURL = photoURL
+                await loadImageFromURL(photoURL)
+            }
+            
             // Load basic profile data
             do {
                 let profile = try await getUserProfileFromFirestore(userId: userId)
@@ -122,8 +128,16 @@ class ProfileViewModel: ObservableObject {
                 await MainActor.run {
                     self.username = profile.username ?? ""
                     
-                    if let photoURLString = profile.photoURL?.absoluteString {
-                        self.imageURL = URL(string: photoURLString)
+                    if let photoURLString = profile.photoURL?.absoluteString,
+                       let photoURL = URL(string: photoURLString) {
+                        self.imageURL = photoURL
+                        
+                        // If this URL is different from what we already loaded, load it
+                        if self.userSession.photoURL?.absoluteString != photoURLString {
+                            Task {
+                                await self.loadImageFromURL(photoURL)
+                            }
+                        }
                     }
                     
                     // Set member since date
@@ -142,9 +156,15 @@ class ProfileViewModel: ObservableObject {
             // Load user identity info
             await loadUserIdentityInfo()
             
-            // Update profile image if URL is available
-            if let imageURL = self.imageURL {
+            // Make sure we have the latest image loaded
+            if let imageURL = self.imageURL, self.profileImage == nil {
                 await loadImageFromURL(imageURL)
+            }
+            
+            // As a fallback, check Auth.auth().currentUser.photoURL which might be different
+            if let authPhotoURL = Auth.auth().currentUser?.photoURL, self.profileImage == nil {
+                await loadImageFromURL(authPhotoURL)
+                self.imageURL = authPhotoURL
             }
             
             // Finish loading
@@ -199,7 +219,15 @@ class ProfileViewModel: ObservableObject {
     private func processAndUploadImage(_ image: UIImage) async {
         do {
             // Process image using extensions
-            let processedImage = image.resized(to: CGSize(width: 500, height: 500)).circleCropped()
+            let resizedImage = image.resized(to: CGSize(width: 500, height: 500))
+            guard let processedImage = resizedImage.circleCropped() else {
+                print("Failed to crop image")
+                await MainActor.run {
+                    self.error = "Failed to process the image"
+                    self.isLoadingImage = false
+                }
+                return
+            }
             
             // Ensure we're getting valid data back for the processed image
             guard let processedImageData = processedImage.compressedJPEG(quality: 0.7) else {
@@ -224,15 +252,16 @@ class ProfileViewModel: ObservableObject {
             print("Starting upload to Firebase Storage for user: \(userId)")
             print("Image data size: \(processedImageData.count) bytes")
             
+            // Show progress indicator immediately
+            await MainActor.run {
+                self.profileImage = processedImage // Set image immediately to show the user
+            }
+            
             // Upload the image to Firebase Storage
             let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
             print("Image uploaded successfully to: \(url.absoluteString)")
             
-            // Update Firestore with photoURL
-            try await updatePhotoURL(url)
-            print("Firestore photoURL updated")
-            
-            // Update UserSession to ensure photoURL is accessible app-wide
+            // Update Firestore with photoURL via UserSession
             try await userSession.updateProfilePhoto(url)
             print("UserSession photoURL updated")
             
@@ -269,9 +298,9 @@ class ProfileViewModel: ObservableObject {
                 self.isLoadingImage = false
             }
         } catch {
-            print("Error uploading profile image: \(error.localizedDescription)")
+            print("Unexpected error uploading profile image: \(error)")
             await MainActor.run {
-                self.error = "Failed to upload image: \(error.localizedDescription)"
+                self.error = "An unexpected error occurred: \(error.localizedDescription)"
                 self.isLoadingImage = false
             }
         }
@@ -397,7 +426,7 @@ class ProfileViewModel: ObservableObject {
         isSocialFeatureEnabled = false
     }
     
-    private func loadImageFromURL(_ url: URL) async {
+    public func loadImageFromURL(_ url: URL) async {
         // Check cache first
         if let cachedImage = ImageCacheManager.shared.image(forKey: url.absoluteString) {
             profileImage = cachedImage
@@ -413,17 +442,6 @@ class ProfileViewModel: ObservableObject {
         } catch {
             print("Error loading profile image: \(error.localizedDescription)")
         }
-    }
-    
-    private func updatePhotoURL(_ url: URL) async throws {
-        guard let userId = userSession.currentUser?.uid else {
-            throw NSError(domain: "ProfileViewModel", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
-        }
-        
-        try await Firestore.firestore()
-            .collection("users")
-            .document(userId)
-            .setData(["photoURL": url.absoluteString], merge: true)
     }
     
     private func isUsernameAvailable(_ username: String) async throws -> Bool {

@@ -349,7 +349,7 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
 // MARK: - UPViewModel Implementation
 @MainActor
 class ProgressDashboardViewModel: ObservableObject {
-    // Add shared singleton instance
+    // Use shared singleton instance to prevent recreation between tab switches
     static let shared = ProgressDashboardViewModel()
     
     @Published var isLoading = false
@@ -373,9 +373,14 @@ class ProgressDashboardViewModel: ObservableObject {
     private let firestore = Firestore.firestore()
     @MainActor private var loadTask: Task<Void, Never>?
     @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
+    @MainActor private var challengeStore: ChallengeStore { ChallengeStore.shared }
     
     // Add Combine cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
+    
+    // Add debounce timer
+    private var refreshDebounceTimer: Timer?
+    private let refreshDebounceInterval: TimeInterval = 2.0
     
     // Private initializer for singleton
     private init() {
@@ -390,10 +395,11 @@ class ProgressDashboardViewModel: ObservableObject {
     
     // Set up subscription to UserStatsService
     private func setupUserStatsSubscription() {
-        // Subscribe to userStats changes
+        // Subscribe to userStats changes with debouncing
         UserStatsService.shared.$userStats
             .dropFirst() // Skip initial empty value
             .receive(on: RunLoop.main)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] stats in
                 guard let self = self else { return }
                 
@@ -408,9 +414,10 @@ class ProgressDashboardViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // Subscribe to loading state changes
+        // Subscribe to loading state changes with debouncing
         UserStatsService.shared.$isLoading
             .receive(on: RunLoop.main)
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
             .sink { [weak self] isLoading in
                 guard let self = self else { return }
                 // Only update our loading state if UserStatsService is loading
@@ -422,9 +429,10 @@ class ProgressDashboardViewModel: ObservableObject {
             }
             .store(in: &cancellables)
         
-        // Subscribe to notifications about stats updates
+        // Subscribe to notifications about stats updates with debouncing
         NotificationCenter.default.publisher(for: UserStatsService.userStatsDidUpdateNotification)
             .receive(on: RunLoop.main)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 print("ProgressDashboardViewModel received userStatsDidUpdateNotification")
@@ -441,66 +449,51 @@ class ProgressDashboardViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+            
+        // Subscribe to challenge store updates with debouncing
+        NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)
+            .receive(on: RunLoop.main)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                print("ProgressDashboardViewModel received challenge updates - refreshing consistency calendar")
+                
+                // Update calendar data with fresh check-in information
+                Task { [self] in
+                    // Generate new check-in data for the consistency calendar
+                    let newCheckInData = self.generateCheckInMapFromChallenges()
+                    
+                    // Update the map on the main thread
+                    await MainActor.run {
+                        self.dateIntensityMap = newCheckInData
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     // Set up network monitoring
     private func setupNetworkMonitoring() {
         NetworkMonitor.shared.connectionState
             .receive(on: RunLoop.main)
+            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
             .sink { [weak self] isConnected in
                 self?.isNetworkConnected = isConnected
             }
             .store(in: &cancellables)
     }
     
-    // Computed properties that get data from the centralized UserStatsService
-    var totalChallenges: Int { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.totalChallenges 
-    }
-    var currentStreak: Int { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.currentStreak 
-    }
-    var longestStreak: Int { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.longestStreak 
-    }
-    var completionPercentage: Double { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.overallCompletionPercentage 
-    }
-    var lastCheckInDate: Date? { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.lastCheckInDate 
-    }
-    
-    deinit {
-        cancellables.removeAll()
-        cancelTaskOnly()
-        print("ProgressDashboardViewModel deinit - resources released")
-    }
-    
-    // Non-isolated method for deinit to use
-    nonisolated func cancelTaskOnly() {
-        Task { @MainActor in
-            loadTask?.cancel()
-            loadTask = nil
+    // Add debounced refresh method
+    private func debouncedRefresh() {
+        refreshDebounceTimer?.invalidate()
+        refreshDebounceTimer = Timer.scheduledTimer(withTimeInterval: refreshDebounceInterval, repeats: false) { [weak self] _ in
+            Task { [weak self] in
+                await self?.loadData(forceRefresh: true)
+            }
         }
     }
     
-    // Main actor method for UI updates
-    @MainActor
-    func cancelTasks() {
-        cancelTaskOnly()
-        
-        // Ensure we update the loading state
-        if isLoading {
-            isLoading = false
-            print("ProgressDashboardViewModel - Cancelled tasks and reset loading state")
-        }
-    }
-    
+    // Update loadData method to use debouncing
     func loadData(forceRefresh: Bool = false) async {
         if isLoading && !forceRefresh {
             return
@@ -508,6 +501,12 @@ class ProgressDashboardViewModel: ObservableObject {
         
         // Cancel any previous loading task
         cancelTasks()
+        
+        // Use debounced refresh for non-forced refreshes
+        if !forceRefresh {
+            debouncedRefresh()
+            return
+        }
         
         loadTask = Task { [weak self] in
             guard let self = self else { return }
@@ -525,7 +524,7 @@ class ProgressDashboardViewModel: ObservableObject {
                 // Create a separate timeout task with more reasonable timeout (6 seconds)
                 let timeoutTask = Task {
                     do {
-                        try await Task.sleep(nanoseconds: 6_000_000_000) // 6 seconds timeout (reduced from 10)
+                        try await Task.sleep(nanoseconds: 6_000_000_000) // 6 seconds timeout
                         if !Task.isCancelled && self.isLoading {
                             print("ProgressDashboardViewModel - Loading timed out after 6 seconds")
                             await MainActor.run {
@@ -552,13 +551,11 @@ class ProgressDashboardViewModel: ObservableObject {
                 }
                 
                 // First, sync with UserStatsService to ensure consistent state
-                // Always fetch from the central source of truth first
                 print("ProgressDashboardViewModel - Fetching stats from UserStatsService")
                 try Task.checkCancellation()
                 await userStatsService.refreshUserStats()
                 
                 // First, prepare early visual feedback by generating sample data
-                // This provides an instant layout, especially on first load
                 if self.isInitialLoad && !self.hasData {
                     let quickSampleData = self.generateSampleData()
                     
@@ -650,15 +647,48 @@ class ProgressDashboardViewModel: ObservableObject {
         // Generate data for UI display
         let sampleData = self.generateSampleData()
         
+        // Generate check-in data for the consistency calendar directly from challenges
+        let checkInData = generateCheckInMapFromChallenges()
+        
         // Only update specific fields on main actor
         await MainActor.run {
             self.journeyCards = sampleData.journeyCards
-            self.dateIntensityMap = sampleData.dateIntensityMap
+            self.dateIntensityMap = checkInData
             self.dailyCheckInsData = sampleData.dailyCheckInsData
             self.projectedCompletionDate = sampleData.projectedCompletionDate
             self.currentPace = sampleData.currentPace
             self.earnedBadges = sampleData.earnedBadges
         }
+    }
+    
+    /// Generate consistency calendar check-in data from actual challenge records
+    private func generateCheckInMapFromChallenges() -> [Date: Int] {
+        let calendar = Calendar.current
+        var dateIntensityMap: [Date: Int] = [:]
+        
+        // Get all challenges from the store
+        let challenges = challengeStore.challenges
+        
+        // Process each challenge to extract check-in dates
+        for challenge in challenges {
+            // Skip archived challenges
+            if challenge.isArchived { continue }
+            
+            // Look at the check-in history (which is stored in lastCheckInDate)
+            if let lastCheckIn = challenge.lastCheckInDate {
+                // Normalize to start of day to ensure dates match
+                let normalizedDate = calendar.startOfDay(for: lastCheckIn)
+                
+                // Increment intensity for this date (allowing multiple check-ins to accumulate)
+                if let currentIntensity = dateIntensityMap[normalizedDate] {
+                    dateIntensityMap[normalizedDate] = min(currentIntensity + 1, 5) // Cap at intensity 5
+                } else {
+                    dateIntensityMap[normalizedDate] = 1
+                }
+            }
+        }
+        
+        return dateIntensityMap
     }
     
     // Add loadProgress() method for backward compatibility
@@ -853,5 +883,53 @@ class ProgressDashboardViewModel: ObservableObject {
         }
         
         return badges
+    }
+    
+    deinit {
+        cancellables.removeAll()
+        cancelTaskOnly()
+        print("ProgressDashboardViewModel deinit - resources released")
+    }
+    
+    // Non-isolated method for deinit to use
+    nonisolated func cancelTaskOnly() {
+        Task { @MainActor in
+            loadTask?.cancel()
+            loadTask = nil
+        }
+    }
+    
+    // Main actor method for UI updates
+    @MainActor
+    func cancelTasks() {
+        cancelTaskOnly()
+        
+        // Ensure we update the loading state
+        if isLoading {
+            isLoading = false
+            print("ProgressDashboardViewModel - Cancelled tasks and reset loading state")
+        }
+    }
+    
+    // Computed properties that get data from the centralized UserStatsService
+    var totalChallenges: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.totalChallenges 
+    }
+    var currentStreak: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.currentStreak 
+    }
+    var longestStreak: Int { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.longestStreak 
+    }
+    var completionPercentage: Double { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.overallCompletionPercentage 
+    }
+    var lastCheckInDate: Date? { 
+        MainActor.assertIsolated()
+        return userStatsService.userStats.lastCheckInDate 
     }
 } 

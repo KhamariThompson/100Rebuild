@@ -6,6 +6,11 @@ import Combine
 // Using canonical Challenge model
 // (No import needed as it will be accessed directly)
 
+// Define notification for showing subscription screen
+extension Notification.Name {
+    static let showSubscription = Notification.Name("showSubscription")
+}
+
 struct ChallengesView: View {
     @StateObject private var viewModel = ChallengesViewModel()
     @EnvironmentObject private var subscriptionService: SubscriptionService
@@ -16,84 +21,93 @@ struct ChallengesView: View {
     @State private var challengeToEdit: Challenge?
     @State private var isShowingCheckInSheet = false
     @State private var challengeToCheckIn: Challenge?
-    @State private var isCheckingIn = false
     @State private var checkInError: String?
-    @State private var offlineCheckInQueued = false
     @State private var showSuccessToast = false
     @State private var showOfflineToast = false
     @State private var showErrorAlert = false
+    @State private var scrollOffset: CGFloat = 0
+    
+    // Gradient for challenges header styling
+    private let challengesGradient = LinearGradient(
+        colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                contentView
-            }
-            .navigationTitle("Challenges")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
+        ZStack {
+            // Background
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // ScrollView with integrated title
+            ScrollView {
+                VStack(spacing: AppSpacing.m) {
+                    // App title as "100Days" inside the ScrollView 
+                    HStack(alignment: .top) {
+                        Text("100Days")
+                            .font(.largeTitle)
+                            .bold()
+                            .foregroundStyle(challengesGradient)
+                        
+                        Spacer()
+                        
+                        // Add button
                         Button(action: { viewModel.isShowingNewChallenge = true }) {
-                            Label("New Challenge", systemImage: "plus")
+                            Image(systemName: "plus")
+                                .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                                .foregroundColor(.theme.accent)
+                                .frame(width: 40, height: 40)
+                                .contentShape(Rectangle())
                         }
-                        
-                        if !viewModel.challenges.isEmpty {
-                            Button(action: refreshChallenges) {
-                                Label("Refresh", systemImage: "arrow.clockwise")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: AppSpacing.iconSizeSmall, weight: .semibold))
+                        .buttonStyle(AppScaleButtonStyle())
                     }
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                    .padding(.top, AppSpacing.m)
+                    
+                    // Main content
+                    contentView
+                        .padding(.bottom, AppSpacing.xl)
                 }
             }
-            .sheet(isPresented: $viewModel.isShowingNewChallenge) {
-                NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
-                    Task {
-                        await viewModel.createChallenge(title: title, isTimed: isTimed)
-                        await userStatsService.refreshUserStats()
+        }
+        .sheet(isPresented: $viewModel.isShowingNewChallenge) {
+            NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
+                Task {
+                    await viewModel.createChallenge(title: title, isTimed: isTimed)
+                    await userStatsService.refreshUserStats()
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingEditChallenge) {
+            if let challenge = challengeToEdit {
+                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
+            }
+        }
+        .sheet(isPresented: $isShowingCheckInSheet) {
+            if let challenge = challengeToCheckIn {
+                // Using SimpleCheckInSheet instead of EnhancedCheckInSheet
+                SimpleCheckInSheet(
+                    challenge: challenge, 
+                    dayNumber: challenge.daysCompleted + 1,
+                    onCheckIn: { note, image in
+                        performCheckIn(challenge: challenge, note: note, image: image)
+                        isShowingCheckInSheet = false
+                    },
+                    onDismiss: {
+                        isShowingCheckInSheet = false
                     }
-                }
-            }
-            .sheet(isPresented: $isShowingEditChallenge) {
-                if let challenge = challengeToEdit {
-                    EditChallengeSheet(viewModel: viewModel, challenge: challenge)
-                }
-            }
-            .sheet(isPresented: $isShowingCheckInSheet) {
-                if let challenge = challengeToCheckIn {
-                    // Assuming a CheckInView exists or create a simple one
-                    VStack {
-                        Text("Check in to: \(challenge.title)")
-                            .font(AppTypography.headline)
-                            .padding(AppSpacing.m)
-                        
-                        Button("Check In") {
-                            checkInToChallenge(challenge)
-                            isShowingCheckInSheet = false
-                        }
-                        .padding(AppSpacing.m)
-                        .background(Color.theme.accent)
-                        .foregroundColor(.white)
-                        .cornerRadius(AppSpacing.cardCornerRadius)
-                        
-                        Button("Cancel") {
-                            isShowingCheckInSheet = false
-                        }
-                        .padding(AppSpacing.m)
-                    }
-                    .padding(AppSpacing.m)
-                    .frame(width: 300, height: 250)
-                }
-            }
-            .alert(isPresented: $viewModel.showError) {
-                Alert(
-                    title: Text("Oops!"),
-                    message: Text(viewModel.errorMessage),
-                    dismissButton: .default(Text("OK"))
                 )
+                .presentationDetents([.large, .medium])
+                .presentationDragIndicator(.visible)
             }
+        }
+        .alert(isPresented: $viewModel.showError) {
+            Alert(
+                title: Text("Oops!"),
+                message: Text(viewModel.errorMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
         .onAppear {
             // Mark tab as changing when this view appears
@@ -114,7 +128,6 @@ struct ChallengesView: View {
         .refreshable {
             await viewModel.loadChallenges()
         }
-        .withDiagnostics()
     }
     
     private var contentView: some View {
@@ -160,13 +173,14 @@ struct ChallengesView: View {
     
     private var emptyStateView: some View {
         VStack(spacing: AppSpacing.m) {
-            GreetingView(viewModel: viewModel)
-                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                .padding(.bottom, AppSpacing.xs)
-            
-            FliqloTimerView(viewModel: viewModel)
-                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                .padding(.bottom, AppSpacing.l)
+            // New personalized greeting component
+            MorningGreetingComponent(
+                userName: viewModel.userName,
+                streakCount: viewModel.maxStreak,
+                timeOfDay: convertToComponentTimeOfDay(viewModel.currentTimeOfDay)
+            )
+            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+            .padding(.bottom, AppSpacing.s)
             
             Image(systemName: "flag.fill")
                 .font(.system(size: 70))
@@ -207,70 +221,216 @@ struct ChallengesView: View {
                 ChallengesOfflineBanner()
             }
             
-            ScrollView {
-                VStack(spacing: AppSpacing.l) {
-                    GreetingView(viewModel: viewModel)
+            VStack(spacing: AppSpacing.l) {
+                // New personalized greeting component
+                MorningGreetingComponent(
+                    userName: viewModel.userName,
+                    streakCount: viewModel.maxStreak,
+                    timeOfDay: convertToComponentTimeOfDay(viewModel.currentTimeOfDay)
+                )
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .padding(.top, AppSpacing.m)
+                
+                // Add back the Fliqlo timer view to show time since last check-in
+                FliqloTimerView(viewModel: viewModel)
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                
+                // Use the space for a more urgent call to action
+                if let urgentChallenge = viewModel.mostUrgentChallenge {
+                    urgentChallengeCard(urgentChallenge)
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                        .padding(.top, AppSpacing.m)
-                    
-                    FliqloTimerView(viewModel: viewModel)
+                }
+                
+                // Pro limit warning if user has too many challenges
+                if viewModel.challenges.count >= 3 && !subscriptionService.isProUser {
+                    proLimitWarning
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                        .padding(.bottom, AppSpacing.xs)
-                    
-                    LazyVStack(spacing: AppSpacing.m) {
-                        ForEach(viewModel.challenges) { challenge in
-                            challengeCardView(challenge)
+                        .padding(.bottom, AppSpacing.s)
+                }
+                
+                // Challenge list with our new component
+                LazyVStack(spacing: AppSpacing.m) {
+                    ForEach(viewModel.challenges) { challenge in
+                        ChallengeCardComponent(challenge: challenge) {
+                            // Only show the check-in sheet if not already completed today
+                            if !challenge.isCompletedToday && !challenge.isCompleted {
+                                self.challengeToCheckIn = challenge
+                                self.isShowingCheckInSheet = true
+                            }
+                        }
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            Button {
+                                self.challengeToEdit = challenge
+                                self.isShowingEditChallenge = true
+                            } label: {
+                                Label("Edit Challenge", systemImage: "pencil")
+                            }
+                            
+                            Button(role: .destructive) {
+                                Task {
+                                    await viewModel.archiveChallenge(challenge)
+                                }
+                            } label: {
+                                Label("Archive Challenge", systemImage: "archivebox")
+                            }
                         }
                     }
-                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                 }
+                .padding(.bottom, AppSpacing.m)
+                
+                // Add challenge button at bottom for easy access
+                Button(action: { viewModel.isShowingNewChallenge = true }) {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(.theme.accent)
+                        
+                        Text("Add Another Challenge")
+                            .font(.headline)
+                            .foregroundColor(.theme.accent)
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                            .stroke(Color.theme.accent, lineWidth: 1)
+                            .background(Color.theme.surface.cornerRadius(AppSpacing.cardCornerRadius))
+                    )
+                }
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .opacity(viewModel.challenges.count >= 3 && !subscriptionService.isProUser ? 0.5 : 1.0)
+                .disabled(viewModel.challenges.count >= 3 && !subscriptionService.isProUser)
             }
         }
     }
     
-    private func challengeCardView(_ challenge: Challenge) -> some View {
-        ChallengeCardView(
-            challenge: challenge,
-            subscriptionService: subscriptionService,
-            onCheckIn: {
-                // Only show the check-in sheet if not already completed today
-                if !challenge.isCompletedToday && !challenge.isCompleted {
-                    self.challengeToCheckIn = challenge
-                    self.isShowingCheckInSheet = true
-                }
-            }
-        )
-        .padding(.bottom, AppSpacing.xxs)
-        .contentShape(Rectangle())
-        .contextMenu {
-            Button {
-                self.challengeToEdit = challenge
-                self.isShowingEditChallenge = true
-            } label: {
-                Label("Edit Challenge", systemImage: "pencil")
+    // Card for the most urgent challenge (about to break streak)
+    private func urgentChallengeCard(_ challenge: Challenge) -> some View {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                    .font(.title3)
+                
+                Text("Don't Break the Chain!")
+                    .font(.headline)
+                    .foregroundColor(.theme.text)
+                
+                Spacer()
             }
             
-            Button(role: .destructive) {
-                Task {
-                    await viewModel.archiveChallenge(challenge)
+            if challenge.hasStreakExpired {
+                Text("Your streak for \"\(challenge.title)\" is at risk. Check in today to keep your \(challenge.streakCount)-day streak going!")
+                    .font(.subheadline)
+                    .foregroundColor(.theme.subtext)
+            } else {
+                Text("Keep your \(challenge.streakCount)-day streak for \"\(challenge.title)\" by checking in today!")
+                    .font(.subheadline)
+                    .foregroundColor(.theme.subtext)
+            }
+            
+            Button {
+                self.challengeToCheckIn = challenge
+                self.isShowingCheckInSheet = true
+            } label: {
+                Text("Keep the Streak")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, AppSpacing.s)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [.orange, .orange.opacity(0.8)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    )
+            }
+            .buttonStyle(AppScaleButtonStyle())
+            .padding(.top, AppSpacing.xs)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.orange.opacity(0.1), Color.theme.surface]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+    
+    // Pro limit warning when user has 3+ challenges as a free user
+    private var proLimitWarning: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            HStack {
+                Image(systemName: "lock.fill")
+                    .foregroundColor(.theme.accent)
+                
+                Text("Pro Feature")
+                    .font(.headline)
+                    .foregroundColor(.theme.accent)
+                
+                Spacer()
+            }
+            
+            Text("Unlock unlimited challenges with Pro")
+                .font(.subheadline)
+                .foregroundColor(.theme.text)
+            
+            Button {
+                // Navigate to subscription screen
+                router.selectedTab = 3 // Switch to Profile tab
+                // Navigate to subscription view in profile tab
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    NotificationCenter.default.post(name: .showSubscription, object: nil)
                 }
             } label: {
-                Label("Archive Challenge", systemImage: "archivebox")
+                Text("Upgrade to Pro")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, AppSpacing.s)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    )
             }
+            .buttonStyle(AppScaleButtonStyle())
+            .padding(.top, AppSpacing.xs)
         }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                .fill(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color.theme.accent.opacity(0.1), Color.theme.surface]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
     }
     
     // MARK: - Check In Functionality
     
-    func checkInToChallenge(_ challenge: Challenge) {
+    private func performCheckIn(challenge: Challenge, note: String, image: UIImage?) {
         Task {
-            let result = await viewModel.checkInToChallenge(challenge)
+            let result = await viewModel.checkInToChallenge(challenge, note: note, image: image)
             
             switch result {
-            case .success(let updatedChallenge):
+            case .success(_):
                 showSuccessToast = true
-                // Refresh user stats after successful check-in
-                await userStatsService.refreshUserStats()
+                // User stats are now being refreshed in the viewModel's checkInToChallenge method
                 
                 // Dismiss the toast after a delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
@@ -283,27 +443,15 @@ struct ChallengesView: View {
         }
     }
     
-    // MARK: - Helper Functions
-    
-    func deleteChallenge(_ challenge: Challenge) {
-        Task {
-            let result = await viewModel.deleteChallenge(challenge)
-            
-            switch result {
-            case .success:
-                // Refresh user stats after successful deletion
-                await userStatsService.refreshUserStats()
-            case .failure(let error):
-                viewModel.showError = true
-                viewModel.errorMessage = "Failed to delete challenge: \(error.localizedDescription)"
-            }
-        }
-    }
-    
-    private func refreshChallenges() {
-        Task {
-            await viewModel.loadChallenges()
-            await userStatsService.refreshUserStats()
+    // Helper functions to convert between TimeOfDay enums
+    private func convertToComponentTimeOfDay(_ timeOfDay: ChallengesViewModel.TimeOfDay) -> MorningGreetingComponent.TimeOfDay {
+        switch timeOfDay {
+        case .morning:
+            return .morning
+        case .afternoon:
+            return .afternoon
+        case .evening:
+            return .evening
         }
     }
 }
@@ -646,21 +794,18 @@ struct ModernFlipClockView: View {
     
     var body: some View {
         HStack(spacing: AppSpacing.s) {
-            // Parse the timeString (format: "Xh Ym Zs")
+            // Parse the timeString (format: "Xhr Ymin Zsec")
             let components = timeString.components(separatedBy: " ")
             
-            ForEach(0..<components.count, id: \.self) { index in
-                let component = components[index]
-                let isValue = component.dropLast().allSatisfy { $0.isNumber }
-                
-                if isValue {
-                    // This is a number component (with unit suffix like 'h', 'm', 's')
-                    let digitPart = String(component.dropLast())
-                    let unitPart = String(component.suffix(1))
+            ForEach(Array(zip(components.indices, components)), id: \.0) { index, component in
+                // Extract numeric part and unit part
+                if let numericEndIndex = component.firstIndex(where: { !$0.isNumber }) {
+                    let numericPart = String(component[..<numericEndIndex])
+                    let unitPart = String(component[numericEndIndex...])
                     
                     VStack(spacing: AppSpacing.xxs) {
                         // Create flip panel for the digit
-                        Text(digitPart)
+                        Text(numericPart)
                             .font(.system(size: 36, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .foregroundColor(.theme.text)
@@ -682,20 +827,21 @@ struct ModernFlipClockView: View {
                             )
                         
                         // Unit label
-                        Text(unitLabel(for: unitPart))
+                        Text(formatUnit(unitPart))
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.theme.subtext)
+                            .id("\(index)_\(unitPart)")
                     }
                 }
             }
         }
     }
     
-    private func unitLabel(for unit: String) -> String {
+    private func formatUnit(_ unit: String) -> String {
         switch unit {
-        case "h": return "hours"
-        case "m": return "minutes"
-        case "s": return "seconds"
+        case "hr": return "hours"
+        case "min": return "minutes"
+        case "sec": return "seconds"
         default: return unit
         }
     }

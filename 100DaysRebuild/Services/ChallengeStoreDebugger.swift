@@ -18,7 +18,7 @@ class ChallengeStoreDebugger {
         // ChallengeStore metrics
         print("\n--- CHALLENGE STORE METRICS ---")
         print("Total challenges: \(challengeStore.totalChallenges)")
-        print("Active challenges: \(challengeStore.activeChallenges)")
+        print("Active challenges: \(challengeStore.getActiveChallenges().count)")
         print("Completed challenges: \(challengeStore.completedChallenges)")
         print("Current streak: \(challengeStore.currentStreak)")
         print("Longest streak: \(challengeStore.longestStreak)")
@@ -83,7 +83,7 @@ struct DiagnosticView: View {
                         .fontWeight(.bold)
                     
                     metricRow("Total challenges", "\(challengeStore.totalChallenges)")
-                    metricRow("Active challenges", "\(challengeStore.activeChallenges)")
+                    metricRow("Active challenges", "\(challengeStore.getActiveChallenges().count)")
                     metricRow("Completed", "\(challengeStore.completedChallenges)")
                     metricRow("Current streak", "\(challengeStore.currentStreak)")
                     
@@ -135,7 +135,7 @@ struct DiagnosticView: View {
 }
 
 extension View {
-    /// Add diagnostic view in debug builds
+    /// Add diagnostic view in debug builds only
     func withDiagnostics() -> some View {
         #if DEBUG
         return self.overlay(
@@ -145,7 +145,7 @@ extension View {
             alignment: .bottom
         )
         #else
-        return self
+        return self // Return the view unchanged in production
         #endif
     }
 } 

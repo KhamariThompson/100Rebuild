@@ -57,8 +57,9 @@ class ChallengeService: ObservableObject {
     /// Create a new challenge
     func createChallenge(_ challenge: Challenge) async throws {
         if !subscriptionService.isProUser {
-            let challengeCount = try await getChallengeCount()
-            if challengeCount >= maxChallengesForFreeUsers {
+            // Get count of active challenges only (not including archived)
+            let activeCount = challengeStore.getActiveChallenges().count
+            if activeCount >= maxChallengesForFreeUsers {
                 subscriptionService.showPaywall = true
                 throw ChallengeError.proFeatureRequired
             }
@@ -96,18 +97,20 @@ class ChallengeService: ObservableObject {
         }
     }
     
-    /// Get current challenge count for a user
+    /// Get current active challenge count for a user
     private func getChallengeCount() async throws -> Int {
-        // Use the store to get the active challenges count
-        return challengeStore.activeChallenges
+        // Only count active (non-archived) challenges
+        return challengeStore.getActiveChallenges().count
     }
     
     // MARK: - CRUD Operations
     
     func createChallenge(title: String, userId: String) async throws -> Challenge {
-        // Check free user limit
+        // Check free user limit using active challenges only
         if !subscriptionService.isProUser {
+            // Get only active (non-archived) challenges
             let activeChallenges = challengeStore.getActiveChallenges()
+            // Compare active count against limit
             if activeChallenges.count >= maxChallengesForFreeUsers {
                 // Show paywall
                 subscriptionService.showPaywall = true
@@ -135,12 +138,16 @@ class ChallengeService: ObservableObject {
     
     /// Returns true if user has reached their free challenge limit
     func hasReachedFreeLimit(userId: String) async -> Bool {
+        // If the user is a pro subscriber, they never reach the limit
         if subscriptionService.isProUser {
             return false
         }
         
-        // Use the store to check active challenges count
-        return challengeStore.activeChallenges >= maxChallengesForFreeUsers
+        // Use the store to get the count of ACTIVE (non-archived) challenges only
+        let activeCount = challengeStore.getActiveChallenges().count
+        
+        // Compare active (non-archived) count against the limit
+        return activeCount >= maxChallengesForFreeUsers
     }
     
     func loadChallenges(for userId: String) async throws -> [Challenge] {
