@@ -67,7 +67,7 @@ public enum CalAIDesignTokens {
     public static let largeTitleSize: CGFloat = 30
     
     /// Title size
-    public static let titleSize: CGFloat = 24
+    public static let titleSize: CGFloat = 22
     
     /// Subtitle size
     public static let subtitleSize: CGFloat = 18
@@ -78,13 +78,16 @@ public enum CalAIDesignTokens {
     /// Caption size
     public static let captionSize: CGFloat = 13
     
+    /// Headline size
+    public static let headlineSize: CGFloat = 18
+    
     // MARK: - Component Heights
     
     /// Standard button height
     public static let buttonHeight: CGFloat = 44
     
     /// Tab bar height
-    public static let tabBarHeight: CGFloat = 46
+    public static let tabBarHeight: CGFloat = 78
     
     /// Navigation bar height
     public static let navBarHeight: CGFloat = 56
