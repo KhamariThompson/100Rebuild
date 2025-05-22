@@ -16,6 +16,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
     static var firebaseConfigured = false
     
+    // Add memory monitoring timer
+    private var memoryMonitorTimer: Timer?
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Configure Firebase at the very beginning, before any other Firebase-related code
         configureFirebaseOnce()
@@ -28,6 +31,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Set up network connectivity monitoring after Firebase is configured
         startNetworkMonitoring()
+        
+        // Start memory monitoring
+        startMemoryMonitoring()
         
         return true
     }
@@ -63,6 +69,50 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         let sceneConfig = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
         sceneConfig.delegateClass = SceneDelegate.self
         return sceneConfig
+    }
+    
+    // Start memory monitoring to prevent crashes
+    private func startMemoryMonitoring() {
+        // Register for memory warnings
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        
+        // Start a timer to periodically check memory usage
+        memoryMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Log current memory usage
+            let memoryUsage = MemoryManager.shared.formattedMemoryUsage()
+            print("Current memory usage: \(memoryUsage)")
+            
+            // Check if memory usage is high and clear caches if needed
+            if MemoryManager.shared.checkMemoryUsage() {
+                print("Memory usage is high, clearing caches")
+                self.clearCaches()
+            }
+        }
+    }
+    
+    @objc private func handleMemoryWarning() {
+        print("⚠️ Memory warning received - clearing caches")
+        clearCaches()
+    }
+    
+    private func clearCaches() {
+        // Use our memory manager to clear caches
+        MemoryManager.shared.clearAllCaches()
+        
+        // Clear URLCache
+        URLCache.shared.removeAllCachedResponses()
+        
+        // Suggest a garbage collection
+        autoreleasepool {
+            // Do nothing, just trigger autorelease pool cleanup
+        }
     }
     
     // Function to set up network monitoring
@@ -108,6 +158,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     deinit {
         networkMonitor.cancel()
+        memoryMonitorTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
     }
 }
 
@@ -132,21 +184,8 @@ struct App100Days: App {
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
         
-        // We shouldn't need this fallback initialization anymore since AppDelegate handles it properly
-        // But keeping a safety check just in case
-        if FirebaseApp.app() == nil && !AppDelegate.firebaseConfigured {
-            print("WARNING: Firebase not configured by AppDelegate, applying emergency fallback")
-            FirebaseApp.configure()
-            
-            // Set Firestore offline persistence settings
-            let db = Firestore.firestore()
-            let settings = db.settings
-            settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
-            settings.isPersistenceEnabled = true // Ensure persistence is enabled
-            db.settings = settings
-        } else {
-            print("Firebase already configured by AppDelegate, no action needed in App init")
-        }
+        // REMOVED: Duplicate Firebase initialization code
+        // Firebase is now configured only by the AppDelegate
         
         // Set up improved navigation bar appearance
         let navBarAppearance = UINavigationBarAppearance()
@@ -217,6 +256,8 @@ struct App100Days: App {
                 // Initialize services
                 _ = NetworkMonitor.shared
                 _ = FirebaseAvailabilityService.shared
+                // Initialize memory manager
+                _ = MemoryManager.shared
             }
         }
     }

@@ -67,15 +67,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract Firebase configuration to a separate method
     private func configureFirebase() {
-        // Clear any previous flags to ensure we initialize properly
-        AppDelegate.firebaseConfigured = false
-        
         // Only configure Firebase if it hasn't been configured yet
-        if !AppDelegate.firebaseConfigured {
+        if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
             // Explicitly configure Firebase with the default GoogleService-Info.plist first
-            if FirebaseApp.app() == nil {
-                FirebaseApp.configure()
-            }
+            FirebaseApp.configure()
             print("✅ Firebase configured")
             
             // Now that Firebase is configured but before any Firestore method is called,
