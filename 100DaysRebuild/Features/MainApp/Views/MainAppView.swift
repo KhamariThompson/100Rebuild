@@ -5,21 +5,32 @@ class TabViewRouter: ObservableObject {
     @Published var selectedTab = 0
     @Published var previousTab = 0
     @Published var tabIsChanging = false
+    private var tabSwitchTask: DispatchWorkItem?
     
     func changeTab(to tab: Int) {
+        // Cancel any pending tab switch task
+        tabSwitchTask?.cancel()
+        
         // Only if tab is actually changing
         if tab != selectedTab {
-            tabIsChanging = true
+            // Store previous tab before changing
             previousTab = selectedTab
+            tabIsChanging = true
             
-            // Store the selected tab
-            selectedTab = tab
-            
-            // Add a very small delay before setting tabIsChanging to false
-            // This allows views to respond to the change before animations start
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Create a new task for completing the tab switch
+            let task = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
                 self.tabIsChanging = false
             }
+            
+            // Store the current task
+            tabSwitchTask = task
+            
+            // Set the new tab immediately
+            selectedTab = tab
+            
+            // Schedule completion after a short delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
         }
     }
 }
@@ -83,15 +94,13 @@ struct MainAppView: View {
                         .tag(3)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                // Fix: Use interpolatingSpring animation which is smoother than default
-                .animation(.interpolatingSpring(stiffness: 300, damping: 30), value: router.selectedTab)
+                // Fix: Use easeOut animation for smoother tab transitions
+                .animation(.easeOut(duration: 0.2), value: router.selectedTab)
                 
                 // Only show the custom tab bar when tab switching is complete
                 VStack {
                     Spacer()
-                    if !router.tabIsChanging {
-                        customTabBar
-                    }
+                    customTabBar
                 }
             }
             
@@ -107,11 +116,12 @@ struct MainAppView: View {
         }
         .ignoresSafeArea(.keyboard)
         .accentColor(Color.theme.accent)
-        // Remove transition for the entire main view to prevent flashing
-        // Fix: Remove animation that may cause flashing
+        // Prevent unwanted animations but allow tab bar to remain visible
         .transaction { transaction in
-            transaction.animation = nil
-            transaction.disablesAnimations = true
+            // Only disable animations for specific properties
+            if router.tabIsChanging {
+                transaction.animation = nil
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
             withAnimation {

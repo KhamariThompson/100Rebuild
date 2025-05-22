@@ -153,19 +153,8 @@ struct ProfileView: View {
                     .padding()
             }
             .onAppear {
-                // Mark tab as changing when this view appears
-                if router.selectedTab == 3 {
-                    router.tabIsChanging = true
-                }
-                
+                // Load user profile data
                 viewModel.loadUserProfile()
-                
-                // After a short delay, mark tab as not changing
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    if router.selectedTab == 3 {
-                        router.tabIsChanging = false
-                    }
-                }
                 
                 // Show username prompt if no username is set
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

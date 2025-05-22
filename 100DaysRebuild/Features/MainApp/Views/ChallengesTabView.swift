@@ -93,19 +93,9 @@ struct MainAppChallengesTabView: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
-            // Mark tab as changing when this view appears
-            if router.selectedTab == 0 {
-                router.tabIsChanging = true
-            }
-            
             Task {
                 await viewModel.loadChallenges()
                 await viewModel.loadUserProfile()
-                
-                // After data is loaded, mark tab as not changing
-                if router.selectedTab == 0 {
-                    router.tabIsChanging = false
-                }
             }
         }
     }
