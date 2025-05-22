@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @StateObject private var router = NavigationTabViewRouter()
+    @StateObject private var router = NavigationRouter()
     @State private var showNewChallengeSheet = false
     @State private var socialNotificationCount: Int? = 0
     @State private var isMenuExpanded = false
@@ -47,6 +47,11 @@ struct MainTabView: View {
             }
             .disabled(isMenuExpanded) // Disable tab view interaction when menu is expanded
             .edgesIgnoringSafeArea(.bottom)
+            .onChange(of: router.selectedTab) { oldValue, newValue in
+                // Make sure the tab change is intentional and not a bug
+                // This prevents auto-switching back to home tab
+                print("Tab changed from \(oldValue) to \(newValue)")
+            }
             
             ZStack(alignment: .bottom) {
                 // Custom tab bar (visible when menu is not expanded)
@@ -62,6 +67,7 @@ struct MainTabView: View {
                     )
                     .offset(y: router.tabIsChanging ? 100 : 0) // Hide during tab transitions
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: router.tabIsChanging)
+                    .shadow(color: Color.theme.shadow.opacity(0.15), radius: 8, x: 0, y: -3)
                 }
                 
                 // Floating action menu (replaces the + button with a menu)
@@ -107,7 +113,7 @@ struct MainTabView: View {
                             }
                         }, isExpanded: $isMenuExpanded)
                     }
-                    .padding(.bottom, -10) // Adjust to align with tab bar position
+                    .padding(.bottom, 20) // Adjusted for better alignment
                 }
             }
         }
@@ -145,7 +151,7 @@ struct MainTabView: View {
 }
 
 /// Router to manage tab state and transitions
-class NavigationTabViewRouter: ObservableObject {
+class NavigationRouter: ObservableObject {
     @Published var selectedTab: Int = 0
     @Published var tabIsChanging: Bool = false
     

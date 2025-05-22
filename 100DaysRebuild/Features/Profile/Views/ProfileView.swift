@@ -10,7 +10,7 @@ struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
-    @EnvironmentObject var router: TabViewRouter
+    @EnvironmentObject var router: NavigationRouter
     @StateObject private var viewModel = ProfileViewModel()
     
     @State private var isShowingSettings = false
@@ -47,42 +47,59 @@ struct ProfileView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .transition(.opacity)
-                } 
-                // Main content with title inside ScrollView (scrolls with content)
-                else {
+                } else {
+                    // Main profile scrolling content
                     ScrollView {
+                        // Scrollable content that slides under the sticky header
                         VStack(spacing: AppSpacing.m) {
-                            // Title with gradient inside the ScrollView
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Profile")
-                                    .font(.largeTitle)
-                                    .bold()
-                                    .foregroundStyle(profileGradient)
-                                
-                                // Subtitle if username is available
-                                if !viewModel.username.isEmpty {
-                                    Text("@\(viewModel.username)")
-                                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                            // Title header with username
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Profile title with gradient
+                                    Text("Profile")
+                                        .font(.largeTitle)
+                                        .bold()
+                                        .foregroundStyle(profileGradient)
+                                    
+                                    // Username display
+                                    Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
+                                        .font(.headline)
                                         .foregroundColor(.theme.subtext)
                                 }
+                                
+                                Spacer()
+                                
+                                // Settings button
+                                Button(action: { isShowingSettings = true }) {
+                                    Image(systemName: "gear")
+                                        .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                                        .foregroundColor(.theme.accent)
+                                }
+                                .buttonStyle(AppScaleButtonStyle())
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                             .padding(.top, AppSpacing.m)
                             
-                            // Hero Section
+                            // Top hero section with profile image and username
                             profileHeroSection
                                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                                .padding(.bottom, AppSpacing.l)
                             
-                            // Stats Section - Horizontal Scrolling
+                            // Stats scrolling section
                             statsScrollSection
-                                .padding(.bottom, AppSpacing.l)
                             
-                            // Action Bar - Horizontal
+                            // Divider for visual separation
+                            Divider()
+                                .padding(.vertical, AppSpacing.m)
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                            
+                            // Horizontal action bar
                             horizontalActionBar
                                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                                .padding(.bottom, AppSpacing.l)
+                            
+                            // Divider for visual separation
+                            Divider()
+                                .padding(.vertical, AppSpacing.m)
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                             
                             // Last Active Challenge - Condensed
                             if let lastActiveChallenge = viewModel.lastActiveChallenge {
@@ -231,26 +248,18 @@ struct ProfileView: View {
             Button(action: { 
                 isShowingSettings = true
             }) {
-                Label("Edit Profile", systemImage: "pencil")
-                    .font(AppTypography.callout)
-                    .fontWeight(.medium)
+                Text("Edit Profile")
+                    .font(AppTypography.subheadline)
+                    .foregroundColor(.theme.accent)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(
                         Capsule()
-                            .stroke(Color.theme.accent, lineWidth: 1.5)
+                            .strokeBorder(Color.theme.accent, lineWidth: 1.5)
                     )
-                    .foregroundColor(.theme.accent)
             }
-            .padding(.top, 4) // Reduced padding
+            .buttonStyle(PlainButtonStyle())
         }
-        .padding(.vertical, AppSpacing.s) // Reduced vertical padding
-        .padding(.horizontal, AppSpacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow, radius: 4, x: 0, y: 2)
-        )
     }
     
     // Stats horizontal scroll area
@@ -677,7 +686,7 @@ struct ProfileView_Previews: PreviewProvider {
             .environmentObject(UserSession.shared)
             .environmentObject(SubscriptionService.shared)
             .environmentObject(NotificationService.shared)
-            .environmentObject(TabViewRouter())
+            .environmentObject(NavigationRouter())
     }
 }
 

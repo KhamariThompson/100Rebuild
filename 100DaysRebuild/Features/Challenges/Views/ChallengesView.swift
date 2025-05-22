@@ -15,7 +15,7 @@ struct ChallengesView: View {
     @StateObject private var viewModel = ChallengesViewModel()
     @EnvironmentObject private var subscriptionService: SubscriptionService
     @EnvironmentObject private var notificationService: NotificationService
-    @EnvironmentObject private var router: TabViewRouter
+    @EnvironmentObject private var router: NavigationRouter
     @EnvironmentObject private var userStatsService: UserStatsService
     @State private var isShowingEditChallenge = false
     @State private var challengeToEdit: Challenge?

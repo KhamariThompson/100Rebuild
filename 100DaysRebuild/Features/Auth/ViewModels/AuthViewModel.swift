@@ -35,6 +35,8 @@ enum AuthMode {
     case emailSignIn
     case emailSignUp
     case forgotPassword
+    case googleSignIn
+    case appleSignIn
 }
 
 @MainActor
@@ -163,6 +165,16 @@ class AuthViewModel: ObservableObject {
         case .forgotPassword:
             // No need to retry password reset
             break
+        case .googleSignIn:
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.signInWithGoogle()
+            }
+        case .appleSignIn:
+            Task { [weak self] in
+                guard let self = self else { return }
+                await self.signInWithApple()
+            }
         }
     }
     
@@ -186,6 +198,10 @@ class AuthViewModel: ObservableObject {
             return !email.isEmpty && !password.isEmpty && password == confirmPassword && password.count >= 6
         case .forgotPassword:
             return !email.isEmpty
+        case .googleSignIn:
+            return true
+        case .appleSignIn:
+            return true
         }
     }
     
@@ -208,6 +224,10 @@ class AuthViewModel: ObservableObject {
             
         case .forgotPassword:
             return emailErrorResult == nil && !email.isEmpty
+        case .googleSignIn:
+            return true
+        case .appleSignIn:
+            return true
         }
     }
     
@@ -222,6 +242,12 @@ class AuthViewModel: ObservableObject {
             passwordError = validatePassword(password)
             confirmPasswordError = validateConfirmPassword(password, confirmPassword)
         case .forgotPassword:
+            // No additional validation needed
+            break
+        case .googleSignIn:
+            // No additional validation needed
+            break
+        case .appleSignIn:
             // No additional validation needed
             break
         }
@@ -371,24 +397,33 @@ class AuthViewModel: ObservableObject {
         }
         
         isLoading = true
+        lastAuthAttemptMode = .googleSignIn
         
         // Create local references to avoid capturing self
         let authService = self.authService
         let userSession = self.userSession
         
         Task { [weak self] in
-            let success = await authService.signInWithGoogle(viewController: rootViewController)
-            
-            await MainActor.run {
-                guard let self = self else { return }
+            do {
+                let success = await authService.signInWithGoogle(viewController: rootViewController)
                 
-                // Check for error message from UserSession
-                if let errorMsg = userSession.errorMessage {
-                    self.errorMessage = errorMsg
-                    self.showError = true
+                await MainActor.run {
+                    guard let self = self else { return }
+                    
+                    // Check for error message from UserSession
+                    if let errorMsg = userSession.errorMessage {
+                        self.errorMessage = errorMsg
+                        self.showError = true
+                    }
+                    
+                    if !success {
+                        self.isLoading = false
+                    }
                 }
-                
-                if !success {
+            } catch {
+                await MainActor.run {
+                    guard let self = self else { return }
+                    self.setError(error)
                     self.isLoading = false
                 }
             }
@@ -397,38 +432,52 @@ class AuthViewModel: ObservableObject {
     
     /// Apple sign in
     func signInWithApple() async {
-        guard let credential = appleIDCredential, 
+        guard let appleIDCredential = appleIDCredential,
               let nonce = appleNonce else {
             setError(NSError(domain: "AppleSignIn", code: 1001, 
-                           userInfo: [NSLocalizedDescriptionKey: "Missing Apple sign-in credentials"]))
+                          userInfo: [NSLocalizedDescriptionKey: "Invalid Apple sign-in state"]))
             return
         }
         
         isLoading = true
+        lastAuthAttemptMode = .appleSignIn
         
         // Create local references to avoid capturing self
+        let appleCredential = self.appleIDCredential
+        let authNonce = self.appleNonce
         let authService = self.authService
         let userSession = self.userSession
         
         Task { [weak self] in
-            let success = await authService.signInWithApple(credential: credential, nonce: nonce)
-            
-            await MainActor.run {
-                guard let self = self else { return }
+            do {
+                let success = await authService.signInWithApple(credential: appleCredential!, nonce: authNonce!)
                 
-                // Check for error message from UserSession
-                if let errorMsg = userSession.errorMessage {
-                    self.errorMessage = errorMsg
-                    self.showError = true
+                await MainActor.run {
+                    guard let self = self else { return }
+                    
+                    // Check for error message from UserSession
+                    if let errorMsg = userSession.errorMessage {
+                        self.errorMessage = errorMsg
+                        self.showError = true
+                    }
+                    
+                    // Reset nonce and credential for security
+                    self.appleNonce = nil
+                    self.appleIDCredential = nil
+                    
+                    if !success {
+                        self.isLoading = false
+                    }
                 }
-                
-                if !success {
+            } catch {
+                await MainActor.run {
+                    guard let self = self else { return }
+                    // Reset nonce and credential for security
+                    self.appleNonce = nil
+                    self.appleIDCredential = nil
+                    self.setError(error)
                     self.isLoading = false
                 }
-                
-                // Reset Apple credential data
-                self.appleIDCredential = nil
-                self.appleNonce = nil
             }
         }
     }

@@ -67,10 +67,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract Firebase configuration to a separate method
     private func configureFirebase() {
+        // Clear any previous flags to ensure we initialize properly
+        AppDelegate.firebaseConfigured = false
+        
         // Only configure Firebase if it hasn't been configured yet
-        if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
+        if !AppDelegate.firebaseConfigured {
             // Explicitly configure Firebase with the default GoogleService-Info.plist first
-            FirebaseApp.configure()
+            if FirebaseApp.app() == nil {
+                FirebaseApp.configure()
+            }
             print("✅ Firebase configured")
             
             // Now that Firebase is configured but before any Firestore method is called,
@@ -96,19 +101,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract RevenueCat configuration to a separate method
     private func configureRevenueCat() {
-        let apiKey = "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
-        
-        // Configure RevenueCat with API key if not already configured
-        if !Purchases.isConfigured {
-            // Set RevenueCat behavior before configure
-            Purchases.logLevel = .debug
-            
-            // Configure with the API key
-            Purchases.configure(withAPIKey: apiKey)
-            print("RevenueCat configured with key: \(apiKey)")
-            print("Expected product ID: com.KhamariThompson.100Days.monthly")
-            print("Expected entitlement: pro")
-        }
+        Purchases.logLevel = .debug
+        Purchases.configure(
+            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+                .with(appUserID: nil)
+                .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
+                .with(userDefaults: UserDefaults.standard)
+                .with(usesStoreKit2IfAvailable: true)
+                .build()
+        )
+        print("RevenueCat configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -600,247 +602,109 @@ class ConstraintSwizzler {
 
 @main
 struct App100Days: App {
-    // Use UIApplicationDelegateAdaptor to ensure AppDelegate is used for Firebase initialization
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
-    @StateObject private var adManager = AdManager.shared
-    @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
-    @StateObject private var appStateCoordinator = AppStateCoordinator.shared
     @StateObject private var themeManager = ThemeManager.shared
-    @AppStorage("AppTheme") private var appTheme: String = "system"
+    @StateObject private var progressDashboardViewModel = ProgressDashboardViewModel.shared
+    @StateObject private var networkMonitor = NetworkMonitor.shared
+    @StateObject private var userStatsService = UserStatsService.shared
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
-        
-        // Don't attempt to initialize Firebase here, let AppDelegate handle it
-        // This avoids multiple initialization attempts
-        
-        // Set up improved navigation bar appearance
-        let navBarAppearance = UINavigationBarAppearance()
-        navBarAppearance.configureWithDefaultBackground()
-        navBarAppearance.shadowColor = .clear // Remove shadow line
-        
-        // Apply the appearance settings
-        UINavigationBar.appearance().standardAppearance = navBarAppearance
-        UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
-        UINavigationBar.appearance().compactAppearance = navBarAppearance
-        
-        // Fix ASAuthorizationAppleIDButton constraint issue - This is a key fix for the SIGABRT
-        if let buttonClass = NSClassFromString("ASAuthorizationAppleIDButton") as? UIView.Type {
-            // Swizzle the constraints setup for ASAuthorizationAppleIDButton
-            fixAppleButtonConstraints()
-        }
-    }
-    
-    private func fixAppleButtonConstraints() {
-        // Fix for the AppleID button constraints that cause SIGABRT
-        UserDefaults.standard.set(false, forKey: "ASAuthorizationAppleIDButtonDrawsWhenDisabled")
-        
-        // Ensure we don't break constraints automatically
-        UserDefaults.standard.set(false, forKey: "UIViewLayoutConstraintBehaviorAllowBreakingConstraints")
-        
-        // Log unsatisfiable constraints
-        UserDefaults.standard.set(true, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
+        // Firebase will be configured in AppDelegate
     }
     
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                if userSession.isAuthenticated {
-                    AppContentView()
-                        .environmentObject(userSession)
-                        .environmentObject(subscriptionService)
-                        .environmentObject(notificationService)
-                        .environmentObject(adManager)
-                        .environmentObject(progressViewModel)
-                        .environmentObject(themeManager)
-                        .onAppear {
-                            print("App main view appeared")
-                            // Initialize services
-                            _ = NetworkMonitor.shared
-                            _ = FirebaseAvailabilityService.shared
-                        }
-                        .withAppTheme()
-                        .animation(.easeInOut(duration: 0.3), value: themeManager.currentTheme)
-                } else {
-                    AuthView()
-                        .environmentObject(userSession)
-                        .environmentObject(themeManager)
-                        .withAppTheme()
-                        .animation(.easeInOut(duration: 0.3), value: themeManager.currentTheme)
+            AppContentView()
+                .environmentObject(userSession)
+                .environmentObject(subscriptionService)
+                .environmentObject(notificationService)
+                .environmentObject(themeManager)
+                .environmentObject(progressDashboardViewModel)
+                .environmentObject(networkMonitor)
+                .environmentObject(userStatsService)
+                .withAppTheme()
+                .task {
+                    // Register custom fonts if any
+                    FontRegistration.registerFonts()
                 }
-                
-                // Show offline banner when in offline state
-                if appStateCoordinator.appState == .offline {
-                    OfflineBanner()
-                        .transition(.move(edge: .top))
-                        .animation(.spring(), value: appStateCoordinator.appState)
-                        .zIndex(100)
-                }
-                
-                // Show initializing or error state content
-                if appStateCoordinator.appState == .initializing {
-                    SplashScreen()
-                        .zIndex(101)
-                } else if case .error(let message) = appStateCoordinator.appState {
-                    ErrorView(message: message) {
-                        appStateCoordinator.attemptRecovery()
-                    }
-                    .zIndex(101)
-                }
-            }
         }
     }
     
-    // Helper to get color scheme from app theme setting
-    private func getPreferredColorScheme() -> ColorScheme? {
-        switch appTheme {
-        case "dark":
-            return .dark
-        case "light":
-            return .light
-        default:
-            return nil
-        }
-    }
-    
-    // Fix layout constraint issues at the app level
-    private func fixLayoutConstraintIssues() {
-        print("Disabling input assistant view to fix layout constraints")
-        
-        // Register for unsatisfiable constraints
-        UserDefaults.standard.set(true, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
-        
-        // Disable automatic constraint breaking
-        UserDefaults.standard.set(false, forKey: "UIViewShowAlignmentRects")
-        
-        // Fix the specific constraint conflict mentioned in the error log
-        print("Fixing specific constraint conflict mentioned in error log")
-        
-        // Schedule a task to fix the height constraint of SystemInputAssistantView
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            App100Days.fixSystemInputAssistantViewConstraints()
-        }
-        
-        // Register for keyboard appearance notification
-        NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardWillShowNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            print("Keyboard will show")
-            // Fix constraints when keyboard is shown
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                App100Days.fixSystemInputAssistantViewConstraints()
-            }
-        }
-    }
-    
-    private func setupAuthenticationServices() {
-        // Fix for ASAuthorizationAppleIDButton layout issues
-        DispatchQueue.main.async {
-            // Register preference for ephemeral web session
-            if #available(iOS 15.0, *) {
-                UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
-                
-                // Set additional key used by Apple authentication
-                UserDefaults.standard.set(true, forKey: "com.apple.developer.applesignin")
-            }
-            
-            // Fix for "No active account" error
-            AuthUtilities.configureAppleAuthSession()
-        }
-    }
-    
-    // Add static functions to be accessible from anywhere
-    static func fixSystemInputAssistantViewConstraints() {
-        // Find all windows in the app
-        for window in getAppWindows() {
-            // Search for SystemInputAssistantView in window hierarchy
-            findAndFixSystemInputAssistantView(in: window)
-        }
-    }
-    
-    static func getAppWindows() -> [UIWindow] {
-        if #available(iOS 15.0, *) {
-            return UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .flatMap { $0.windows }
-        } else {
-            // For iOS < 15, use the deprecated API
-            return UIApplication.shared.windows
-        }
-    }
-    
-    static func findAndFixSystemInputAssistantView(in view: UIView) {
-        // Check for SystemInputAssistantView
-        let viewName = NSStringFromClass(type(of: view))
-        if viewName.contains("SystemInputAssistantView") {
-            // Lower the priority of constraints rather than completely removing them
-            for constraint in view.constraints {
-                if constraint.firstAttribute == .height {
-                    constraint.priority = UILayoutPriority(50) // Very low priority
-                }
-            }
-        }
-        
-        // Check for ASAuthorizationAppleIDButton constraint issues
-        if viewName.contains("ASAuthorizationAppleIDButton") {
-            print("Found ASAuthorizationAppleIDButton, fixing constraints")
-            
-            // Remove any width constraints that could cause conflicts
-            let constraintsToRemove = view.constraints.filter { constraint in
-                return constraint.firstAttribute == .width && constraint.relation == .lessThanOrEqual
-            }
-            
-            for constraint in constraintsToRemove {
-                view.removeConstraint(constraint)
-            }
-            
-            // Make the view size itself appropriately
-            view.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-            view.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-        }
-        
-        // Check all subviews recursively
-        for subview in view.subviews {
-            findAndFixSystemInputAssistantView(in: subview)
-        }
+    private func initializeServices() {
+        // Log initialized services, but don't re-configure Firestore
+        // as it's already configured in AppDelegate
+        print("Services already initialized in AppDelegate")
+        print("Auth service initialized")
+        print("Firestore service initialized")
+        print("Storage service initialized")
     }
 }
 
+// App content view for the main content area
 struct AppContentView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
-    @EnvironmentObject var adManager: AdManager
-    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
+    @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var userStatsService: UserStatsService
+    @State private var isInitializing = true
     
     var body: some View {
-        Group {
-            if userSession.isAuthenticated {
-                // Always go to main app view regardless of onboarding state
-                MainAppView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
-                    .environmentObject(adManager)
-                    .environmentObject(progressViewModel)
-                    .environmentObject(themeManager)
-                    .applyLayoutFixes()
+        ZStack {
+            // Background color for the entire app
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // Content based on state
+            if isInitializing {
+                SplashScreen()
+                    .transition(.opacity)
+                    .onAppear {
+                        // Delay to show splash screen briefly
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                isInitializing = false
+                            }
+                        }
+                    }
             } else {
-                // Use the new CalAI-styled welcome screen
-                WelcomeView()
-                    .environmentObject(userSession)
-                    .environmentObject(subscriptionService)
-                    .environmentObject(notificationService)
-                    .environmentObject(adManager)
-                    .environmentObject(progressViewModel)
-                    .environmentObject(themeManager)
-                    .applyLayoutFixes()
+                Group {
+                    if userSession.isAuthenticated {
+                        // Main app for authenticated users
+                        MainAppView()
+                            .environmentObject(userSession)
+                            .environmentObject(subscriptionService)
+                            .environmentObject(notificationService)
+                            .environmentObject(themeManager)
+                            .environmentObject(progressDashboardViewModel)
+                            .environmentObject(networkMonitor)
+                            .environmentObject(userStatsService)
+                    } else {
+                        // Welcome view for non-authenticated users
+                        WelcomeView()
+                            .environmentObject(userSession)
+                            .environmentObject(themeManager)
+                    }
+                }
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.4), value: userSession.isAuthenticated)
+            }
+            
+            // Offline banner overlay (always on top)
+            if !networkMonitor.isConnected {
+                VStack {
+                    OfflineBanner()
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .animation(.easeInOut, value: networkMonitor.isConnected)
+                .zIndex(100) // Ensure it's on top
             }
         }
     }
@@ -940,20 +804,57 @@ struct ErrorView: View {
 
 // Splash screen shown during initialization
 struct SplashScreen: View {
+    @State private var opacity = 0.0
+    @State private var scale = 0.9
+    @State private var rotation = 0.0
+    
     var body: some View {
-        VStack(spacing: 30) {
-            Image(systemName: "checkmark.circle.fill")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 100, height: 100)
-                .foregroundColor(.blue)
+        ZStack {
+            // Clean background
+            Color.theme.background.ignoresSafeArea()
             
-            Text("100Days")
-                .font(.system(size: 40, weight: .heavy, design: .rounded))
-            
-            ProgressView()
-                .scaleEffect(1.5)
-                .padding(.top, 30)
+            VStack(spacing: 24) {
+                // Clean, minimalist logo
+                ZStack {
+                    // Outer circle with gradient
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 110, height: 110)
+                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 10, x: 0, y: 5)
+                    
+                    // Inner checkmark
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 50, weight: .bold))
+                        .foregroundColor(.white)
+                        .rotationEffect(.degrees(rotation))
+                }
+                
+                // App name with clean typography
+                Text("100Days")
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .tracking(1) // Slightly increased letter spacing for cleaner look
+            }
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .onAppear {
+                // Subtle animations
+                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                    opacity = 1.0
+                    scale = 1.0
+                }
+                
+                // Subtle rotation animation for the checkmark
+                withAnimation(.easeInOut(duration: 1.2)) {
+                    rotation = 360
+                }
+            }
         }
     }
 }

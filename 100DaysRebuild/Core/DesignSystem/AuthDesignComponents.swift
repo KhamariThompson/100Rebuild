@@ -325,7 +325,10 @@ public enum AuthComponents {
         
         public var body: some View {
             ZStack {
-                Color.theme.background.ignoresSafeArea()
+                // Apply background color to entire screen with higher priority
+                Color.theme.background
+                    .edgesIgnoringSafeArea(.all)
+                    .zIndex(-1) // Ensure background is below all other content
                 
                 ScrollView {
                     VStack(spacing: CalAIDesignTokens.screenPadding) {
@@ -336,6 +339,10 @@ public enum AuthComponents {
                     .padding(.bottom, 30)
                 }
                 .scrollDismissesKeyboard(.interactively)
+            }
+            .onAppear {
+                // Apply fixes when container appears
+                AppFixes.shared.applyAllFixes()
             }
         }
     }

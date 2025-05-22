@@ -280,7 +280,7 @@ public enum AppComponents {
                 
                 // Value
                 Text(value)
-                    .font(.system(size: 28, weight: .medium, design: .rounded))
+                    .font(AppTypography.title1)
                     .foregroundColor(Color.theme.text)
                 
                 // Optional content

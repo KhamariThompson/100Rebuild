@@ -1,39 +1,7 @@
 import SwiftUI
 
-// Router to handle tab switching and loading state management 
-class TabViewRouter: ObservableObject {
-    @Published var selectedTab = 0
-    @Published var previousTab = 0
-    @Published var tabIsChanging = false
-    private var tabSwitchTask: DispatchWorkItem?
-    
-    func changeTab(to tab: Int) {
-        // Cancel any pending tab switch task
-        tabSwitchTask?.cancel()
-        
-        // Only if tab is actually changing
-        if tab != selectedTab {
-            // Store previous tab before changing
-            previousTab = selectedTab
-            tabIsChanging = true
-            
-            // Create a new task for completing the tab switch
-            let task = DispatchWorkItem { [weak self] in
-                guard let self = self else { return }
-                self.tabIsChanging = false
-            }
-            
-            // Store the current task
-            tabSwitchTask = task
-            
-            // Set the new tab immediately
-            selectedTab = tab
-            
-            // Schedule completion after a short delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
-        }
-    }
-}
+// Import NavigationRouter from MainTabView
+import UIKit
 
 // Define the notification name for showing notification settings
 extension Notification.Name {
@@ -42,7 +10,7 @@ extension Notification.Name {
 
 struct MainAppView: View {
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var router: TabViewRouter
+    @StateObject private var router = NavigationRouter()
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var userStatsService = UserStatsService.shared
@@ -96,6 +64,10 @@ struct MainAppView: View {
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 // Fix: Use easeOut animation for smoother tab transitions
                 .animation(.easeOut(duration: 0.2), value: router.selectedTab)
+                .onChange(of: router.selectedTab) { oldValue, newValue in
+                    // Debug tab changes
+                    print("Tab changed from \(oldValue) to \(newValue)")
+                }
                 
                 // Only show the custom tab bar when tab switching is complete
                 VStack {
@@ -112,6 +84,11 @@ struct MainAppView: View {
             // Show notification permission request for new users
             if showNotificationSettings {
                 notificationPermissionOverlay
+            }
+            
+            // Add action overlay when showAddAction is true
+            if showAddAction {
+                addActionOverlay
             }
         }
         .ignoresSafeArea(.keyboard)

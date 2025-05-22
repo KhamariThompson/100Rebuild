@@ -1,8 +1,18 @@
 import SwiftUI
+import CoreText
+import CoreGraphics
 
 /// Core Design System Typography
 /// Provides consistent text styles across the application
 public enum AppTypography {
+    /// Font family constants
+    public enum FontFamily {
+        public static let primary = "SFProDisplay-Regular"
+        public static let primaryMedium = "SFProDisplay-Medium"
+        public static let primarySemibold = "SFProDisplay-Semibold"
+        public static let primaryBold = "SFProDisplay-Bold"
+    }
+    
     public enum FontSize {
         public static let display: CGFloat = 40
         public static let largeTitle: CGFloat = 32
@@ -93,29 +103,49 @@ public enum AppTypography {
     public static func dynamicCustomFont(name: String, size: CGFloat, style: Font.TextStyle) -> Font {
         return Font.custom(name, size: size, relativeTo: style)
     }
+    
+    /// Get the font name for a specified weight
+    private static func fontName(for weight: Font.Weight) -> String {
+        switch weight {
+        case .bold:
+            return FontFamily.primaryBold
+        case .semibold:
+            return FontFamily.primarySemibold
+        case .medium:
+            return FontFamily.primaryMedium
+        default:
+            return FontFamily.primary
+        }
+    }
 }
 
 // MARK: - Font Extensions
 public extension Font {
     static func custom(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        return Font.system(size: size, weight: weight, design: .rounded)
+        // In real implementation, we would use actual custom fonts
+        // For now, we'll continue using system fonts with rounded design to maintain consistency
+        return .system(size: size, weight: weight, design: .rounded)
+        
+        // When SF Pro Display is properly added to the project:
+        // let fontName = AppTypography.fontName(for: weight)
+        // return .custom(fontName, size: size)
     }
     
     // Convenience methods to create fonts with specific sizes and weights
     static func displayRounded(weight: Font.Weight = .semibold) -> Font {
-        return .system(size: AppTypography.FontSize.display, weight: weight, design: .rounded)
+        return .system(size: CalAIDesignTokens.largeTitleSize, weight: weight, design: .rounded)
     }
     
     static func titleRounded(weight: Font.Weight = .semibold) -> Font {
-        return .system(size: AppTypography.FontSize.title1, weight: weight, design: .rounded)
+        return .system(size: CalAIDesignTokens.titleSize, weight: weight, design: .rounded)
     }
     
     static func headlineRounded(weight: Font.Weight = .medium) -> Font {
-        return .system(size: AppTypography.FontSize.headline, weight: weight, design: .rounded)
+        return .system(size: CalAIDesignTokens.headlineSize, weight: weight, design: .rounded)
     }
     
     static func bodyRounded(weight: Font.Weight = .regular) -> Font {
-        return .system(size: AppTypography.FontSize.body, weight: weight, design: .rounded)
+        return .system(size: CalAIDesignTokens.bodySize, weight: weight, design: .rounded)
     }
 }
 
@@ -169,7 +199,7 @@ public extension View {
 public extension View {
     func display() -> some View { appFont(AppTypography.display) }
     func largeTitle() -> some View { appFont(AppTypography.largeTitle) }
-    func title() -> some View { appFont(AppTypography.title1) }
+    func title1() -> some View { appFont(AppTypography.title1) }
     func title2() -> some View { appFont(AppTypography.title2) }
     func title3() -> some View { appFont(AppTypography.title3) }
     func headline() -> some View { appFont(AppTypography.headline) }
@@ -183,10 +213,10 @@ public extension View {
     func captionMedium() -> some View { appFont(AppTypography.captionMedium) }
     func small() -> some View { appFont(AppTypography.small) }
     
-    // Dynamic Type versions
+    // Dynamic Type versions that adapt to user preferences
     func dynamicDisplay() -> some View { appFont(AppTypography.dynamicDisplay) }
     func dynamicLargeTitle() -> some View { appFont(AppTypography.dynamicLargeTitle) }
-    func dynamicTitle() -> some View { appFont(AppTypography.dynamicTitle1) }
+    func dynamicTitle1() -> some View { appFont(AppTypography.dynamicTitle1) }
     func dynamicTitle2() -> some View { appFont(AppTypography.dynamicTitle2) }
     func dynamicTitle3() -> some View { appFont(AppTypography.dynamicTitle3) }
     func dynamicHeadline() -> some View { appFont(AppTypography.dynamicHeadline) }
@@ -196,4 +226,36 @@ public extension View {
     func dynamicFootnote() -> some View { appFont(AppTypography.dynamicFootnote) }
     func dynamicCaption() -> some View { appFont(AppTypography.dynamicCaption) }
     func dynamicCaption2() -> some View { appFont(AppTypography.dynamicCaption2) }
+}
+
+// MARK: - Font Registration
+
+/// Manages font registration in the app
+public struct FontRegistration {
+    /// Register all custom fonts with the system
+    public static func registerFonts() {
+        // No custom fonts to register, we're using system fonts
+        // This is a placeholder for future custom font registration
+        
+        // For custom fonts, registration would look like:
+        // registerFont(bundle: .main, fontName: "CustomFont-Regular", fontExtension: "ttf")
+    }
+    
+    /// Register a single font with the system
+    private static func registerFont(bundle: Bundle, fontName: String, fontExtension: String) {
+        guard let fontURL = bundle.url(forResource: fontName, withExtension: fontExtension),
+              let fontDataProvider = CGDataProvider(url: fontURL as CFURL),
+              let font = CGFont(fontDataProvider) else {
+            print("ERROR: Failed to register font \(fontName).\(fontExtension)")
+            return
+        }
+        
+        var error: Unmanaged<CFError>?
+        if !CTFontManagerRegisterGraphicsFont(font, &error) {
+            if let error = error?.takeRetainedValue() {
+                let errorDescription = CFErrorCopyDescription(error)
+                print("ERROR: Failed to register font \(fontName): \(errorDescription)")
+            }
+        }
+    }
 } 

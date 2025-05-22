@@ -1,6 +1,7 @@
 import SwiftUI
+import WebKit
 
-/// A view that displays terms and privacy policy information
+/// A view that displays terms and privacy policy information from web URLs
 struct TermsAndPrivacyView: View {
     enum ViewMode {
         case terms
@@ -9,6 +10,11 @@ struct TermsAndPrivacyView: View {
     
     let mode: ViewMode
     @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = true
+    
+    // URLs for terms and privacy content
+    private let termsURL = URL(string: "https://100days.site/terms")!
+    private let privacyURL = URL(string: "https://100days.site/privacy")!
     
     var body: some View {
         ZStack {
@@ -42,140 +48,83 @@ struct TermsAndPrivacyView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 16)
                 
-                // Content
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 24) {
-                        if mode == .terms {
-                            termsContent
-                        } else {
-                            privacyContent
+                // Web content
+                WebView(url: mode == .terms ? termsURL : privacyURL, isLoading: $isLoading)
+                    .overlay(
+                        Group {
+                            if isLoading {
+                                ZStack {
+                                    Color.theme.background
+                                    ProgressView()
+                                        .scaleEffect(1.5)
+                                }
+                            }
                         }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 40)
-                }
+                    )
             }
         }
         .navigationBarHidden(true)
     }
+}
+
+// WebView to display web content
+struct WebView: UIViewRepresentable {
+    let url: URL
+    @Binding var isLoading: Bool
     
-    private var termsContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text("Terms of Service")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .padding(.bottom, 8)
-            
-            Text("Last Updated: June 1, 2024")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .padding(.bottom, 16)
-            
-            Group {
-                termsSection(
-                    title: "1. Acceptance of Terms",
-                    content: "By accessing or using 100Days, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using this app."
-                )
-                
-                termsSection(
-                    title: "2. Use License",
-                    content: "Permission is granted to use 100Days for personal, non-commercial purposes. This license does not include the right to resell or commercially use this app or its contents; use any data mining, robots, or similar data gathering tools; download any portion of the app; or use the app in any manner that may damage or impair 100Days."
-                )
-                
-                termsSection(
-                    title: "3. User Accounts",
-                    content: "To use certain features of 100Days, you may need to create an account. You are responsible for maintaining the confidentiality of your account information and for all activities that occur under your account."
-                )
-                
-                termsSection(
-                    title: "4. Content",
-                    content: "All content provided on 100Days is for informational purposes only. 100Days makes no representations as to the accuracy or completeness of any information on this app."
-                )
-                
-                termsSection(
-                    title: "5. Modifications",
-                    content: "100Days may revise these terms of service at any time without notice. By using this app, you agree to be bound by the current version of these terms of service."
-                )
-                
-                termsSection(
-                    title: "6. Limitations",
-                    content: "In no event shall 100Days or its suppliers be liable for any damages arising out of the use or inability to use the materials on 100Days, even if 100Days or a 100Days authorized representative has been notified orally or in writing of the possibility of such damage."
-                )
-                
-                termsSection(
-                    title: "7. Contact",
-                    content: "If you have any questions about these Terms, please contact us at support@100days.app"
-                )
-            }
-        }
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView()
+        webView.navigationDelegate = context.coordinator
+        webView.load(URLRequest(url: url))
+        return webView
     }
     
-    private var privacyContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            Text("Privacy Policy")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .padding(.bottom, 8)
-            
-            Text("Last Updated: June 1, 2024")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .padding(.bottom, 16)
-            
-            Group {
-                termsSection(
-                    title: "1. Information We Collect",
-                    content: "100Days collects information that you provide directly to us, such as your name, email address, and information about your challenges and progress. We also collect certain information automatically, including your device type, operating system, and app usage data."
-                )
-                
-                termsSection(
-                    title: "2. How We Use Your Information",
-                    content: "We use the information we collect to provide, maintain, and improve our services; to communicate with you; to personalize your experience; and to protect against fraud and unauthorized activity."
-                )
-                
-                termsSection(
-                    title: "3. Information Sharing",
-                    content: "We do not share your personal information with third parties except as described in this privacy policy. We may share information with service providers that perform services on our behalf, and if required by law."
-                )
-                
-                termsSection(
-                    title: "4. Data Security",
-                    content: "We take reasonable measures to help protect your personal information from loss, theft, misuse, and unauthorized access, alteration, and destruction."
-                )
-                
-                termsSection(
-                    title: "5. Your Choices",
-                    content: "You can access, update, or delete your account information at any time through the app settings. You can also choose to opt out of certain communications."
-                )
-                
-                termsSection(
-                    title: "6. Children's Privacy",
-                    content: "100Days is not directed to children under the age of 13, and we do not knowingly collect personal information from children under 13."
-                )
-                
-                termsSection(
-                    title: "7. Changes to This Policy",
-                    content: "We may update this privacy policy from time to time. We will notify you of any changes by posting the new privacy policy on this page and updating the 'Last Updated' date."
-                )
-                
-                termsSection(
-                    title: "8. Contact Us",
-                    content: "If you have any questions about this privacy policy, please contact us at privacy@100days.app"
-                )
-            }
-        }
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        // Nothing to update
     }
     
-    private func termsSection(title: String, content: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 18, weight: .semibold, design: .rounded))
-                .foregroundColor(.theme.text)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: WebView
+        
+        init(_ parent: WebView) {
+            self.parent = parent
+        }
+        
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            parent.isLoading = true
+        }
+        
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            parent.isLoading = false
             
-            Text(content)
-                .font(.system(size: 15, weight: .regular, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .fixedSize(horizontal: false, vertical: true)
+            // Apply custom styling to the web content for better appearance
+            let cssString = """
+            body {
+                font-family: -apple-system, system-ui, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto;
+                padding: 0 20px;
+                line-height: 1.5;
+                color: #2c3e50;
+            }
+            h1, h2, h3 {
+                font-weight: 600;
+            }
+            """
+            
+            let jsString = """
+            var style = document.createElement('style');
+            style.innerHTML = '\(cssString)';
+            document.head.appendChild(style);
+            """
+            
+            webView.evaluateJavaScript(jsString, completionHandler: nil)
+        }
+        
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            parent.isLoading = false
         }
     }
 }

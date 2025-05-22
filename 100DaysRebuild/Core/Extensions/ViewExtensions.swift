@@ -267,6 +267,11 @@ extension View {
             }
             .photoPickerTrigger(selection: photosPickerSelection)
     }
+    
+    /// Apply this modifier to prevent flashing during tab transitions
+    func withTabTransition(router: NavigationRouter) -> some View {
+        self.modifier(TabTransitionModifier(router: router))
+    }
 }
 
 // MARK: - Safe Keyboard Handling Modifier
@@ -548,3 +553,19 @@ struct NavigationDebounceModifier: ViewModifier {
 
 // NOTE: ScaleButtonStyle has been moved to Core/DesignSystem/Buttons.swift
 // Please use AppScaleButtonStyle from there instead. 
+
+// MARK: - Tab Transition Modifier
+
+/// A modifier that prevents flashing of content during tab transitions
+struct TabTransitionModifier: ViewModifier {
+    @ObservedObject var router: NavigationRouter
+    
+    func body(content: Content) -> some View {
+        content
+            .opacity(router.tabIsChanging ? 0 : 1)
+            .animation(.easeInOut(duration: 0.15), value: router.tabIsChanging)
+    }
+}
+
+// Note: The withTabTransition extension is already defined earlier in this file
+// and shouldn't be repeated here to avoid the redeclaration error.

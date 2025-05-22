@@ -1,14 +1,7 @@
 import Foundation
 import Combine
 import StoreKit
-
-enum SubscriptionError: Error {
-    case purchaseFailed
-    case restoreFailed
-    case unknown
-    case timeout
-    case notSignedIntoAppStore
-}
+import SwiftUI
 
 enum SubscriptionPlan: String {
     case monthly = "com.KhamariThompson.100Days.monthly"
@@ -18,7 +11,7 @@ enum SubscriptionPlan: String {
 class SubscriptionViewModel: ObservableObject {
     @Published private(set) var features: [ProFeature] = []
     @Published private(set) var isLoading = false
-    @Published private(set) var error: SubscriptionError?
+    @Published private(set) var error: Error?
     @Published var showError = false
     @Published var errorMessage = ""
     
@@ -69,9 +62,6 @@ class SubscriptionViewModel: ObservableObject {
         
         do {
             try await subscriptionService.purchaseSubscription(plan: plan)
-        } catch SubscriptionError.notSignedIntoAppStore {
-            errorMessage = "You need to be signed into the App Store to make purchases. Please sign in through Settings app."
-            showError = true
         } catch {
             errorMessage = "Failed to purchase subscription: \(error.localizedDescription)"
             showError = true
@@ -91,9 +81,6 @@ class SubscriptionViewModel: ObservableObject {
                 errorMessage = "No previous purchases found to restore"
                 showError = true
             }
-        } catch SubscriptionError.notSignedIntoAppStore {
-            errorMessage = "You need to be signed into the App Store to restore purchases. Please sign in through Settings app."
-            showError = true
         } catch {
             errorMessage = "Failed to restore purchases: \(error.localizedDescription)"
             showError = true

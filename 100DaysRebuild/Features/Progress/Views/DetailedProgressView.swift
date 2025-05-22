@@ -6,7 +6,7 @@ struct DetailedProgressView: View {
     @ObservedObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
-    @EnvironmentObject var router: TabViewRouter
+    @EnvironmentObject var router: NavigationRouter
     @Binding var showAnalytics: Bool
     
     var body: some View {

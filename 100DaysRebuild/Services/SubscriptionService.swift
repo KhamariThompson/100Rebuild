@@ -4,7 +4,7 @@ import RevenueCat
 import FirebaseAuth
 
 @MainActor
-class SubscriptionService: ObservableObject {
+class SubscriptionService: NSObject, ObservableObject {
     static let shared = SubscriptionService()
     
     @Published private(set) var isProUser: Bool = false
@@ -41,7 +41,18 @@ class SubscriptionService: ObservableObject {
     // Product identifiers
     private let monthlyProductID = "com.KhamariThompson.100Days.monthly"
     
-    private init() {
+    @Published private(set) var offerings: Offerings?
+    @Published private(set) var customerInfo: CustomerInfo?
+    @Published private(set) var isLoading = false
+    @Published private(set) var error: Error?
+    
+    private var products: [Product] = []
+    private let productIds = ["com.KhamariThompson.100Days.monthly"]
+    
+    private override init() {
+        // Call super.init() first before using self
+        super.init()
+        
         // Configure custom error handling
         setupRevenueCatErrorHandling()
         
@@ -110,30 +121,14 @@ class SubscriptionService: ObservableObject {
     }
     
     private func setupRevenueCat() {
-        // Only configure if not already configured
-        if Purchases.isConfigured {
-            print("RevenueCat is already configured, skipping initialization")
-            return
-        }
-        
-        // Enable debug logs to help troubleshoot
-        #if DEBUG
+        // Configure RevenueCat with proper error handling
         Purchases.logLevel = .debug
-        #else
-        Purchases.logLevel = .error
-        #endif
-        
-        // Configure RevenueCat with API key
         Purchases.configure(withAPIKey: apiKey)
+        Purchases.shared.delegate = self
         
-        // Ensure entitlements are configured correctly
-        print("RevenueCat configured with key: \(apiKey)")
-        print("Expected product ID: \(monthlyProductID)")
-        print("Expected entitlement: pro")
-        
-        // Identify the current user if available
+        // Load offerings
         Task {
-            await identifyUser()
+            await loadOfferings()
         }
     }
     
@@ -585,4 +580,50 @@ class SubscriptionService: ObservableObject {
         
         return try await withTimeout(seconds: seconds, task: task)
     }
+    
+    @MainActor
+    private func loadOfferings() async {
+        isLoading = true
+        error = nil
+        
+        do {
+            offerings = try await Purchases.shared.offerings()
+            print("Successfully loaded offerings")
+        } catch {
+            self.error = error
+            print("Error loading offerings: \(error)")
+            
+            // Retry logic
+            if let retryCount = UserDefaults.standard.object(forKey: "offeringsRetryCount") as? Int,
+               retryCount < 3 {
+                let newRetryCount = retryCount + 1
+                UserDefaults.standard.set(newRetryCount, forKey: "offeringsRetryCount")
+                print("Retrying offerings load (attempt \(newRetryCount)/3)...")
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 second delay
+                await loadOfferings()
+            } else {
+                UserDefaults.standard.set(0, forKey: "offeringsRetryCount")
+            }
+        }
+        
+        isLoading = false
+    }
+}
+
+extension SubscriptionService: PurchasesDelegate {
+    func purchases(_ purchases: Purchases, receivedUpdatedCustomerInfo customerInfo: CustomerInfo) {
+        self.customerInfo = customerInfo
+    }
+}
+
+enum StoreError: Error {
+    case failedVerification
+}
+
+enum SubscriptionError: Error {
+    case purchaseFailed
+    case notSignedIntoAppStore
+    case restoreFailed
+    case timeout
+    case unknown
 } 

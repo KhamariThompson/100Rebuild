@@ -51,6 +51,25 @@ struct PaywallView: View {
                 animateGradient = true
             }
             
+            // Close button - positioned in top corner
+            VStack {
+                HStack {
+                    Spacer()
+                    
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(Color.theme.subtext)
+                            .padding(16)
+                    }
+                }
+                
+                Spacer()
+            }
+            .zIndex(99) // Ensure button is above other content
+            
             ScrollView {
                 VStack(spacing: AppSpacing.l) {
                     // Header
@@ -79,6 +98,7 @@ struct PaywallView: View {
         }
         .navigationTitle("Upgrade to Pro")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true) // Hide the back button to use our custom dismiss button
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Close") {
@@ -370,13 +390,19 @@ struct PaywallView: View {
         VStack(spacing: AppSpacing.m) {
             // Icon with glow effect
             ZStack {
+                // Background glow effect
                 Circle()
                     .fill(Color.theme.accent.opacity(0.2))
-                    .frame(width: 100, height: 100)
+                    .frame(width: 110, height: 110)
                     .blur(radius: 15)
                 
-                // App icon with animation
-                Image.appIconWithFallback(size: 90)
+                // App icon - replacing with actual app icon image
+                Image("AppIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 90, height: 90)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
                     .scaleEffect(isAnimating ? 1.0 : 0.8)
                     .opacity(isAnimating ? 1.0 : 0.0)
                     .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isAnimating)

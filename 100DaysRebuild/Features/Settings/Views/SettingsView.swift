@@ -17,6 +17,27 @@ enum SettingsSectionType {
     case appInfo
 }
 
+// Add ActiveSheet enum before the SettingsView struct
+enum ActiveSheet: Identifiable {
+    case changeEmail
+    case changePassword
+    case changeUsername
+    case paywall
+    case emailComposer
+    case shareSheet
+    
+    var id: Int {
+        switch self {
+        case .changeEmail: return 0
+        case .changePassword: return 1
+        case .changeUsername: return 2
+        case .paywall: return 3
+        case .emailComposer: return 4
+        case .shareSheet: return 5
+        }
+    }
+}
+
 struct SettingsView: View {
     // Environment
     @Environment(\.dismiss) private var dismiss
@@ -31,21 +52,17 @@ struct SettingsView: View {
     @State private var scrollToSection: SettingsSectionType?
     
     // State
-    @State private var showingChangeEmail = false
-    @State private var showingChangePassword = false
-    @State private var showingChangeUsername = false
+    @State private var activeSheet: ActiveSheet?
     @State private var isRestoringPurchases = false
     @State private var isPerformingAction = false
-    @State private var showingShareSheet = false
-    @State private var showingEmailComposer = false
     @State private var showingDeleteConfirmation = false
     @State private var showingDeleteChallengesConfirmation = false
     @State private var showingError = false
-    @State private var errorMessage = ""
+    @State private var errorMessage: String? = nil
     @State private var isNotificationsEnabled = false
     @State private var showSuccessMessage = false
     @State private var successMessage = ""
-    @State private var selectedTheme: AppThemeMode = .system // Local state for theme selection
+    @State private var selectedTheme: AppThemeMode = .system
     
     // Notification Settings
     @State private var isDailyReminderEnabled: Bool = true
@@ -65,132 +82,200 @@ struct SettingsView: View {
     @State private var dragOffset: CGFloat = 0
     private var isDraggable: Bool = true
     
+    // Add new state for gesture handling
+    @State private var isGestureActive = false
+    
     var body: some View {
-        ZStack {
-            // Main content container
-            VStack(spacing: 0) {
-                // Modern header with large title
-                settingsHeader
-                
-                // Main content container
-                mainContent
-            }
+        // Break up the complex body expression into smaller components
+        bodyContent
+    }
+    
+    // Main body content extracted to a separate computed property
+    private var bodyContent: some View {
+        let content = VStack(spacing: 0) {
+            // Modern header with large title
+            settingsHeader
+                .offset(y: -dragOffset * 0.2)
             
-            // Bottom drag indicator if modal
-            if isDraggable {
-                bottomDragIndicator
-            }
+            // Main content container
+            mainContent
+                .offset(y: -dragOffset * 0.8)
         }
         .background(Color.theme.background.ignoresSafeArea())
         .accentColor(Color.theme.accent)
-        // Sheets
-        .fixedSheet(isPresented: $showingChangeEmail) {
-            ChangeEmailView()
+        
+        // Apply all modifiers in sequence instead of chaining methods
+        return applyDragGesture(
+            applyEventHandlers(
+                applyAlerts(
+                    applySheets(content)
+                )
+            )
+        )
+        .environment(\.isGestureActive, isGestureActive)
+    }
+    
+    // Extract sheet presentation to a separate method
+    private func applySheets(_ content: some View) -> some View {
+        content.sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .changeEmail:
+                ChangeEmailView()
+                    .environmentObject(userSession)
+                    .environmentObject(themeManager)
+            case .changePassword:
+                ChangePasswordView()
+                    .environmentObject(userSession)
+                    .environmentObject(themeManager)
+            case .changeUsername:
+                ChangeUsernameView()
+                    .environmentObject(userSession)
+                    .environmentObject(themeManager)
+            case .paywall:
+                PaywallView()
+                    .environmentObject(subscriptionService)
+                    .environmentObject(themeManager)
+            case .emailComposer:
+                emailComposerView()
+            case .shareSheet:
+                ShareSheet(items: [
+                    AppStoreHelper.getShareMessage(),
+                    AppStoreHelper.getShareableAppLink()
+                ])
+            }
         }
-        .fixedSheet(isPresented: $showingChangePassword) {
-            ChangePasswordView()
-        }
-        .fixedSheet(isPresented: $showingChangeUsername) {
-            ChangeUsernameView()
-        }
-        .fixedSheet(isPresented: $subscriptionService.showPaywall) {
-            PaywallView()
-        }
-        .fixedSheet(isPresented: $showingEmailComposer) {
+    }
+    
+    // Helper function for email composer view
+    private func emailComposerView() -> some View {
+        Group {
             if EmailComposer.canSendEmail() {
                 EmailComposer(
                     recipient: "support@100days.site",
                     subject: "100Days App Support",
-                    body: getEmailSupportBody()
-                ) { _, _ in }
-            }
-        }
-        .fixedSheet(isPresented: $showingShareSheet) {
-            ShareSheet(items: [
-                AppStoreHelper.getShareMessage(),
-                AppStoreHelper.getShareableAppLink()
-            ])
-        }
-        // Alerts
-        .alert("Success", isPresented: $showSuccessMessage) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(successMessage)
-        }
-        .alert("Error", isPresented: $showingError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(errorMessage)
-        }
-        .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                Task {
-                    await handleDeleteAccount()
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")
-        }
-        .alert("Delete All Challenges", isPresented: $showingDeleteChallengesConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                Task {
-                    await handleDeleteAllChallenges()
-                }
-            }
-        } message: {
-            Text("Are you sure you want to delete all your challenges? This action cannot be undone.")
-        }
-        .alert("Notification Permission", isPresented: $showingPermissionAlert) {
-            Button("Settings", role: .none) {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Please enable notifications in settings to receive reminders.")
-        }
-        .onAppear {
-            syncWithNotificationService()
-            selectedTheme = themeManager.currentTheme
-            
-            // Load user's display name
-            Task {
-                await loadUserProfile()
-            }
-            
-            // Scroll to the specified section if needed
-            scrollToInitialSectionIfNeeded()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .appThemeDidChange)) { notification in
-            // Update selectedTheme when it changes externally
-            if let themeRawValue = notification.object as? String,
-               let updatedTheme = AppThemeMode(rawValue: themeRawValue) {
-                selectedTheme = updatedTheme
+                    body: getEmailSupportBody(),
+                    completionHandler: { _, _ in
+                        // Clear sheet when done
+                        activeSheet = nil
+                    }
+                )
             } else {
-                selectedTheme = themeManager.currentTheme
+                // If email composer not available, clear sheet and show fallback
+                Color.clear.onAppear {
+                    activeSheet = nil
+                    let encodedSubject = "100Days App Support".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    if let url = URL(string: "mailto:support@100days.site?subject=\(encodedSubject)") {
+                        UIApplication.shared.open(url)
+                    }
+                }
             }
         }
-        // Add swipe gesture to dismiss if draggable
-        .gesture(isDraggable ? DragGesture()
-            .onChanged { gesture in
-                if gesture.translation.height > 0 {
-                    self.dragOffset = gesture.translation.height
+    }
+    
+    // Extract alerts to a separate method
+    private func applyAlerts(_ content: some View) -> some View {
+        content
+            // Success alert
+            .alert("Success", isPresented: $showSuccessMessage) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(successMessage)
+            }
+            // Error alert
+            .alert("Error", isPresented: $showingError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "")
+            }
+            // Delete account confirmation
+            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await handleDeleteAccount()
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently deleted.")
+            }
+            // Delete challenges confirmation
+            .alert("Delete All Challenges", isPresented: $showingDeleteChallengesConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    Task {
+                        await handleDeleteAllChallenges()
+                    }
+                }
+            } message: {
+                Text("Are you sure you want to delete all your challenges? This action cannot be undone.")
+            }
+            // Notification permission alert
+            .alert("Notification Permission", isPresented: $showingPermissionAlert) {
+                Button("Settings", role: .none) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Please enable notifications in settings to receive reminders.")
+            }
+    }
+    
+    // Apply event handlers
+    private func applyEventHandlers(_ content: some View) -> some View {
+        content
+            .onAppear {
+                syncWithNotificationService()
+                selectedTheme = themeManager.currentTheme
+                
+                // Load user's display name
+                Task {
+                    await loadUserProfile()
+                }
+                
+                // Scroll to the specified section if needed
+                scrollToInitialSectionIfNeeded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .appThemeDidChange)) { notification in
+                // Update selectedTheme when it changes externally
+                if let themeRawValue = notification.object as? String,
+                   let updatedTheme = AppThemeMode(rawValue: themeRawValue) {
+                    selectedTheme = updatedTheme
+                } else {
+                    selectedTheme = themeManager.currentTheme
                 }
             }
-            .onEnded { gesture in
-                if gesture.translation.height > 100 {
-                    withAnimation(.easeOut) {
-                        self.dismiss()
-                    }
-                } else {
-                    withAnimation(.easeOut) {
-                        self.dragOffset = 0
+    }
+    
+    // Extract drag gesture to a separate method
+    private func applyDragGesture(_ content: some View) -> some View {
+        content.gesture(
+            isDraggable ? 
+            DragGesture(minimumDistance: 20)
+                .onChanged { gesture in
+                    // Only capture vertical drags
+                    if abs(gesture.translation.height) > abs(gesture.translation.width) {
+                        if gesture.translation.height > 0 {
+                            isGestureActive = true
+                            self.dragOffset = gesture.translation.height
+                        }
                     }
                 }
-            } : nil)
+                .onEnded { gesture in
+                    isGestureActive = false
+                    if gesture.translation.height > 100 {
+                        withAnimation(.easeOut) {
+                            self.dismiss()
+                        }
+                    } else {
+                        withAnimation(.easeOut) {
+                            self.dragOffset = 0
+                        }
+                    }
+                }
+            : nil
+        )
     }
     
     // MARK: - Header Views
@@ -258,7 +343,6 @@ struct SettingsView: View {
                     .padding(.bottom, 16)
             }
         }
-        .offset(y: -dragOffset * 0.2) // Slight parallax effect on drag
     }
     
     private var bottomDragIndicator: some View {
@@ -291,7 +375,6 @@ struct SettingsView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 30)
             }
-            .offset(y: -dragOffset * 0.8) // Content follows drag
             .onChange(of: scrollToSection) { oldValue, newValue in
                 if let section = newValue {
                     withAnimation {
@@ -409,7 +492,7 @@ struct SettingsView: View {
                             
                             // Change button
                             Button {
-                                showingChangeUsername = true
+                                activeSheet = .changeUsername
                             } label: {
                                 Text("Change")
                                     .font(.system(size: 15, weight: .medium))
@@ -436,7 +519,7 @@ struct SettingsView: View {
                             Spacer()
                             
                             Button {
-                                showingChangeUsername = true
+                                activeSheet = .changeUsername
                             } label: {
                                 HStack {
                                     Text("Set Now")
@@ -455,33 +538,42 @@ struct SettingsView: View {
                     Divider()
                     
                     // Email button
-                    Button(action: { showingChangeEmail = true }) {
+                    Button {
+                        activeSheet = .changeEmail
+                    } label: {
                         SettingsRow(icon: "envelope.fill", title: "Change Email", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     
                     Divider()
                     
                     // Password button
-                    Button(action: { showingChangePassword = true }) {
+                    Button {
+                        activeSheet = .changePassword
+                    } label: {
                         SettingsRow(icon: "lock.fill", title: "Change Password", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     
                     Divider()
                     
                     // Sign Out
-                    Button(action: { 
+                    Button {
                         Task {
                             await handleSignOut()
                         }
-                    }) {
+                    } label: {
                         SettingsRow(icon: "arrow.right.square", title: "Sign Out", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     .disabled(isPerformingAction)
                     
                     Divider()
                     
                     // Delete Account (destructive)
-                    Button(action: { showingDeleteConfirmation = true }) {
+                    Button {
+                        showingDeleteConfirmation = true
+                    } label: {
                         SettingsRow(
                             icon: "trash.fill", 
                             title: "Delete Account", 
@@ -489,6 +581,7 @@ struct SettingsView: View {
                             showChevron: true
                         )
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     .disabled(isPerformingAction)
                     
                     // Show a progress indicator if account action is in progress
@@ -497,9 +590,9 @@ struct SettingsView: View {
                             Spacer()
                             ProgressView()
                                 .progressViewStyle(CircularProgressViewStyle())
+                                .padding(.vertical, 10)
                             Spacer()
                         }
-                        .padding(.vertical, 10)
                     }
                 }
                 .padding(.vertical, 0)
@@ -544,15 +637,16 @@ struct SettingsView: View {
                     
                     // Manage subscription
                     if subscriptionService.isProUser {
-                        Button(action: {
+                        Button {
                             AppStoreHelper.openSubscriptionManagement()
-                        }) {
+                        } label: {
                             SettingsRow(icon: "creditcard", title: "Manage Subscription", color: .theme.text, showChevron: true)
                         }
+                        .buttonStyle(AppScaleButtonStyle())
                     } else {
-                        Button(action: {
+                        Button {
                             subscriptionService.presentSubscriptionSheet()
-                        }) {
+                        } label: {
                             SettingsRow(
                                 icon: "star.circle.fill", 
                                 title: "Upgrade to Pro", 
@@ -560,12 +654,15 @@ struct SettingsView: View {
                                 showChevron: true
                             )
                         }
+                        .buttonStyle(AppScaleButtonStyle())
                     }
                     
                     Divider()
                     
                     // Restore purchases
-                    Button(action: restorePurchases) {
+                    Button {
+                        restorePurchases()
+                    } label: {
                         HStack {
                             SettingsRow(
                                 icon: "arrow.clockwise", 
@@ -582,6 +679,7 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     .disabled(isRestoringPurchases)
                 }
                 .padding(.vertical, 0)
@@ -756,22 +854,14 @@ struct SettingsView: View {
                     // Enhanced theme selector with visual previews
                     HStack(spacing: 12) {
                         ForEach(AppThemeMode.allCases) { themeMode in
-                            let isThemeSelected = selectedTheme == themeMode
-                            let themeAction = {
-                                hapticFeedback(style: .medium)
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    themeManager.setTheme(themeMode)
-                                    // Force UI update after a short delay
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                        selectedTheme = themeManager.currentTheme
-                                    }
-                                }
-                            }
-                            
                             ThemeOptionButton(
                                 theme: themeMode,
-                                isSelected: isThemeSelected,
-                                action: themeAction
+                                isSelected: selectedTheme == themeMode,
+                                action: {
+                                    hapticFeedback(style: .medium)
+                                    selectedTheme = themeMode
+                                    themeManager.setTheme(themeMode)
+                                }
                             )
                         }
                     }
@@ -832,9 +922,8 @@ struct SettingsView: View {
                                 .stroke(isSelected ? Color.theme.accent : Color.clear, lineWidth: 2)
                         )
                 )
-                .contentShape(Rectangle())
             }
-            .buttonStyle(AppScaleButtonStyle())
+            .buttonStyle(PlainButtonStyle())
         }
         
         // Colors that represent the theme preview
@@ -865,36 +954,39 @@ struct SettingsView: View {
         SettingsSection(title: "Community & Support", icon: "bubble.left.and.bubble.right.fill") {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 0) {
-                    Button(action: {
+                    Button {
                         if EmailComposer.canSendEmail() {
-                            showingEmailComposer = true
+                            activeSheet = .emailComposer
                         } else {
                             let encodedSubject = "100Days App Support".addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
                             if let url = URL(string: "mailto:support@100days.site?subject=\(encodedSubject)") {
                                 UIApplication.shared.open(url)
                             }
                         }
-                    }) {
+                    } label: {
                         SettingsRow(icon: "envelope.fill", title: "Contact Support", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     
                     Divider()
                     
-                    Button(action: {
+                    Button {
                         AppStoreHelper.openAppStoreReview()
-                    }) {
+                    } label: {
                         SettingsRow(icon: "star.bubble.fill", title: "Rate on App Store", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                     
                     Divider()
                     
-                    Button(action: {
+                    Button {
                         if let twitterURL = URL(string: "https://twitter.com/100daysapp") {
                             UIApplication.shared.open(twitterURL)
                         }
-                    }) {
+                    } label: {
                         SettingsRow(icon: "bird.fill", title: "Follow Us on Twitter", color: .theme.text, showChevron: true)
                     }
+                    .buttonStyle(AppScaleButtonStyle())
                 }
                 .padding(.vertical, 0)
             }
@@ -1037,45 +1129,103 @@ struct SettingsView: View {
     // MARK: - Action Handlers
     
     private func handleSignOut() async {
-        isPerformingAction = true
+        print("DEBUG: Sign out button clicked")
+        
+        // Set loading state
+        await MainActor.run {
+            isPerformingAction = true
+            errorMessage = ""  // Set to empty string instead of nil
+        }
+        
+        // Create a timeout task
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            if isPerformingAction {
+                print("DEBUG: Sign out operation timed out")
+                await MainActor.run {
+                    errorMessage = "Sign out timed out. Please try again."
+                    showingError = true
+                    isPerformingAction = false
+                }
+            }
+        }
         
         do {
-            // First, reset all local state and cached values
-            await MainActor.run {
-                // Reset UI state
-                displayName = ""
-                isDailyReminderEnabled = false
-                isStreakReminderEnabled = false
-                // Any other state that should be reset
+            // Check network availability first
+            guard userSession.isNetworkAvailable else {
+                throw NSError(domain: "SettingsView", 
+                             code: 100, 
+                             userInfo: [NSLocalizedDescriptionKey: "No internet connection available"])
             }
             
-            // Use the non-throwing version to ensure we always sign out
+            print("DEBUG: Starting sign out process")
+            
+            // Force sign out by calling signOutWithoutThrowing
             await userSession.signOutWithoutThrowing()
             
-            // Wait for the auth state to update
-            for _ in 0..<10 { // Try for up to 1 second
+            // Wait for auth state to update
+            var authStateUpdated = false
+            for i in 0..<20 { // Try for up to 2 seconds
                 if case .signedOut = userSession.authState {
+                    print("DEBUG: Auth state updated to signedOut")
+                    authStateUpdated = true
                     break
                 }
+                print("DEBUG: Auth state check attempt \(i + 1)")
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             }
             
+            if !authStateUpdated {
+                print("DEBUG: Auth state did not update properly")
+                // Force sign out by calling signOutWithoutThrowing again
+                await userSession.signOutWithoutThrowing()
+            }
+            
             // Dismiss the settings view
+            print("DEBUG: Dismissing settings view")
             await MainActor.run {
                 isPerformingAction = false
                 dismiss()
             }
         } catch {
+            print("DEBUG: Error during sign out: \(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = "Failed to sign out: \(error.localizedDescription)"
                 showingError = true
                 isPerformingAction = false
+                
+                // Force sign out by calling signOutWithoutThrowing
+                Task {
+                    await userSession.signOutWithoutThrowing()
+                    // Dismiss after a short delay to show the error
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        dismiss()
+                    }
+                }
             }
         }
+        
+        // Cancel the timeout task
+        timeoutTask.cancel()
     }
     
     private func handleDeleteAccount() async {
-        isPerformingAction = true
+        await MainActor.run {
+            isPerformingAction = true
+        }
+        
+        // Create a timeout task to prevent hangs
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+            if isPerformingAction {
+                print("DEBUG: Account deletion timed out")
+                await MainActor.run {
+                    errorMessage = "Account deletion timed out. Please try again."
+                    showingError = true
+                    isPerformingAction = false
+                }
+            }
+        }
         
         do {
             guard let userId = userSession.currentUser?.uid else {
@@ -1101,19 +1251,31 @@ struct SettingsView: View {
                 displayName = ""
                 isDailyReminderEnabled = false
                 isStreakReminderEnabled = false
-                
-                // Reset any other state variables here
+                activeSheet = nil
                 
                 // Now dismiss the view
                 dismiss()
             }
         } catch {
+            print("DEBUG: Error during account deletion: \(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = "Failed to delete account: \(error.localizedDescription)"
                 showingError = true
                 isPerformingAction = false
+                
+                // Force sign out if possible, as a recovery mechanism
+                Task {
+                    do {
+                        await userSession.signOutWithoutThrowing()
+                    } catch {
+                        print("DEBUG: Failed to sign out after account deletion error: \(error.localizedDescription)")
+                    }
+                }
             }
         }
+        
+        // Cancel the timeout task
+        timeoutTask.cancel()
     }
     
     private func deleteUserData(userId: String) async throws {
@@ -1752,6 +1914,7 @@ struct SettingsRow: View {
     let color: Color
     let showChevron: Bool
     @State private var isPressed = false
+    @Environment(\.isGestureActive) private var isGestureActive
     
     init(
         icon: String,
@@ -1804,16 +1967,20 @@ struct SettingsRow: View {
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isPressed)
         .contentShape(Rectangle())
-        // Add gesture for feedback when pressed
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    isPressed = true
-                }
-                .onEnded { _ in
-                    isPressed = false
-                }
-        )
+        // Remove the gesture that interferes with the button action
+        .onAppear { isPressed = false }
+    }
+}
+
+// Add environment key for gesture state
+private struct IsGestureActiveKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isGestureActive: Bool {
+        get { self[IsGestureActiveKey.self] }
+        set { self[IsGestureActiveKey.self] = newValue }
     }
 }
 

@@ -59,7 +59,7 @@ public struct ConsistencyHeatmapView: View {
             VStack(spacing: AppSpacing.xs) {
                 // Day of week labels
                 HStack(spacing: 4) {
-                    ForEach(weekdayLabels, id: \.self) { label in
+                    ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { index, label in
                         Text(label)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.theme.subtext)

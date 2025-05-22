@@ -23,6 +23,7 @@ class UserSession: ObservableObject {
     @Published private(set) var photoURL: URL?
     @Published var isNetworkAvailable = true
     @Published var errorMessage: String?
+    @Published var lastSignInTime: Date?
     
     // Add a handler that other components can set to be notified of auth changes
     var authStateDidChangeHandler: (() -> Void)?
@@ -93,6 +94,7 @@ class UserSession: ObservableObject {
             currentUser = user
             isAuthenticated = true
             authState = .signedIn(user)
+            lastSignInTime = Date()
             
             // Reload user profile
             Task {
@@ -104,6 +106,7 @@ class UserSession: ObservableObject {
             isAuthenticated = false
             username = nil
             photoURL = nil
+            lastSignInTime = nil
         }
         
         // Notify listeners about auth state change
@@ -127,6 +130,7 @@ class UserSession: ObservableObject {
                     self.currentUser = user
                     self.isAuthenticated = true
                     self.authState = .signedIn(user)
+                    self.lastSignInTime = Date()
                     await self.loadUserProfile()
                 } else {
                     print("UserSession: No active user")
@@ -135,6 +139,7 @@ class UserSession: ObservableObject {
                     self.isAuthenticated = false
                     self.username = nil
                     self.photoURL = nil
+                    self.lastSignInTime = nil
                 }
                 
                 // Notify listeners about auth state change
@@ -464,11 +469,19 @@ class UserSession: ObservableObject {
     
     // Add a non-throwing sign out method to ensure we always sign out
     func signOutWithoutThrowing() async {
+        print("DEBUG: UserSession: Starting sign out process")
+        
         do {
+            // Remove existing auth state listener first
+            if let listener = stateListener {
+                auth.removeStateDidChangeListener(listener)
+                stateListener = nil
+            }
+            
             // Try to sign out using Firebase Auth
             try auth.signOut()
             
-            // Reset local state immediately rather than waiting for auth listener
+            // Reset local state immediately
             await MainActor.run {
                 authState = .signedOut
                 currentUser = nil
@@ -477,6 +490,7 @@ class UserSession: ObservableObject {
                 photoURL = nil
                 hasCompletedOnboarding = false
                 errorMessage = nil
+                lastSignInTime = nil
             }
             
             // Force post a notification about auth state change
@@ -485,22 +499,23 @@ class UserSession: ObservableObject {
                 object: nil
             )
             
-            // Ensure the auth state listener is properly set up
+            // Set up a new auth state listener
             setupAuthStateListener()
             
-            print("UserSession: Successfully signed out user")
+            print("DEBUG: UserSession: Successfully signed out user")
         } catch {
-            // Even if Firebase sign out fails, reset local state
-            print("UserSession: Error during sign out - \(error.localizedDescription)")
+            print("DEBUG: UserSession: Error during sign out - \(error.localizedDescription)")
             
+            // Even if Firebase sign out fails, reset local state
             await MainActor.run {
-                authState = .signedOut  // Force to signed out state
+                authState = .signedOut
                 currentUser = nil
                 isAuthenticated = false
                 username = nil
                 photoURL = nil
                 hasCompletedOnboarding = false
                 errorMessage = nil
+                lastSignInTime = nil
             }
             
             // Force post a notification about auth state change
@@ -509,7 +524,7 @@ class UserSession: ObservableObject {
                 object: nil
             )
             
-            // Ensure the auth state listener is properly set up
+            // Set up a new auth state listener
             setupAuthStateListener()
         }
     }

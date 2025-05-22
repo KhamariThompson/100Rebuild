@@ -57,7 +57,7 @@ struct ConsistencyCalendarView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Weekday headers once at the top
             HStack(spacing: cellSpacing) {
-                ForEach(Calendar.current.veryShortWeekdaySymbols, id: \.self) { day in
+                ForEach(Array(Calendar.current.veryShortWeekdaySymbols.enumerated()), id: \.offset) { index, day in
                     Text(day)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.theme.subtext)

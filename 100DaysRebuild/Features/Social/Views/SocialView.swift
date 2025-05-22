@@ -127,7 +127,7 @@ struct SocialView: View {
             
             // Title and subtitle
             Text("The Social Side of 100Days")
-                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .font(AppTypography.display)
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
             

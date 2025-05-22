@@ -33,7 +33,7 @@ public struct AppPrimaryButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium, design: .rounded))
+            .font(AppTypography.bodyMedium)
             .foregroundColor(.white)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
@@ -65,7 +65,7 @@ public struct AppSecondaryButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium, design: .rounded))
+            .font(AppTypography.bodyMedium)
             .foregroundColor(.theme.accent)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
@@ -88,7 +88,7 @@ public struct AppTextButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .font(AppTypography.subheadlineMedium)
             .foregroundColor(color)
             .opacity(configuration.isPressed ? 0.7 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
@@ -116,7 +116,7 @@ public struct AppBorderedButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium, design: .rounded))
+            .font(AppTypography.bodyMedium)
             .foregroundColor(foregroundColor)
             .padding(.horizontal, AppSpacing.buttonHorizontalPadding)
             .padding(.vertical, AppSpacing.buttonVerticalPadding - 2)

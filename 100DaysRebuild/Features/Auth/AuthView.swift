@@ -12,84 +12,136 @@ struct AuthView: View {
     @StateObject private var viewModel = AuthViewModel.shared
     @EnvironmentObject var userSession: UserSession
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dismiss) private var dismiss
     @FocusState private var focusedField: Field?
     @State private var showTerms = false
     @State private var showPrivacy = false
+    @State private var animateContent = false
+    @State private var isShowingAuthView = false
     
     enum Field: Hashable {
         case email, password, confirmPassword, username
     }
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                Color.theme.background.ignoresSafeArea()
+        ZStack {
+            // Background
+            Color.theme.background.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Header with close button
+                HStack {
+                    // Close Button
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(Color.theme.text)
+                            .padding(12)
+                            .background(
+                                Circle()
+                                    .fill(Color.theme.surface)
+                                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                    }
+                    
+                    Spacer()
+                    
+                    // Help Button
+                    Button(action: {
+                        // Add help action
+                    }) {
+                        Image(systemName: "questionmark")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundColor(Color.theme.text)
+                            .padding(12)
+                            .background(
+                                Circle()
+                                    .fill(Color.theme.surface)
+                                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .opacity(animateContent ? 1 : 0)
                 
                 ScrollView {
                     VStack(spacing: CalAIDesignTokens.screenPadding) {
                         // App logo and title
                         appHeader
+                            .offset(y: animateContent ? 0 : -20)
+                            .opacity(animateContent ? 1 : 0)
                         
                         // Auth mode selector
                         if viewModel.authMode != .forgotPassword {
                             AuthModeSelector(viewModel: viewModel)
                                 .padding(.top, 10)
+                                .offset(y: animateContent ? 0 : 20)
+                                .opacity(animateContent ? 1 : 0)
                         }
                         
                         // Main authentication form
                         authForm
+                            .offset(y: animateContent ? 0 : 30)
+                            .opacity(animateContent ? 1 : 0)
                         
                         // Social sign-in buttons
                         if viewModel.authMode != .forgotPassword {
                             socialSignInSection
+                                .offset(y: animateContent ? 0 : 40)
+                                .opacity(animateContent ? 1 : 0)
                         }
                         
                         // Terms and privacy links
                         termsAndPrivacyLinks
+                            .offset(y: animateContent ? 0 : 50)
+                            .opacity(animateContent ? 1 : 0)
                         
                         // Add extra space at bottom for keyboard
                         Spacer(minLength: 30)
                     }
                     .padding(.horizontal, CalAIDesignTokens.screenPadding)
-                    .padding(.top, 60)
+                    .padding(.top, 40)
                     .padding(.bottom, 30)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .focusedDismissKeyboardOnTap()
-                
-                // Error notifications
-                if viewModel.showError {
-                    errorBanner
-                }
-                
-                // Loading overlay
-                if viewModel.isLoading {
-                    loadingOverlay
-                }
-                
-                // Network status
-                if !viewModel.networkConnected {
-                    networkStatusBanner
-                }
             }
-            .navigationBarTitle("", displayMode: .inline)
-            .navigationBarHidden(true)
-            .withSafeKeyboardHandling()
-            .withSafeTextInput()
-            .withSafeNavigation()
-            .onAppear {
-                // Reset focus state to ensure keyboard behavior is correct
-                focusedField = nil
+            
+            // Error notifications
+            if viewModel.showError {
+                errorBanner
             }
-            .fullScreenCover(isPresented: $showTerms) {
-                TermsAndPrivacyView(mode: .terms)
+            
+            // Loading overlay
+            if viewModel.isLoading {
+                loadingOverlay
             }
-            .fullScreenCover(isPresented: $showPrivacy) {
-                TermsAndPrivacyView(mode: .privacy)
+            
+            // Network status
+            if !viewModel.networkConnected {
+                networkStatusBanner
             }
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .navigationBarTitle("", displayMode: .inline)
+        .navigationBarHidden(true)
+        .withSafeKeyboardHandling()
+        .withSafeTextInput()
+        .withSafeNavigation()
+        .onAppear {
+            // Start animations
+            withAnimation(.easeOut(duration: 0.6)) {
+                animateContent = true
+            }
+            
+            // Reset focus state to ensure keyboard behavior is correct
+            focusedField = nil
+        }
+        .fullScreenCover(isPresented: $isShowingAuthView) {
+            AuthView()
+        }
     }
     
     // MARK: - Computed Properties
@@ -119,6 +171,12 @@ struct AuthView: View {
                 
             case .forgotPassword:
                 await viewModel.resetPassword(email: viewModel.email)
+                
+            case .googleSignIn:
+                await viewModel.signInWithGoogle()
+                
+            case .appleSignIn:
+                await viewModel.signInWithApple()
             }
         }
     }
@@ -181,42 +239,66 @@ struct AuthModeSelector: View {
 // MARK: - Launch Screen View
 struct LaunchScreenView: View {
     @State private var opacity = 0.0
-    @State private var scale = 0.8
+    @State private var scale = 0.9
     @State private var showAuth = false
+    @State private var rotation = 0.0
     
     var body: some View {
         ZStack {
+            // Clean background
             Color.theme.background.ignoresSafeArea()
             
             if !showAuth {
-                VStack(spacing: 20) {
-                    // Large app icon with animation
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 90))
-                        .foregroundColor(.theme.accent)
+                VStack(spacing: 24) {
+                    // Clean, minimalist logo
+                    ZStack {
+                        // Outer circle with gradient
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 110, height: 110)
+                            .shadow(color: Color.theme.accent.opacity(0.2), radius: 10, x: 0, y: 5)
+                        
+                        // Inner checkmark
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 50, weight: .bold))
+                            .foregroundColor(.white)
+                            .rotationEffect(.degrees(rotation))
+                    }
                     
-                    // App name with large bold font
+                    // App name with clean typography
                     Text("100Days")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
                         .foregroundColor(.theme.text)
+                        .tracking(1) // Slightly increased letter spacing for cleaner look
                 }
                 .scaleEffect(scale)
                 .opacity(opacity)
                 .onAppear {
-                    // Simple animation sequence
-                    withAnimation(.easeOut(duration: 0.8)) {
+                    // Subtle animations
+                    withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
                         opacity = 1.0
                         scale = 1.0
                     }
                     
+                    // Subtle rotation animation for the checkmark
+                    withAnimation(.easeInOut(duration: 1.2)) {
+                        rotation = 360
+                    }
+                    
                     // Transition to auth screen after delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-                        withAnimation(.easeIn(duration: 0.4)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        withAnimation(.easeIn(duration: 0.5)) {
                             opacity = 0.0
-                            scale = 1.1
+                            scale = 1.05
                         }
                         
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                             showAuth = true
                         }
                     }
@@ -333,6 +415,11 @@ private extension AuthView {
                 
             case .forgotPassword:
                 forgotPasswordForm
+                
+            case .googleSignIn, .appleSignIn:
+                // These auth modes are handled directly by their respective buttons
+                // and don't need dedicated form UI in the authForm view
+                EmptyView()
             }
         }
     }
@@ -562,36 +649,37 @@ private extension AuthView {
                 // Apple Sign In
                 SignInWithAppleButton(text: .continueWith, onRequest: configureAppleRequest, onCompletion: handleAppleSignIn)
                     .frame(maxWidth: .infinity, minHeight: CalAIDesignTokens.buttonHeight)
-                    .cornerRadius(CalAIDesignTokens.buttonRadius) // Force correct corner radius
+                    .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
                     .id("appleSignInButton")
                     .accessibility(identifier: "appleSignInButton")
                     .onAppear {
                         // Fix Apple button constraints on appear
-                        DispatchQueue.main.async {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             AppFixes.shared.applyAllFixes()
                         }
                     }
                 
                 // Google sign-in
                 Button {
-                    guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                          let _ = windowScene.windows.first?.rootViewController else {
-                        print("Failed to get root view controller")
-                        return
-                    }
-                    
-                    viewModel.isLoading = true
-                    
                     Task {
+                        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                              let rootVC = windowScene.windows.first?.rootViewController else {
+                            print("Failed to get root view controller")
+                            return
+                        }
+                        
+                        viewModel.isLoading = true
                         await viewModel.signInWithGoogle()
                     }
                 } label: {
-                    HStack(spacing: 12) {
+                    HStack {
                         Image("google_logo")
                             .resizable()
                             .scaledToFit()
                             .frame(width: 20, height: 20)
+                        
+                        Spacer()
                         
                         Text("Continue with Google")
                             .font(.system(size: 16, weight: .medium, design: .rounded))
@@ -599,13 +687,13 @@ private extension AuthView {
                         
                         Spacer()
                     }
-                    .padding(.leading, 16)
+                    .padding(.horizontal, 20)
                     .frame(maxWidth: .infinity)
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(
                         RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .fill(Color.theme.surface)
-                            .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
+                            .shadow(color: Color.theme.shadow.opacity(0.12), radius: 5, x: 0, y: 2)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
@@ -613,7 +701,7 @@ private extension AuthView {
                     )
                 }
                 .buttonStyle(AppScaleButtonStyle(scale: 0.98))
-                .disabled(!viewModel.networkConnected)
+                .disabled(!viewModel.networkConnected || viewModel.isLoading)
             }
         }
     }
@@ -761,21 +849,17 @@ private extension AuthView {
                 .foregroundColor(.theme.subtext)
             
             HStack(spacing: 4) {
-                Button("Terms of Service") {
-                    showTerms = true
-                }
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.accent)
+                Link("Terms of Service", destination: URL(string: "https://100days.site/terms")!)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.accent)
                 
                 Text("and")
                     .font(.system(size: 13, weight: .regular, design: .rounded))
                     .foregroundColor(.theme.subtext)
                 
-                Button("Privacy Policy") {
-                    showPrivacy = true
-                }
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.accent)
+                Link("Privacy Policy", destination: URL(string: "https://100days.site/privacy")!)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.accent)
             }
         }
         .padding(.top, 20)
@@ -802,6 +886,8 @@ struct SignInWithAppleButton: UIViewRepresentable {
     let onRequest: (ASAuthorizationAppleIDRequest) -> Void
     let onCompletion: (Result<ASAuthorization, Error>) -> Void
     
+    @Environment(\.colorScheme) private var colorScheme
+    
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
         let style: ASAuthorizationAppleIDButton.Style = colorScheme == .dark ? .white : .black
         let type: ASAuthorizationAppleIDButton.ButtonType
@@ -817,25 +903,66 @@ struct SignInWithAppleButton: UIViewRepresentable {
         
         let button = ASAuthorizationAppleIDButton(authorizationButtonType: type, authorizationButtonStyle: style)
         
-        // Remove fixed width constraints that cause conflicts
-        button.translatesAutoresizingMaskIntoConstraints = false
+        // Set exact frame for better layout control
+        button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width - 48, height: 50)
         
-        // Set up the content hugging and compression resistance
-        button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        button.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        // Ensure the button adapts to layout changes but doesn't create invalid constraints
+        button.translatesAutoresizingMaskIntoConstraints = true
+        button.clipsToBounds = true
+        
+        // Add tap gesture recognizer
+        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.buttonTapped))
+        button.addGestureRecognizer(tapGesture)
         
         return button
     }
     
     func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
-        // Configuration happens in makeUIView, nothing to update
-        // Ensure any current fixed width constraints are removed
-        for constraint in uiView.constraints {
-            if constraint.firstAttribute == .width && constraint.constant == 380 {
-                uiView.removeConstraint(constraint)
-            }
+        // Update the frame when parent view changes size
+        if let superviewWidth = uiView.superview?.bounds.width {
+            let padding: CGFloat = 48 // Match horizontal padding from SwiftUI parent view
+            uiView.frame = CGRect(x: 0, y: 0, width: superviewWidth, height: 50)
         }
     }
     
-    @Environment(\.colorScheme) private var colorScheme
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+        var parent: SignInWithAppleButton
+        
+        init(_ parent: SignInWithAppleButton) {
+            self.parent = parent
+        }
+        
+        @objc func buttonTapped() {
+            let provider = ASAuthorizationAppleIDProvider()
+            let request = provider.createRequest()
+            
+            // Apply configuration through the parent's onRequest
+            parent.onRequest(request)
+            
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            
+            // Use a slight delay to avoid visual glitches
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                controller.performRequests()
+            }
+        }
+        
+        func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+            parent.onCompletion(.success(authorization))
+        }
+        
+        func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+            parent.onCompletion(.failure(error))
+        }
+        
+        func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+            return UIApplication.shared.windows.first { $0.isKeyWindow }!
+        }
+    }
 } 

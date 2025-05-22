@@ -53,7 +53,7 @@ class AppStateCoordinator: ObservableObject {
         networkMonitor.connectionState
             .removeDuplicates()
             .receive(on: RunLoop.main)
-            .sink { [weak self] isConnected in
+            .sink { [weak self] (isConnected: Bool) in
                 guard let self = self else { return }
                 
                 if !isConnected && self.appState == .ready {

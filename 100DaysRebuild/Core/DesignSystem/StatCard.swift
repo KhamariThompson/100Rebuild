@@ -41,13 +41,13 @@ public struct StatCard: View {
                     }
                     
                     Text(title)
-                        .font(.system(size: AppTypography.FontSize.subheadline, weight: .regular, design: .rounded))
+                        .font(AppTypography.subheadline)
                         .foregroundColor(Color.theme.subtext)
                 }
                 
                 // Value
                 Text(value)
-                    .font(.system(size: AppTypography.FontSize.title1, weight: .medium, design: .rounded))
+                    .font(AppTypography.title2)
                     .foregroundColor(Color.theme.text)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -98,12 +98,12 @@ public struct HorizontalStatCard: View {
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     // Title
                     Text(title)
-                        .font(.system(size: AppTypography.FontSize.subheadline, weight: .regular, design: .rounded))
+                        .font(AppTypography.subheadline)
                         .foregroundColor(Color.theme.subtext)
                     
                     // Value
                     Text(value)
-                        .font(.system(size: AppTypography.FontSize.title2, weight: .medium, design: .rounded))
+                        .font(AppTypography.title2)
                         .foregroundColor(Color.theme.text)
                 }
                 

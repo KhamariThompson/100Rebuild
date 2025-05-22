@@ -71,7 +71,7 @@ struct ProgressView: View {
     @EnvironmentObject var viewModel: UPViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
-    @EnvironmentObject var router: TabViewRouter
+    @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userStatsService: UserStatsService
     
     @State private var showAnalytics = false
@@ -147,6 +147,9 @@ struct ProgressView: View {
                     // Content based on state
                     if viewModel.isLoading && !hasLoadedOnce {
                         loadingView
+                            .transaction { transaction in
+                                transaction.animation = nil // Disable animation for initial load
+                            }
                     } else if let errorMessage = viewModel.errorMessage, !viewModel.hasData {
                         errorView(message: errorMessage)
                     } else if viewModel.hasData {
@@ -156,7 +159,8 @@ struct ProgressView: View {
                     }
                 }
             }
-            // Remove animations that might be causing tab transition flicker
+            // Apply the tab transition modifier to prevent flashing during tab switches
+            .withTabTransition(router: router)
         }
         .navigationTitle("") // Empty to prevent navigation title
         .navigationBarHidden(true) // Hide navigation bar since we have our own header
@@ -196,7 +200,7 @@ struct ProgressView: View {
         .sheet(item: $selectedBadge) { badge in
             BadgeDetailView(badge: badge)
         }
-        .fixNavigationLayout()
+        .modifier(NavigationDebounceModifier())
         .onReceive(NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)) { _ in
             // Update data when we receive notifications about challenge store changes
             if !viewModel.isLoading {
@@ -616,7 +620,7 @@ struct ProgressView: View {
     // Loading view with progress indicator
     private var loadingView: some View {
         VStack(spacing: 20) {
-            ProgressView()
+            SwiftUI.ProgressView()
                 .scaleEffect(1.5)
                 .tint(.theme.accent)
             
@@ -705,7 +709,7 @@ struct ProgressView: View {
 // MARK: - Preview
 struct ProgressView_Previews: PreviewProvider {
     static var previews: some View {
-        ProgressView()
+        SwiftUI.ProgressView()
             .environmentObject(SubscriptionService.shared)
             .environmentObject(NotificationService.shared)
     }

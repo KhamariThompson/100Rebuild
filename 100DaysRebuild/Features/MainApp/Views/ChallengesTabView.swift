@@ -3,7 +3,7 @@ import SwiftUI
 // This is the main implementation
 struct MainAppChallengesTabView: View {
     @StateObject private var viewModel = ChallengesViewModel()
-    @EnvironmentObject private var router: TabViewRouter
+    @EnvironmentObject private var router: NavigationRouter
     @EnvironmentObject private var subscriptionService: SubscriptionService
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var userStatsService: UserStatsService
