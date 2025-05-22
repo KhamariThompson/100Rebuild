@@ -124,6 +124,143 @@ struct FixNavigationLayoutModifier: ViewModifier {
     }
 }
 
+// MARK: - Tab Transition Modifier
+struct TabTransitionModifier: ViewModifier {
+    @ObservedObject var router: NavigationRouter
+    
+    func body(content: Content) -> some View {
+        content
+            .opacity(router.tabIsChanging ? 0 : 1)
+            .blur(radius: router.tabIsChanging ? 5 : 0)
+            .animation(.easeInOut(duration: 0.2), value: router.tabIsChanging)
+            .overlay(
+                // Add loading indicator during transition for better UX
+                ZStack {
+                    if router.tabIsChanging {
+                        Color.theme.background
+                            .opacity(0.5)
+                        
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
+                    }
+                }
+            )
+    }
+}
+
+// MARK: - Card Shadow Modifier
+struct CardShadowModifier: ViewModifier {
+    let shadowRadius: CGFloat
+    let shadowOpacity: Double
+    
+    func body(content: Content) -> some View {
+        content
+            .shadow(
+                color: Color.theme.shadow.opacity(shadowOpacity),
+                radius: shadowRadius,
+                x: 0,
+                y: 4
+            )
+    }
+}
+
+// MARK: - Tooltip Modifier
+struct TooltipModifier: ViewModifier {
+    @State private var showTooltip = false
+    let message: String
+    let position: TooltipPosition
+    let backgroundColor: Color
+    let textColor: Color
+    let arrowSize: CGFloat
+    let cornerRadius: CGFloat
+    
+    enum TooltipPosition {
+        case top, bottom, leading, trailing
+    }
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                ZStack {
+                    if showTooltip {
+                        GeometryReader { geometry in
+                            VStack {
+                                switch position {
+                                case .top:
+                                    tooltipContent
+                                        .offset(y: -geometry.size.height - arrowSize)
+                                        .frame(width: min(geometry.size.width * 1.5, 250))
+                                case .bottom:
+                                    Spacer()
+                                    tooltipContent
+                                        .offset(y: geometry.size.height/2 + arrowSize)
+                                        .frame(width: min(geometry.size.width * 1.5, 250))
+                                case .leading:
+                                    HStack(alignment: .center) {
+                                        tooltipContent
+                                            .offset(x: -arrowSize)
+                                            .frame(width: min(geometry.size.width * 1.2, 200))
+                                        Spacer()
+                                    }
+                                case .trailing:
+                                    HStack(alignment: .center) {
+                                        Spacer()
+                                        tooltipContent
+                                            .offset(x: arrowSize)
+                                            .frame(width: min(geometry.size.width * 1.2, 200))
+                                    }
+                                }
+                            }
+                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: showTooltip)
+                        }
+                    }
+                }
+            )
+            .onTapGesture {
+                withAnimation {
+                    showTooltip.toggle()
+                    
+                    // Auto-hide tooltip after 3 seconds
+                    if showTooltip {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                showTooltip = false
+                            }
+                        }
+                    }
+                }
+            }
+    }
+    
+    private var tooltipContent: some View {
+        VStack(alignment: .center) {
+            Text(message)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(textColor)
+                .multilineTextAlignment(.center)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(backgroundColor)
+                .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
+        )
+    }
+}
+
+// MARK: - Round Corners Modifier
+struct RoundedCornerModifier: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
+        return Path(path.cgPath)
+    }
+}
+
 // MARK: - View Extensions
 
 extension View {
@@ -158,5 +295,56 @@ extension View {
                 .withAppTheme()
                 .fixNavigationLayout()
         }
+    }
+    
+    /// Applies a transition effect during tab changes
+    func withTabTransition(router: NavigationRouter) -> some View {
+        self.modifier(TabTransitionModifier(router: router))
+    }
+    
+    /// Applies a standard card shadow
+    func cardShadow(radius: CGFloat = 10, opacity: Double = 0.1) -> some View {
+        self.modifier(CardShadowModifier(shadowRadius: radius, shadowOpacity: opacity))
+    }
+    
+    /// Add a tooltip to any view
+    func tooltip(_ message: String, position: TooltipModifier.TooltipPosition = .bottom, 
+                backgroundColor: Color = Color.theme.accent,
+                textColor: Color = .white,
+                arrowSize: CGFloat = 8,
+                cornerRadius: CGFloat = 8) -> some View {
+        self.modifier(
+            TooltipModifier(
+                message: message,
+                position: position,
+                backgroundColor: backgroundColor,
+                textColor: textColor,
+                arrowSize: arrowSize,
+                cornerRadius: cornerRadius
+            )
+        )
+    }
+    
+    /// Rounds specific corners of a view
+    func roundedCorners(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCornerModifier(radius: radius, corners: corners))
+    }
+}
+
+// MARK: - Navigation Debug Modifier
+/// A modifier that helps debug navigation issues by printing path changes
+struct NavigationDebounceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                #if DEBUG
+                print("View appeared: \(String(describing: self))")
+                #endif
+            }
+            .onDisappear {
+                #if DEBUG
+                print("View disappeared: \(String(describing: self))")
+                #endif
+            }
     }
 } 

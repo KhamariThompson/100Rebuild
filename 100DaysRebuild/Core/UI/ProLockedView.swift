@@ -62,13 +62,13 @@ struct ProLockedView<Content: View>: View {
                     // Text & Button with enhanced styling
                     VStack(spacing: AppSpacing.s) {
                         Text("Pro Feature")
-                            .font(AppTypography.title3)
+                            .font(AppTypography.title3())
                             .foregroundColor(.theme.text)
                             .opacity(animateElements ? 1 : 0)
                             .offset(y: animateElements ? 0 : 10)
                         
                         Text("Unlock advanced insights and powerful analytics with a Pro subscription")
-                            .font(AppTypography.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
@@ -99,10 +99,10 @@ struct ProLockedView<Content: View>: View {
                         } label: {
                             HStack(spacing: AppSpacing.xs) {
                                 Text("Upgrade to Pro")
-                                    .font(AppTypography.headline)
+                                    .font(AppTypography.headline())
                                 
                                 Image(systemName: "arrow.right")
-                                    .font(AppTypography.footnote.bold())
+                                    .font(AppTypography.footnote().bold())
                                     .opacity(hoverEffect ? 1 : 0.7)
                                     .offset(x: hoverEffect ? 4 : 0)
                             }
@@ -138,7 +138,7 @@ struct ProLockedView<Content: View>: View {
                             }
                         } label: {
                             Text("Maybe later")
-                                .font(AppTypography.footnote)
+                                .font(AppTypography.footnote())
                                 .foregroundColor(.theme.subtext)
                                 .padding(.vertical, AppSpacing.xs)
                         }
@@ -201,7 +201,7 @@ struct ProFeatureItem: View {
                 .foregroundColor(.theme.accent)
             
             Text(text)
-                .font(AppTypography.caption)
+                .font(AppTypography.caption1())
                 .foregroundColor(.theme.subtext)
         }
         .padding(.horizontal, AppSpacing.xs)
@@ -220,7 +220,7 @@ struct ProLockedView_Previews: PreviewProvider {
             ProLockedView {
                 VStack {
                     Text("Pro Content")
-                        .font(AppTypography.title1)
+                        .font(AppTypography.title1())
                     Image(systemName: "star.fill")
                         .font(.largeTitle)
                 }
@@ -232,7 +232,7 @@ struct ProLockedView_Previews: PreviewProvider {
             ProLockedView {
                 VStack {
                     Text("Pro Content")
-                        .font(AppTypography.title1)
+                        .font(AppTypography.title1())
                     Image(systemName: "star.fill")
                         .font(.largeTitle)
                 }

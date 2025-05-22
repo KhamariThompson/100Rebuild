@@ -267,11 +267,6 @@ extension View {
             }
             .photoPickerTrigger(selection: photosPickerSelection)
     }
-    
-    /// Apply this modifier to prevent flashing during tab transitions
-    func withTabTransition(router: NavigationRouter) -> some View {
-        self.modifier(TabTransitionModifier(router: router))
-    }
 }
 
 // MARK: - Safe Keyboard Handling Modifier
@@ -496,76 +491,9 @@ extension UIResponder {
     }
 }
 
-/// Modifier to debounce navigation transitions and prevent UIKeyboardImpl snapshotting warnings
-struct NavigationDebounceModifier: ViewModifier {
-    @State private var isTransitioning = false
-    @State private var debounceTimer: Timer? = nil
-    
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                // Listen for keyboard notifications
-                let notificationCenter = NotificationCenter.default
-                notificationCenter.addObserver(
-                    forName: UIResponder.keyboardWillShowNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    self.isTransitioning = true
-                    
-                    // Reset after a delay
-                    self.debounceTimer?.invalidate()
-                    self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
-                        self.isTransitioning = false
-                    }
-                }
-                
-                notificationCenter.addObserver(
-                    forName: UIResponder.keyboardWillHideNotification,
-                    object: nil,
-                    queue: .main
-                ) { _ in
-                    self.isTransitioning = true
-                    
-                    // Reset after a delay
-                    self.debounceTimer?.invalidate()
-                    self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
-                        self.isTransitioning = false
-                    }
-                }
-            }
-            .onDisappear {
-                // Clean up timer when view disappears
-                self.debounceTimer?.invalidate()
-                self.debounceTimer = nil
-            }
-            .transaction { transaction in
-                // If keyboard is transitioning, disable animation to prevent snapshot issues
-                if isTransitioning {
-                    transaction.animation = nil
-                    transaction.disablesAnimations = true
-                }
-            }
-    }
-}
+// NavigationDebounceModifier is defined in AppViewModifiers.swift
 
 // MARK: - Button Styles
 
 // NOTE: ScaleButtonStyle has been moved to Core/DesignSystem/Buttons.swift
-// Please use AppScaleButtonStyle from there instead. 
-
-// MARK: - Tab Transition Modifier
-
-/// A modifier that prevents flashing of content during tab transitions
-struct TabTransitionModifier: ViewModifier {
-    @ObservedObject var router: NavigationRouter
-    
-    func body(content: Content) -> some View {
-        content
-            .opacity(router.tabIsChanging ? 0 : 1)
-            .animation(.easeInOut(duration: 0.15), value: router.tabIsChanging)
-    }
-}
-
-// Note: The withTabTransition extension is already defined earlier in this file
-// and shouldn't be repeated here to avoid the redeclaration error.
+// Please use AppScaleButtonStyle from there instead.

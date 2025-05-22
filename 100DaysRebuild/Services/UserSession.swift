@@ -824,4 +824,22 @@ class UserSession: ObservableObject {
             return false
         }
     }
+    
+    /// Completes the onboarding process for the user
+    func completeOnboarding() async {
+        guard let userId = currentUser?.uid else { return }
+        
+        do {
+            // Update Firestore to mark onboarding as completed
+            try await firestore.collection("users").document(userId).updateData([
+                "hasCompletedOnboarding": true
+            ])
+            
+            // Update local state
+            self.hasCompletedOnboarding = true
+        } catch {
+            print("Error completing onboarding: \(error.localizedDescription)")
+            self.errorMessage = "Failed to complete onboarding: \(error.localizedDescription)"
+        }
+    }
 } 

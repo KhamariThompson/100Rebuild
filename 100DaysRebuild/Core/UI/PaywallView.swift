@@ -60,10 +60,20 @@ struct PaywallView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(Color.theme.subtext)
+                            .font(.system(size: 32))
+                            .foregroundColor(colorScheme == .dark ? .white : Color.theme.subtext)
                             .padding(16)
+                            .background(
+                                Circle()
+                                    .fill(Color.theme.surface.opacity(0.7))
+                                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                            .contentShape(Circle()) // Increase tap area
                     }
+                    .buttonStyle(PlainButtonStyle()) // Use plain style for more reliable tapping
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
+                    .accessibility(label: Text("Close"))
                 }
                 
                 Spacer()
@@ -163,22 +173,58 @@ struct PaywallView: View {
     private func purchaseSubscription() {
         isLoading = true
         
+        // Check if we're in a sandbox environment (App Store review)
+        if subscriptionService.isSandboxUser {
+            // Show special message for sandbox users (App Store reviewers)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                self.isLoading = false
+                self.showingError = true
+                self.errorMessage = "This is a sandbox environment. In the production app, this would initiate a real purchase. For testing purposes, premium features are already enabled."
+            }
+            return
+        }
+        
+        // Regular purchase flow
         Task {
             do {
-                // Purchase the package using the correct method in SubscriptionService
-                if let package = monthlyPackage {
-                    try await subscriptionService.purchaseSubscription(plan: .monthly)
-                    dismiss()
-                } else {
-                    errorMessage = "Subscription package not available"
-                    showingError = true
-                }
+                // Attempt to purchase using the service
+                try await subscriptionService.purchaseSubscription(plan: .monthly)
+                
+                isLoading = false
+                
+                // Dismiss paywall on successful purchase
+                dismiss()
+                
+                // Show success feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
             } catch {
-                errorMessage = error.localizedDescription
+                isLoading = false
                 showingError = true
+                
+                // Handle specific errors
+                if let subscriptionError = error as? SubscriptionError {
+                    switch subscriptionError {
+                    case .notSignedIntoAppStore:
+                        errorMessage = "Please sign in to your App Store account to complete this purchase."
+                    case .purchaseFailed:
+                        errorMessage = "The purchase could not be completed. Please try again later."
+                    case .restoreFailed:
+                        errorMessage = "Could not restore your previous purchase. Please try again later."
+                    case .timeout:
+                        errorMessage = "The purchase timed out. Please check your internet connection and try again."
+                    case .unknown:
+                        errorMessage = "An unknown error occurred. Please try again later."
+                    }
+                } else {
+                    // Generic error message
+                    errorMessage = "Could not complete purchase: \(error.localizedDescription)"
+                }
+                
+                // Haptic feedback for error
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
             }
-            
-            isLoading = false
         }
     }
     
@@ -189,24 +235,61 @@ struct PaywallView: View {
     
     private func restorePurchases() {
         isLoading = true
+        
+        // Check if we're in a sandbox environment (App Store review)
+        if subscriptionService.isSandboxUser {
+            // Show special message for sandbox users (App Store reviewers)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                self.isLoading = false
+                self.showingError = true
+                self.errorMessage = "This is a sandbox environment. For testing purposes, premium features are already enabled without requiring restoration."
+            }
+            return
+        }
+        
+        // Regular restore flow
         Task {
             do {
                 try await subscriptionService.restorePurchases()
                 
-                // If pro was successfully restored, dismiss the view
+                isLoading = false
+                
+                // Check if user has active subscription after restoration
                 if subscriptionService.isProUser {
+                    // Successful restoration with active subscription
                     dismiss()
+                    
+                    // Success feedback
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
                 } else {
-                    // Show an error if no purchases were found
-                    errorMessage = "No previous purchases found to restore"
+                    // No subscription found
                     showingError = true
+                    errorMessage = "No active subscription was found on your account."
                 }
             } catch {
-                // Show error message if restoration fails
-                errorMessage = error.localizedDescription
+                isLoading = false
                 showingError = true
+                
+                // Handle specific errors
+                if let subscriptionError = error as? SubscriptionError {
+                    switch subscriptionError {
+                    case .notSignedIntoAppStore:
+                        errorMessage = "Please sign in to your App Store account to restore purchases."
+                    case .restoreFailed:
+                        errorMessage = "Could not restore your previous purchase. Please try again later."
+                    default:
+                        errorMessage = "An error occurred while restoring purchases. Please try again."
+                    }
+                } else {
+                    // Generic error message
+                    errorMessage = "Could not restore purchases: \(error.localizedDescription)"
+                }
+                
+                // Error feedback
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.error)
             }
-            isLoading = false
         }
     }
     
@@ -219,11 +302,11 @@ struct PaywallView: View {
         var body: some View {
             HStack(spacing: AppSpacing.s) {
                 Text(icon)
-                    .font(AppTypography.title2)
+                    .font(AppTypography.title2())
                     .frame(width: 32)
                 
                 Text(title)
-                    .font(AppTypography.title3)
+                    .font(AppTypography.title3())
                     .foregroundColor(Color.theme.text)
             }
         }
@@ -258,11 +341,11 @@ struct PaywallView: View {
                 // Feature text
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     Text(title)
-                        .font(AppTypography.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(Color.theme.text)
                     
                     Text(description)
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.subtext)
                         .lineSpacing(2)
                 }
@@ -312,7 +395,7 @@ struct PaywallView: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHighlighted)
                 
                 Text(text)
-                    .font(AppTypography.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(Color.theme.text)
                 
                 Spacer()
@@ -358,8 +441,8 @@ struct PaywallView: View {
                     .fill(Color.theme.accent)
                     .frame(width: 60, height: 60)
                 
-                Text("$5.99")
-                    .font(AppTypography.title3)
+                Text(price)
+                    .font(AppTypography.title3())
                     .fontWeight(.bold)
                     .foregroundColor(.white)
             }
@@ -373,7 +456,7 @@ struct PaywallView: View {
                     .cornerRadius(8, corners: [.topRight, .bottomRight])
                 
                 Text("per month")
-                    .font(AppTypography.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
                     .padding(.leading, 30)
             }
@@ -422,7 +505,7 @@ struct PaywallView: View {
             
             // Subtitle
             Text("Elevate your journey with premium features")
-                .font(AppTypography.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -435,53 +518,173 @@ struct PaywallView: View {
     
     private var featuresSection: some View {
         VStack(spacing: AppSpacing.xl) {
-            // Key features grid
-            VStack(alignment: .leading, spacing: AppSpacing.m) {
+            // Enhanced features section with stronger glow effects
+            VStack(alignment: .leading, spacing: AppSpacing.l) {
                 Text("Pro Features")
-                    .font(AppTypography.title2)
-                    .fontWeight(.bold)
+                    .font(AppTypography.title2().bold())
+                    .foregroundColor(Color.theme.text)
                     .padding(.horizontal, AppSpacing.m)
                 
-                VStack(spacing: AppSpacing.m) {
-                    ProFeature(text: "Unlimited Challenges", icon: "infinity")
-                    ProFeature(text: "Group Challenges", icon: "person.3.fill")
-                    ProFeature(text: "Advanced Analytics", icon: "chart.bar.xaxis")
-                    ProFeature(text: "Shareable Milestones", icon: "square.and.arrow.up")
-                    ProFeature(text: "More Than 5 Friends", icon: "person.badge.plus")
-                    ProFeature(text: "No Ads", icon: "hand.raised")
+                // Combined feature cards with enhanced styling
+                ForEach(proFeatures) { feature in
+                    EnhancedFeatureCard(
+                        title: feature.title,
+                        description: feature.description,
+                        iconName: feature.iconName,
+                        category: feature.category
+                    )
+                    .padding(.bottom, AppSpacing.s)
                 }
-                .padding(AppSpacing.s)
-                .background(
-                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                        .fill(Color.theme.background)
-                        .shadow(color: Color.theme.shadow.opacity(0.08), radius: 8, x: 0, y: 4)
-                )
             }
+            .padding(AppSpacing.s)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                    .fill(Color.theme.background)
+                    .shadow(color: Color.theme.shadow.opacity(0.08), radius: 10, x: 0, y: 5)
+            )
             .opacity(isAnimating ? 1.0 : 0.0)
             .offset(y: isAnimating ? 0 : 20)
             .animation(.easeOut(duration: 0.5).delay(0.4), value: isAnimating)
-            
-            // Feature themes
-            VStack(alignment: .leading, spacing: AppSpacing.l) {
-                // Unlock Your Potential
-                unlockPotentialSection
-                    .opacity(isAnimating ? 1.0 : 0.0)
-                    .offset(y: isAnimating ? 0 : 20)
-                    .animation(.easeOut(duration: 0.5).delay(0.5), value: isAnimating)
+        }
+    }
+    
+    // Consolidated feature data model
+    private var proFeatures: [ProFeatureItem] {
+        [
+            ProFeatureItem(
+                title: "Unlimited Challenges", 
+                description: "No limits on the number of habits and challenges you can track simultaneously.", 
+                iconName: "infinity",
+                category: "🔓 Unlock Your Potential"
+            ),
+            ProFeatureItem(
+                title: "Advanced Analytics", 
+                description: "Gain deeper insights with detailed stats, charts, and performance trends.", 
+                iconName: "chart.bar.xaxis",
+                category: "🔓 Unlock Your Potential"
+            ),
+            ProFeatureItem(
+                title: "Group Challenges", 
+                description: "Create and join challenges with friends to stay accountable and motivated together.", 
+                iconName: "person.3.fill",
+                category: "🤝 Level Up Together"
+            ),
+            ProFeatureItem(
+                title: "Extended Friends Network", 
+                description: "Connect with more than 5 friends to expand your support system.", 
+                iconName: "person.badge.plus",
+                category: "🤝 Level Up Together"
+            ),
+            ProFeatureItem(
+                title: "Shareable Milestones", 
+                description: "Create beautiful cards to share your progress and achievements on social media.", 
+                iconName: "square.and.arrow.up",
+                category: "🎯 Stay Motivated"
+            ),
+            ProFeatureItem(
+                title: "Ad-Free Experience", 
+                description: "Enjoy a clean, distraction-free environment focused on your growth.", 
+                iconName: "hand.raised",
+                category: "🎯 Stay Motivated"
+            )
+        ]
+    }
+    
+    // Enhanced feature card with better glow effects
+    struct EnhancedFeatureCard: View {
+        let title: String
+        let description: String
+        let iconName: String
+        let category: String
+        @State private var isHovered = false
+        @Environment(\.colorScheme) private var colorScheme
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                // Category label
+                Text(category)
+                    .font(AppTypography.caption1().bold())
+                    .foregroundColor(Color.theme.accent)
+                    .padding(.leading, 60)
+                    .padding(.bottom, 2)
                 
-                // Level Up Together
-                levelUpSection
-                    .opacity(isAnimating ? 1.0 : 0.0)
-                    .offset(y: isAnimating ? 0 : 20)
-                    .animation(.easeOut(duration: 0.5).delay(0.6), value: isAnimating)
-                
-                // Stay Motivated
-                stayMotivatedSection
-                    .opacity(isAnimating ? 1.0 : 0.0)
-                    .offset(y: isAnimating ? 0 : 20)
-                    .animation(.easeOut(duration: 0.5).delay(0.7), value: isAnimating)
+                HStack(alignment: .top, spacing: AppSpacing.m) {
+                    // Enhanced icon with stronger glow effect
+                    ZStack {
+                        // Outer glow
+                        Circle()
+                            .fill(Color.theme.accent.opacity(0.3))
+                            .frame(width: 52, height: 52)
+                            .blur(radius: isHovered ? 10 : 7)
+                        
+                        // Inner circle
+                        Circle()
+                            .fill(Color.theme.surface)
+                            .frame(width: 44, height: 44)
+                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 8, x: 0, y: 0)
+                        
+                        // Icon
+                        Image(systemName: iconName)
+                            .font(.system(size: AppSpacing.iconSizeMedium))
+                            .foregroundColor(Color.theme.accent)
+                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 1, x: 0, y: 0)
+                    }
+                    .scaleEffect(isHovered ? 1.07 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+                    
+                    // Feature text
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                        Text(title)
+                            .font(AppTypography.headline().bold())
+                            .foregroundColor(Color.theme.text)
+                        
+                        Text(description)
+                            .font(AppTypography.subhead())
+                            .foregroundColor(Color.theme.subtext)
+                            .lineSpacing(2)
+                    }
+                }
+            }
+            .padding(AppSpacing.cardPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                    .fill(colorScheme == .dark ? 
+                          Color.theme.surface.opacity(0.7) : 
+                          Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(isHovered ? 0.2 : 0.1), 
+                            radius: isHovered ? 10 : 6, 
+                            x: 0, 
+                            y: isHovered ? 5 : 3)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                            .stroke(Color.theme.accent.opacity(isHovered ? 0.2 : 0), lineWidth: 1)
+                    )
+            )
+            .onAppear {
+                // Cycle through highlighting features
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        isHovered = true
+                    }
+                    
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                            isHovered = false
+                        }
+                    }
+                }
             }
         }
+    }
+    
+    // Feature item model for single source of truth
+    struct ProFeatureItem: Identifiable {
+        let id = UUID()
+        let title: String
+        let description: String
+        let iconName: String
+        let category: String
     }
     
     private var actionButtons: some View {
@@ -519,21 +722,40 @@ struct PaywallView: View {
                 restorePurchases()
             } label: {
                 Text("Restore Purchases")
-                    .font(AppTypography.subheadline)
-                    .foregroundColor(Color.theme.subtext)
+                    .font(AppTypography.subhead().bold())
+                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : Color.theme.accent)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(colorScheme == .dark ? Color.theme.accent.opacity(0.3) : Color.theme.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(colorScheme == .dark ? Color.white.opacity(0.2) : Color.theme.border, lineWidth: 1)
+                            )
+                    )
             }
-            .padding(.vertical, AppSpacing.xs)
+            .buttonStyle(AppScaleButtonStyle())
             .opacity(isAnimating ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.4).delay(0.9), value: isAnimating)
             
             // Terms and conditions
             Text("Subscription auto-renews until cancelled")
-                .font(AppTypography.caption)
+                .font(AppTypography.caption1())
                 .foregroundColor(Color.theme.subtext.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.top, AppSpacing.xs)
                 .opacity(isAnimating ? 1.0 : 0.0)
                 .animation(.easeOut(duration: 0.4).delay(1.0), value: isAnimating)
+                
+            Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. Manage or cancel your subscription in Settings.")
+                .font(AppTypography.caption2())
+                .foregroundColor(Color.theme.subtext.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.top, AppSpacing.xxs)
+                .padding(.horizontal, AppSpacing.s)
+                .opacity(isAnimating ? 1.0 : 0.0)
+                .animation(.easeOut(duration: 0.4).delay(1.1), value: isAnimating)
         }
     }
     
@@ -548,7 +770,7 @@ struct PaywallView: View {
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 
                 Text("Processing...")
-                    .font(AppTypography.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
             }
             .padding(AppSpacing.xl)
@@ -556,63 +778,6 @@ struct PaywallView: View {
                 RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                     .fill(Color.theme.surface.opacity(0.9))
                     .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
-            )
-        }
-    }
-    
-    private var unlockPotentialSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            SectionHeader(icon: "🔓", title: "Unlock Your Potential")
-                .id("unlock-potential")
-            
-            PaywallFeatureCard(
-                title: "Unlimited Challenges",
-                description: "No limits on the number of habits and challenges you can track simultaneously.",
-                iconName: "infinity"
-            )
-            
-            PaywallFeatureCard(
-                title: "Advanced Analytics",
-                description: "Gain deeper insights with detailed stats, charts, and performance trends.",
-                iconName: "chart.bar.xaxis"
-            )
-        }
-    }
-    
-    private var levelUpSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            SectionHeader(icon: "🤝", title: "Level Up Together")
-                .id("level-up")
-            
-            PaywallFeatureCard(
-                title: "Group Challenges",
-                description: "Create and join challenges with friends to stay accountable and motivated together.",
-                iconName: "person.3.fill"
-            )
-            
-            PaywallFeatureCard(
-                title: "Extended Friends Network",
-                description: "Connect with more than 5 friends to expand your support system.",
-                iconName: "person.badge.plus"
-            )
-        }
-    }
-    
-    private var stayMotivatedSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            SectionHeader(icon: "🎯", title: "Stay Motivated")
-                .id("stay-motivated")
-            
-            PaywallFeatureCard(
-                title: "Shareable Milestones",
-                description: "Create beautiful cards to share your progress and achievements on social media.",
-                iconName: "square.and.arrow.up"
-            )
-            
-            PaywallFeatureCard(
-                title: "Ad-Free Experience",
-                description: "Enjoy a clean, distraction-free environment focused on your growth.",
-                iconName: "hand.raised"
             )
         }
     }

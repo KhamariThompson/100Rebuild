@@ -66,7 +66,7 @@ struct ProBlurredPreview: ViewModifier {
                         if !subscriptionService.isProUser {
                             VStack(spacing: AppSpacing.s) {
                                 Text(message)
-                                    .font(AppTypography.headline)
+                                    .font(AppTypography.headline())
                                     .multilineTextAlignment(.center)
                                     .foregroundColor(Color.theme.text)
                                     .padding(.bottom, AppSpacing.xs)
@@ -75,7 +75,7 @@ struct ProBlurredPreview: ViewModifier {
                                     subscriptionService.showPaywall = true
                                 } label: {
                                     Text("Upgrade to Pro")
-                                        .font(AppTypography.subheadline.bold())
+                                        .font(AppTypography.subhead().bold())
                                         .foregroundColor(.white)
                                         .padding(.horizontal, AppSpacing.m)
                                         .padding(.vertical, AppSpacing.xs)

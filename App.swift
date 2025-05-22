@@ -127,6 +127,7 @@ struct App100Days: App {
     @StateObject private var adManager = AdManager.shared
     @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
     @StateObject private var themeManager = ThemeManager.shared
+    @StateObject private var navigationRouter = NavigationRouter()
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -199,6 +200,7 @@ struct App100Days: App {
                         .environmentObject(UserStatsService.shared)
                         .environmentObject(themeManager) // Ensure ThemeManager is available
                         .environmentObject(progressViewModel) // Add ProgressViewModel to fix loading issues
+                        .environmentObject(navigationRouter)
                         .withAppTheme()
                         .overlay(
                             // Show offline banner when in offline state
@@ -391,6 +393,54 @@ struct SplashScreen: View {
             ProgressView()
                 .scaleEffect(1.5)
                 .padding(.top, 30)
+        }
+    }
+}
+
+// App content view for the main content area
+struct AppContentView: View {
+    @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
+    @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var userStatsService: UserStatsService
+    @StateObject private var navigationRouter = NavigationRouter()
+    @State private var isInitializing = true
+    
+    var body: some View {
+        ZStack {
+            // Background color for the entire app
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // Content based on state
+            if isInitializing {
+                SplashScreen()
+                    .transition(.opacity)
+                    .onAppear {
+                        // Delay to show splash screen briefly
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            withAnimation(.easeInOut(duration: 0.4)) {
+                                isInitializing = false
+                            }
+                        }
+                    }
+            } else {
+                Group {
+                    if userSession.isAuthenticated {
+                        if userSession.hasCompletedOnboarding {
+                            MainAppView()
+                        } else {
+                            OnboardingView()
+                        }
+                    } else {
+                        AuthView()
+                    }
+                }
+                .environmentObject(navigationRouter)
+            }
         }
     }
 } 

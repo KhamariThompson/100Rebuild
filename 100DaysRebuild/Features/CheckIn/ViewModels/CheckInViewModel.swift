@@ -61,6 +61,9 @@ class CheckInViewModel: ObservableObject {
     private var currentDay: Int = 0
     private var challengeTitle: String = ""
     
+    // Image data for check-in photos
+    @Published var photoData: Data?
+    
     init() {
         // Load previous quote from UserDefaults to avoid repeating
         if let savedQuoteData = UserDefaults.standard.data(forKey: "lastQuoteShown"),

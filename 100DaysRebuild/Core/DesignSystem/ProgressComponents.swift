@@ -49,7 +49,7 @@ public enum ProgressComponents {
                 // Optional percentage label
                 if showLabel {
                     Text("\(Int(progress * 100))%")
-                        .font(AppTypography.caption)
+                        .font(AppTypography.caption1())
                         .bold()
                         .foregroundColor(foregroundColor)
                 }
@@ -93,16 +93,16 @@ public enum ProgressComponents {
                 // Text content
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     Text(title)
-                        .font(AppTypography.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                     
                     Text(value)
-                        .font(AppTypography.title3)
+                        .font(AppTypography.title3())
                         .foregroundColor(.theme.text)
                     
                     if let subtitle = subtitle {
                         Text(subtitle)
-                            .font(AppTypography.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -144,17 +144,17 @@ public enum ProgressComponents {
                 
                 VStack(alignment: .leading, spacing: 0) {
                     Text("\(count)")
-                        .font(AppTypography.title1)
+                        .font(AppTypography.title1())
                         .foregroundColor(count > 0 ? .theme.text : .theme.subtext)
                         .fontWeight(.bold)
                     
                     if let subtitle = subtitle {
                         Text(subtitle)
-                            .font(AppTypography.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     } else {
                         Text(count == 1 ? "day" : "days")
-                            .font(AppTypography.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -197,12 +197,12 @@ public enum ProgressComponents {
                 // Title and subtitle
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                     Text(title)
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.text)
                     
                     if let subtitle = subtitle {
                         Text(subtitle)
-                            .font(AppTypography.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -211,7 +211,7 @@ public enum ProgressComponents {
                 
                 // Progress percentage
                 Text("\(Int(progress * 100))%")
-                    .font(AppTypography.callout)
+                    .font(AppTypography.callout())
                     .fontWeight(.medium)
                     .foregroundColor(color)
             }
@@ -258,7 +258,7 @@ public enum ProgressComponents {
                 
                 // Day number
                 Text("\(day)")
-                    .font(AppTypography.callout)
+                    .font(AppTypography.callout())
                     .fontWeight(isToday ? .bold : .regular)
                     .foregroundColor(textColor)
             }

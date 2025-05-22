@@ -5,6 +5,7 @@ import FirebaseAuth
 struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject var router: NavigationRouter
     @State private var scrollOffset: CGFloat = 0
     
     // Animation states
@@ -127,12 +128,12 @@ struct SocialView: View {
             
             // Title and subtitle
             Text("The Social Side of 100Days")
-                .font(AppTypography.display)
+                .font(AppTypography.display())
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
             
             Text("Friends, groups, and leaderboards are almost here.")
-                .font(AppTypography.title3)
+                .font(AppTypography.title3())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.m)
@@ -154,7 +155,7 @@ struct SocialView: View {
                     
                     VStack(spacing: AppSpacing.xs) {
                         Text("Your username is")
-                            .font(AppTypography.body)
+                            .font(AppTypography.body())
                             .foregroundColor(.theme.text)
                         
                         Text("@\(username)")
@@ -163,7 +164,7 @@ struct SocialView: View {
                     }
                     
                     Text("You're all set for the social features launch!")
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                         .multilineTextAlignment(.center)
                         .padding(.top, AppSpacing.xs)
@@ -173,12 +174,12 @@ struct SocialView: View {
                 // User has not claimed a username yet
                 VStack(alignment: .center, spacing: AppSpacing.m) {
                     Text("Claim Your Username")
-                        .font(AppTypography.title3)
+                        .font(AppTypography.title3())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.text)
                     
                     Text("Reserve your username now to secure your identity before others claim it.")
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                         .multilineTextAlignment(.center)
                         .padding(.bottom, AppSpacing.xs)
@@ -233,7 +234,7 @@ struct SocialView: View {
                                 }
                                 
                                 Text(viewModel.validationMessage)
-                                    .font(AppTypography.caption)
+                                    .font(AppTypography.caption1())
                                     .foregroundColor(validationMessageColor)
                                     .lineLimit(1)
                             }
@@ -252,7 +253,7 @@ struct SocialView: View {
                         }
                     } label: {
                         Text("Claim Username")
-                            .font(AppTypography.headline)
+                            .font(AppTypography.headline())
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -281,7 +282,7 @@ struct SocialView: View {
     private var featureTeaseSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             Text("Coming Soon")
-                .font(AppTypography.title3)
+                .font(AppTypography.title3())
                 .fontWeight(.bold)
                 .foregroundColor(.theme.text)
                 .padding(.horizontal, AppSpacing.xs)
@@ -308,13 +309,13 @@ struct SocialView: View {
     private var socialFollowSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             Text("Follow Us for Updates")
-                .font(AppTypography.title3)
+                .font(AppTypography.title3())
                 .fontWeight(.bold)
                 .foregroundColor(.theme.text)
                 .padding(.horizontal, AppSpacing.xs)
             
-            // Social media buttons
-            HStack(spacing: AppSpacing.l) {
+            // Social media buttons in an enhanced layout
+            HStack(alignment: .top, spacing: AppSpacing.xl) {
                 // TikTok Button
                 SocialButton(
                     platform: "TikTok",
@@ -339,16 +340,26 @@ struct SocialView: View {
                     url: URL(string: "https://instagram.com/100days.site")!
                 )
             }
-            .padding(.horizontal, AppSpacing.s)
-            .padding(.vertical, AppSpacing.m)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, AppSpacing.l)
+            
+            // Coming soon label
+            Text("Coming Soon")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.theme.subtext)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .background(
+                    Capsule()
+                        .fill(Color.theme.surface)
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.theme.border, lineWidth: 1)
+                        )
+                )
+                .padding(.top, AppSpacing.s)
         }
-        .padding(AppSpacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                       radius: 8, x: 0, y: 4)
-        )
+        .padding(.bottom, AppSpacing.l)
     }
     
     // MARK: - Helper Properties
@@ -401,7 +412,7 @@ struct SocialView: View {
                 .tint(.theme.accent)
             
             Text("Loading social features...")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, AppSpacing.s)
@@ -474,8 +485,8 @@ struct SocialView: View {
                 .offset(y: socialsAppeared ? 0 : 40)
             
             // Coming Soon Footer
-            Text("Coming Summer 2025")
-                .font(AppTypography.caption)
+            Text("Coming Soon")
+                .font(AppTypography.caption1())
                 .foregroundColor(.theme.subtext)
                 .padding(.bottom, AppSpacing.xl)
                 .opacity(socialsAppeared ? 1 : 0)
@@ -516,12 +527,12 @@ struct SocialView: View {
                     .foregroundColor(.theme.accent)
                 
                 Text("Social Feed Coming Soon")
-                    .font(.title3)
+                    .font(AppTypography.title3())
                     .fontWeight(.bold)
                     .foregroundColor(.theme.text)
                 
                 Text("We're working hard to bring you a full social experience. For now, you can claim your username and prepare for the launch.")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.subtext)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AppSpacing.m)
@@ -585,11 +596,11 @@ struct FeatureTeaseCard: View {
             
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(title)
-                    .font(AppTypography.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
                 
                 Text(description)
-                    .font(AppTypography.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(.theme.subtext)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -624,6 +635,7 @@ struct SocialButton: View {
     let url: URL
     
     @State private var isPressed = false
+    @State private var isHovered = false
     
     var body: some View {
         Button {
@@ -635,32 +647,48 @@ struct SocialButton: View {
             generator.impactOccurred()
         } label: {
             VStack(spacing: AppSpacing.s) {
-                // Icon
-                if ["tiktok-icon", "x-icon", "instagram-icon"].contains(icon) {
-                    // Use custom icon if available
-                    Image(systemName: getSFSymbolFallback(for: icon))
+                // Enhanced Icon with better styling
+                ZStack {
+                    Circle()
+                        .fill(getSocialBackgroundColor(for: platform))
+                        .frame(width: 60, height: 60)
+                        .shadow(color: getSocialBackgroundColor(for: platform).opacity(0.3), radius: 8, x: 0, y: 3)
+                    
+                    // App icon
+                    getIconView(for: platform, icon: icon)
                         .font(.system(size: 28))
-                        .foregroundColor(getIconColor(for: platform))
-                } else {
-                    // Use SF Symbol as fallback
-                    Image(systemName: getSFSymbolFallback(for: icon))
-                        .font(.system(size: 28))
-                        .foregroundColor(getIconColor(for: platform))
+                        .foregroundColor(getSocialIconColor(for: platform))
+                }
+                .scaleEffect(isHovered ? 1.05 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
+                .onAppear {
+                    // Create subtle hover animation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
+                        withAnimation(.spring()) {
+                            isHovered = true
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            withAnimation(.spring()) {
+                                isHovered = false
+                            }
+                        }
+                    }
                 }
                 
-                // Platform name and username
-                VStack(spacing: 2) {
+                // Platform name and username with improved spacing
+                VStack(spacing: 4) {
                     Text(platform)
-                        .font(AppTypography.subheadline)
-                        .fontWeight(.medium)
+                        .font(AppTypography.subhead())
+                        .fontWeight(.semibold)
                         .foregroundColor(.theme.text)
                     
                     Text(username)
-                        .font(AppTypography.caption)
+                        .font(AppTypography.footnote())
                         .foregroundColor(.theme.subtext)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
-            .frame(maxWidth: .infinity)
             .padding(AppSpacing.m)
             .background(
                 RoundedRectangle(cornerRadius: 12)
@@ -671,15 +699,40 @@ struct SocialButton: View {
         .buttonStyle(AppScaleButtonStyle())
     }
     
-    // Helper to get color for different platforms
-    private func getIconColor(for platform: String) -> Color {
+    // Get the appropriate icon view based on platform
+    @ViewBuilder
+    private func getIconView(for platform: String, icon: String) -> some View {
+        if ["tiktok-icon", "x-icon", "instagram-icon"].contains(icon) {
+            // Use actual image assets
+            Image(icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+        } else {
+            // Fallback to SF Symbols
+            Image(systemName: getSFSymbolFallback(for: icon))
+        }
+    }
+    
+    // Helper to get background color for different platforms
+    private func getSocialBackgroundColor(for platform: String) -> Color {
         switch platform {
         case "TikTok":
-            return Color.black.opacity(colorScheme == .dark ? 0.9 : 0.8)
+            return Color.black
         case "X":
-            return Color.black.opacity(colorScheme == .dark ? 0.9 : 0.8)
+            return Color(.systemBlue)
         case "Instagram":
             return Color.purple
+        default:
+            return Color.theme.accent
+        }
+    }
+    
+    // Helper to get icon color for different platforms
+    private func getSocialIconColor(for platform: String) -> Color {
+        switch platform {
+        case "TikTok", "X", "Instagram":
+            return .white
         default:
             return Color.theme.accent
         }
@@ -688,12 +741,12 @@ struct SocialButton: View {
     // Helper to get SF Symbol fallbacks if needed
     private func getSFSymbolFallback(for icon: String) -> String {
         switch icon {
-        case "tiktok-icon":
-            return "play.rectangle.fill"
-        case "x-icon":
-            return "message.fill"
-        case "instagram-icon":
-            return "camera.fill"
+        case "tiktok":
+            return "music.note.list"
+        case "x.logo":
+            return "x"
+        case "instagram.logo":
+            return "camera"
         default:
             return icon
         }
@@ -714,7 +767,7 @@ struct LoadingOverlay: View {
                     .scaleEffect(1.5)
                 
                 Text("Loading...")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
             }
             .padding(24)
@@ -732,10 +785,10 @@ struct SuccessToast: View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.white)
-                .font(.headline)
+                .font(AppTypography.headline())
             
             Text("Username reserved for future social features!")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .fontWeight(.medium)
                 .foregroundColor(.white)
         }

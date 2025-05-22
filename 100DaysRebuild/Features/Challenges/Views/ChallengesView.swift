@@ -158,11 +158,11 @@ struct ChallengesView: View {
                 .tint(.theme.accent)
             
             Text("Loading challenges...")
-                .font(AppTypography.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(.theme.text)
             
             Text("Hold tight as we fetch your latest data")
-                .font(AppTypography.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.xl)
@@ -188,19 +188,19 @@ struct ChallengesView: View {
                 .padding(.bottom, AppSpacing.m)
             
             Text("No Challenges Yet")
-                .font(AppTypography.title2)
+                .font(AppTypography.title2())
                 .bold()
                 .foregroundColor(.theme.text)
             
             Text("Start your first 100-day challenge and begin tracking your progress.")
-                .font(AppTypography.body)
+                .font(AppTypography.body())
                 .multilineTextAlignment(.center)
                 .foregroundColor(.theme.subtext)
                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
             
             Button(action: { viewModel.isShowingNewChallenge = true }) {
                 Text("Create Challenge")
-                    .font(AppTypography.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
                     .padding(.vertical, AppSpacing.buttonVerticalPadding)
                     .padding(.horizontal, AppSpacing.buttonHorizontalPadding)

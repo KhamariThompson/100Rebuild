@@ -163,7 +163,7 @@ struct DetailedProgressView: View {
                     .foregroundColor(.theme.accent)
                 
                 Text("Your Progress")
-                    .font(AppTypography.title3)
+                    .font(AppTypography.title3())
                     .foregroundColor(.theme.text)
             }
             .padding(.horizontal, AppSpacing.xxs)
@@ -200,7 +200,7 @@ struct DetailedProgressView: View {
                     .foregroundColor(.theme.accent)
                 
                 Text("Activity")
-                    .font(AppTypography.title3)
+                    .font(AppTypography.title3())
                     .foregroundColor(.theme.text)
             }
             

@@ -403,3 +403,49 @@ extension View {
             .clipShape(Circle())
     }
 }
+
+// MARK: - Initial Avatar View
+struct InitialAvatarView: View {
+    let name: String
+    let size: CGFloat
+    let backgroundColor: Color?
+    
+    init(name: String, size: CGFloat = 40, backgroundColor: Color? = nil) {
+        self.name = name
+        self.size = size
+        self.backgroundColor = backgroundColor
+    }
+    
+    private var initial: String {
+        if name.isEmpty {
+            return "?"
+        }
+        // Get first letter of the name, or fallback to first character
+        return String(name.first ?? "?").uppercased()
+    }
+    
+    private var avatarBackgroundColor: Color {
+        if let customColor = backgroundColor {
+            return customColor
+        }
+        
+        // Generate consistent color based on name
+        let hash = name.hash
+        let hue = Double(abs(hash) % 360) / 360.0
+        return Color(hue: hue, saturation: 0.7, brightness: 0.9)
+    }
+    
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(avatarBackgroundColor)
+                .frame(width: size, height: size)
+                .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+            
+            Text(initial)
+                .font(.system(size: size * 0.5, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .accessibilityLabel(Text("\(name)'s avatar"))
+    }
+}

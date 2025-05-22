@@ -78,7 +78,7 @@ enum DesignGuide {
     ///
     /// ```swift
     /// Text("Headline")
-    ///     .font(AppTypography.headline)
+    ///     .font(AppTypography.headline())
     ///     .foregroundColor(.theme.text)
     ///
     /// // Or using view extension
@@ -203,7 +203,7 @@ struct DesignGuidePreview: PreviewProvider {
     
     static var spacingPreview: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Spacing").font(AppTypography.title1).foregroundColor(.theme.text)
+            Text("Spacing").font(AppTypography.title1()).foregroundColor(.theme.text)
             
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 spacingRow("xxs", AppSpacing.xxs)
@@ -223,12 +223,12 @@ struct DesignGuidePreview: PreviewProvider {
     static func spacingRow(_ name: String, _ value: CGFloat) -> some View {
         HStack {
             Text(name)
-                .font(AppTypography.body)
+                .font(AppTypography.body())
                 .foregroundColor(.theme.text)
                 .frame(width: 50, alignment: .leading)
             
             Text("\(Int(value))pt")
-                .font(AppTypography.caption)
+                .font(AppTypography.caption1())
                 .foregroundColor(.theme.subtext)
                 .frame(width: 50, alignment: .leading)
             
@@ -244,22 +244,22 @@ struct DesignGuidePreview: PreviewProvider {
     
     static var typographyPreview: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Typography").font(AppTypography.title1).foregroundColor(.theme.text)
+            Text("Typography").font(AppTypography.title1()).foregroundColor(.theme.text)
             
             VStack(alignment: .leading, spacing: AppSpacing.m) {
-                Text("Display").font(AppTypography.display).foregroundColor(.theme.text)
-                Text("Large Title").font(AppTypography.largeTitle).foregroundColor(.theme.text)
-                Text("Title 1").font(AppTypography.title1).foregroundColor(.theme.text)
-                Text("Title 2").font(AppTypography.title2).foregroundColor(.theme.text)
-                Text("Title 3").font(AppTypography.title3).foregroundColor(.theme.text)
-                Text("Headline").font(AppTypography.headline).foregroundColor(.theme.text)
-                Text("Body").font(AppTypography.body).foregroundColor(.theme.text)
-                Text("Body Medium").font(AppTypography.bodyMedium).foregroundColor(.theme.text)
-                Text("Callout").font(AppTypography.callout).foregroundColor(.theme.text)
-                Text("Subheadline").font(AppTypography.subheadline).foregroundColor(.theme.text)
-                Text("Footnote").font(AppTypography.footnote).foregroundColor(.theme.text)
-                Text("Caption").font(AppTypography.caption).foregroundColor(.theme.text)
-                Text("Small").font(AppTypography.small).foregroundColor(.theme.text)
+                Text("Display").font(AppTypography.display()).foregroundColor(.theme.text)
+                Text("Large Title").font(AppTypography.largeTitle()).foregroundColor(.theme.text)
+                Text("Title 1").font(AppTypography.title1()).foregroundColor(.theme.text)
+                Text("Title 2").font(AppTypography.title2()).foregroundColor(.theme.text)
+                Text("Title 3").font(AppTypography.title3()).foregroundColor(.theme.text)
+                Text("Headline").font(AppTypography.headline()).foregroundColor(.theme.text)
+                Text("Body").font(AppTypography.body()).foregroundColor(.theme.text)
+                Text("Body Medium").font(AppTypography.body(.medium)).foregroundColor(.theme.text)
+                Text("Callout").font(AppTypography.callout()).foregroundColor(.theme.text)
+                Text("Subheadline").font(AppTypography.subhead()).foregroundColor(.theme.text)
+                Text("Footnote").font(AppTypography.footnote()).foregroundColor(.theme.text)
+                Text("Caption").font(AppTypography.caption1()).foregroundColor(.theme.text)
+                Text("Small").font(AppTypography.caption2()).foregroundColor(.theme.text)
             }
         }
         .padding(AppSpacing.m)
@@ -269,7 +269,7 @@ struct DesignGuidePreview: PreviewProvider {
     
     static var colorPreview: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Colors").font(AppTypography.title1).foregroundColor(.theme.text)
+            Text("Colors").font(AppTypography.title1()).foregroundColor(.theme.text)
             
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 colorRow("accent", Color.theme.accent)
@@ -290,7 +290,7 @@ struct DesignGuidePreview: PreviewProvider {
     static func colorRow(_ name: String, _ color: Color) -> some View {
         HStack {
             Text(name)
-                .font(AppTypography.body)
+                .font(AppTypography.body())
                 .foregroundColor(.theme.text)
                 .frame(width: 100, alignment: .leading)
             
@@ -307,27 +307,27 @@ struct DesignGuidePreview: PreviewProvider {
     
     static var componentPreview: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Components").font(AppTypography.title1).foregroundColor(.theme.text)
+            Text("Components").font(AppTypography.title1()).foregroundColor(.theme.text)
             
             // Cards
             VStack(alignment: .leading, spacing: AppSpacing.s) {
-                Text("Cards").font(AppTypography.headline).foregroundColor(.theme.text)
+                Text("Cards").font(AppTypography.headline()).foregroundColor(.theme.text)
                 
                 AppComponents.Card {
                     Text("Standard Card")
-                        .font(AppTypography.body)
+                        .font(AppTypography.body())
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 
                 AppComponents.GlassCard {
                     Text("Glass Card")
-                        .font(AppTypography.body)
+                        .font(AppTypography.body())
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 
                 AppComponents.GradientCard {
                     Text("Gradient Card")
-                        .font(AppTypography.body)
+                        .font(AppTypography.body())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -335,7 +335,7 @@ struct DesignGuidePreview: PreviewProvider {
             
             // Buttons
             VStack(alignment: .leading, spacing: AppSpacing.s) {
-                Text("Buttons").font(AppTypography.headline).foregroundColor(.theme.text)
+                Text("Buttons").font(AppTypography.headline()).foregroundColor(.theme.text)
                 
                 HStack(spacing: AppSpacing.m) {
                     Button("Primary") { }
@@ -351,7 +351,7 @@ struct DesignGuidePreview: PreviewProvider {
             
             // Stats
             VStack(alignment: .leading, spacing: AppSpacing.s) {
-                Text("Stats").font(AppTypography.headline).foregroundColor(.theme.text)
+                Text("Stats").font(AppTypography.headline()).foregroundColor(.theme.text)
                 
                 HStack(spacing: AppSpacing.m) {
                     StatCard(
@@ -370,7 +370,7 @@ struct DesignGuidePreview: PreviewProvider {
             
             // Progress
             VStack(alignment: .leading, spacing: AppSpacing.s) {
-                Text("Progress").font(AppTypography.headline).foregroundColor(.theme.text)
+                Text("Progress").font(AppTypography.headline()).foregroundColor(.theme.text)
                 
                 AppComponents.ProgressBar(value: 0.65)
                     .frame(height: AppSpacing.xs)

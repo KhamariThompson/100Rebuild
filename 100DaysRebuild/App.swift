@@ -610,6 +610,7 @@ struct App100Days: App {
     @StateObject private var progressDashboardViewModel = ProgressDashboardViewModel.shared
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var userStatsService = UserStatsService.shared
+    @StateObject private var navigationRouter = NavigationRouter()
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -626,6 +627,7 @@ struct App100Days: App {
                 .environmentObject(progressDashboardViewModel)
                 .environmentObject(networkMonitor)
                 .environmentObject(userStatsService)
+                .environmentObject(navigationRouter)
                 .withAppTheme()
                 .task {
                     // Register custom fonts if any
@@ -653,6 +655,7 @@ struct AppContentView: View {
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
+    @StateObject private var navigationRouter = NavigationRouter()
     @State private var isInitializing = true
     
     var body: some View {
@@ -685,6 +688,7 @@ struct AppContentView: View {
                             .environmentObject(progressDashboardViewModel)
                             .environmentObject(networkMonitor)
                             .environmentObject(userStatsService)
+                            .environmentObject(navigationRouter)
                     } else {
                         // Welcome view for non-authenticated users
                         WelcomeView()

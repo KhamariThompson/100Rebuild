@@ -118,16 +118,19 @@ struct DailySparkView: View {
     }
 }
 
-#Preview {
-    VStack {
-        DailySparkView(currentStreak: 7, completionPercentage: 0.35)
-            .padding()
-        
-        DailySparkView(currentStreak: 0, completionPercentage: 0.0)
-            .padding()
-        
-        DailySparkView(currentStreak: 21, completionPercentage: 0.75)
-            .padding()
+// Replace #Preview with traditional PreviewProvider
+struct DailySparkView_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack {
+            DailySparkView(currentStreak: 7, completionPercentage: 0.35)
+                .padding()
+            
+            DailySparkView(currentStreak: 0, completionPercentage: 0.0)
+                .padding()
+            
+            DailySparkView(currentStreak: 21, completionPercentage: 0.75)
+                .padding()
+        }
+        .background(Color.gray.opacity(0.1))
     }
-    .background(Color.gray.opacity(0.1))
 } 

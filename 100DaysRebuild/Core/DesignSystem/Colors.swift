@@ -9,157 +9,117 @@ public enum AppColors {
     public static let background = Color("Background")
     /// Surface color for cards and containers
     public static let surface = Color("Surface")
-    /// Primary brand color
+    /// Primary brand color - neutral color from the landing page
     public static let primary = Color("ProjectPrimary")
-    /// Secondary brand color
+    /// Secondary brand color - neutral color from the landing page
     public static let secondary = Color("ProjectSecondary")
-    /// Accent color for highlights and CTAs
+    /// Accent color for highlights and CTAs - more subtle neutral from landing page
     public static let accent = Color("ProjectAccent")
-    /// Main text color
+    /// Text color for primary text
     public static let text = Color("Text")
-    /// Secondary text color for labels and captions
+    /// Text color for secondary or less important text
     public static let subtext = Color("Subtext")
-    /// Error state color
-    public static let error = Color("Error")
-    /// Success state color
-    public static let success = Color("Success")
-    
-    // MARK: - Additional Semantic Colors
-    
-    /// Gradient start color for backgrounds and elements
-    public static let gradientStart = Color("GradientStart")
-    /// Gradient end color for backgrounds and elements
-    public static let gradientEnd = Color("GradientEnd")
-    /// Subtle border color for cards and inputs
+    /// Border color for dividers and separators
     public static let border = Color("Border")
-    /// Shadow color for elevated elements
+    /// Shadow color for elevation effects
     public static let shadow = Color("Shadow")
-    /// Tab bar inactive items - ensures visibility in both light/dark modes
-    public static let tabInactive = Color("ProjectAccent").opacity(0.5)
     
-    // MARK: - Extended Semantic Colors
+    // MARK: - Status Colors
     
-    /// Color for destructive actions
-    public static let destructive = Color("Error")
-    /// Color for warning states
-    public static let warning = Color("Warning")
-    /// Color for informational states
-    public static let info = Color("Info")
-    /// Subtle background for disabled elements
-    public static let disabledBackground = Color("DisabledBackground")
-    /// Text color for disabled elements
-    public static let disabledText = Color("DisabledText")
-    /// Overlay color for modal backgrounds
-    public static let modalOverlay = Color.black.opacity(0.4)
-    /// Muted background for secondary content
-    public static let secondaryBackground = Color("SecondaryBackground")
+    /// Success color for positive feedback
+    public static let success = Color("Success")
+    /// Error color for negative feedback
+    public static let error = Color("Error")
     
-    // MARK: - Component-Specific Colors
+    // MARK: - Gradient Colors
     
-    /// Background for input fields
-    public static let inputBackground = Color("Surface")
-    /// Border for input fields
-    public static let inputBorder = Color("Border")
-    /// Background for primary buttons
-    public static let buttonBackground = Color("ProjectAccent")
-    /// Text color for primary buttons
-    public static let buttonText = Color.white
-    /// Background for secondary buttons
-    public static let secondaryButtonBackground = Color("SecondaryBackground")
-    /// Text color for secondary buttons
-    public static let secondaryButtonText = Color("Text")
+    /// Start color for gradients
+    public static let gradientStart = Color("GradientStart")
+    /// End color for gradients
+    public static let gradientEnd = Color("GradientEnd")
     
-    // MARK: - Fallback Colors
+    // MARK: - Gradient Presets
     
-    // These are used if the asset catalog colors aren't loaded properly
-    public static let fallbackAccent = Color.blue
-    public static let fallbackText = Color.primary
-    public static let fallbackSubtext = Color.secondary
-    public static let fallbackBackground = Color(.systemBackground)
-    public static let fallbackSurface = Color(.secondarySystemBackground)
-    public static let fallbackError = Color.red
-    public static let fallbackSuccess = Color.green
-    public static let fallbackGradientStart = Color.blue.opacity(0.8)
-    public static let fallbackGradientEnd = Color.purple.opacity(0.8)
-    public static let fallbackBorder = Color.gray.opacity(0.3)
-    public static let fallbackShadow = Color.black.opacity(0.2)
-    public static let fallbackTabInactive = Color.gray.opacity(0.7)
-    public static let fallbackWarning = Color.yellow
-    public static let fallbackInfo = Color.blue
-    public static let fallbackDisabledBackground = Color.gray.opacity(0.2)
-    public static let fallbackDisabledText = Color.gray
-    public static let fallbackSecondaryBackground = Color(.tertiarySystemBackground)
+    /// Primary gradient used throughout the app
+    public static let primaryGradient = LinearGradient(
+        gradient: Gradient(colors: [gradientStart, gradientEnd]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
     
-    // MARK: - Theme-Specific Color Helpers
+    /// Subtle gradient for backgrounds
+    public static let subtleGradient = LinearGradient(
+        gradient: Gradient(colors: [
+            background,
+            gradientStart.opacity(0.05)
+        ]),
+        startPoint: .top,
+        endPoint: .bottom
+    )
     
-    /// Get the appropriate color based on the current color scheme
-    /// - Parameters:
-    ///   - light: Color to use in light mode
-    ///   - dark: Color to use in dark mode
-    ///   - colorScheme: Current color scheme (optional)
-    /// - Returns: Color appropriate for the current theme
-    public static func forTheme(light: Color, dark: Color, colorScheme: ColorScheme? = nil) -> Color {
-        if let scheme = colorScheme {
-            return scheme == .dark ? dark : light
-        } else {
-            @Environment(\.colorScheme) var currentScheme
-            return currentScheme == .dark ? dark : light
-        }
-    }
+    /// Accent gradient for buttons and highlights
+    public static let accentGradient = LinearGradient(
+        gradient: Gradient(colors: [accent, accent.opacity(0.8)]),
+        startPoint: .top,
+        endPoint: .bottom
+    )
     
-    /// Get an opacity appropriate for the current theme
-    /// - Parameters:
-    ///   - light: Opacity to use in light mode
-    ///   - dark: Opacity to use in dark mode
-    ///   - colorScheme: Current color scheme (optional)
-    /// - Returns: Opacity appropriate for the current theme
-    public static func opacityForTheme(light: Double, dark: Double, colorScheme: ColorScheme? = nil) -> Double {
-        if let scheme = colorScheme {
-            return scheme == .dark ? dark : light
-        } else {
-            @Environment(\.colorScheme) var currentScheme
-            return currentScheme == .dark ? dark : light
-        }
-    }
+    // MARK: - Theme Extension
     
-    /// Get shadow radius appropriate for the current theme
-    /// - Parameters:
-    ///   - light: Radius for light mode
-    ///   - dark: Radius for dark mode
-    ///   - colorScheme: Current color scheme (optional)
-    /// - Returns: Shadow radius for the current theme
-    public static func shadowRadiusForTheme(light: CGFloat, dark: CGFloat, colorScheme: ColorScheme? = nil) -> CGFloat {
-        if let scheme = colorScheme {
-            return scheme == .dark ? dark : light
-        } else {
-            @Environment(\.colorScheme) var currentScheme
-            return currentScheme == .dark ? dark : light
-        }
+    /// Access colors through Color.theme namespace
+    public static func setupTheme() {
+        Color.theme = ColorTheme()
     }
 }
 
-// MARK: - Color Assets
+/// Provides a namespace for colors through Color.theme
+public struct ColorTheme {
+    public let background = AppColors.background
+    public let surface = AppColors.surface
+    public let primary = AppColors.primary
+    public let secondary = AppColors.secondary
+    public let accent = AppColors.accent
+    public let text = AppColors.text
+    public let subtext = AppColors.subtext
+    public let border = AppColors.border
+    public let shadow = AppColors.shadow
+    public let success = AppColors.success
+    public let error = AppColors.error
+    public let gradientStart = AppColors.gradientStart
+    public let gradientEnd = AppColors.gradientEnd
+    public let primaryGradient = AppColors.primaryGradient
+    public let subtleGradient = AppColors.subtleGradient
+    public let accentGradient = AppColors.accentGradient
+}
+
+/// Extension to allow access through Color.theme
 public extension Color {
-    static let theme = AppColors.self
+    static var theme: ColorTheme = ColorTheme()
+}
+
+// MARK: - Color Assets
+// This was causing a redeclaration error - removed duplicate theme property
+public extension Color {
+    // static let theme = AppColors.self - removing duplicate declaration
 }
 
 // MARK: - Gradient Extensions
 public extension LinearGradient {
-    /// Primary gradient for backgrounds and buttons
+    /// Primary gradient for backgrounds and buttons - updated to match landing page
     static let primary = LinearGradient(
         gradient: Gradient(colors: [AppColors.gradientStart, AppColors.gradientEnd]),
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    /// Accent gradient for highlights and CTAs
+    /// Accent gradient for highlights and CTAs - updated to match landing page
     static let accent = LinearGradient(
         gradient: Gradient(colors: [AppColors.accent, AppColors.accent.opacity(0.8)]),
         startPoint: .top,
         endPoint: .bottom
     )
     
-    /// Primary button gradient
+    /// Primary button gradient - updated to match landing page
     static let primaryButton = LinearGradient(
         gradient: Gradient(colors: [AppColors.accent, AppColors.accent.opacity(0.9)]),
         startPoint: .leading,
@@ -187,5 +147,33 @@ public extension LinearGradient {
             startPoint: startPoint,
             endPoint: endPoint
         )
+    }
+    
+    /// Modern chrome-like gradient - added to match landing page
+    static let chrome = LinearGradient(
+        gradient: Gradient(colors: [
+            Color.white.opacity(0.9),
+            Color.gray.opacity(0.2),
+            Color.white.opacity(0.7)
+        ]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    /// Dark mode chrome-like gradient
+    static let darkChrome = LinearGradient(
+        gradient: Gradient(colors: [
+            Color.black.opacity(0.7),
+            Color.gray.opacity(0.3),
+            Color.black.opacity(0.8)
+        ]),
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    
+    /// Theme-aware chrome gradient
+    static var themeChrome: LinearGradient {
+        @Environment(\.colorScheme) var scheme
+        return scheme == .dark ? darkChrome : chrome
     }
 }

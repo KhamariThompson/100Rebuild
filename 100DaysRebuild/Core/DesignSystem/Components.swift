@@ -133,7 +133,7 @@ public enum AppComponents {
         
         public var body: some View {
             Text(text)
-                .font(AppTypography.caption)
+                .font(AppTypography.caption1())
                 .fontWeight(.medium)
                 .foregroundColor(style == .outlined ? color : .white)
                 .padding(.horizontal, style == .capsule ? AppSpacing.xs : AppSpacing.xs)
@@ -207,8 +207,8 @@ public enum AppComponents {
         
         public init(
             progress: Double,
-            ringWidth: CGFloat = AppSpacing.progressRingStrokeWidth,
-            size: CGFloat = AppSpacing.circularProgressSize,
+            ringWidth: CGFloat = 4,
+            size: CGFloat = 120,
             color: Color = Color.theme.accent,
             backgroundColor: Color = Color.theme.border.opacity(0.3)
         ) {
@@ -275,12 +275,12 @@ public enum AppComponents {
             VStack(alignment: .center, spacing: AppSpacing.xs) {
                 // Title
                 Text(title)
-                    .font(AppTypography.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(Color.theme.subtext)
                 
                 // Value
                 Text(value)
-                    .font(AppTypography.title1)
+                    .font(AppTypography.title1())
                     .foregroundColor(Color.theme.text)
                 
                 // Optional content

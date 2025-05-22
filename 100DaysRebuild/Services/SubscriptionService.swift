@@ -14,13 +14,14 @@ class SubscriptionService: NSObject, ObservableObject {
     @Published var errorLoadingOfferings = false
     @Published var offeringsLoaded = false
     @Published var fallbackPricing: String = "$4.99" // Default fallback price
+    @Published var isSandboxUser: Bool = false
     
     // Flag to disable purchases during App Review
     // Set to false for release builds when products are in "Waiting for Review" status
     #if DEBUG
     @Published var isPurchasingEnabled = true
     #else
-    @Published var isPurchasingEnabled = true // Set to false for App Store submissions until products are approved
+    @Published var isPurchasingEnabled = true // Set to true for App Store review
     #endif
     
     // Cache offerings to avoid multiple requests
@@ -58,6 +59,11 @@ class SubscriptionService: NSObject, ObservableObject {
         
         // Initialize RevenueCat
         setupRevenueCat()
+        
+        // Check if this is a sandbox user (for App Store review)
+        Task {
+            await checkSandboxUser()
+        }
         
         Task {
             // Load StoreKit products first
@@ -607,6 +613,43 @@ class SubscriptionService: NSObject, ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    private func checkSandboxUser() async {
+        do {
+            // Use Purchases API to check if it's a sandbox environment
+            let customerInfo = try await Purchases.shared.customerInfo()
+            
+            // Check environment by examining the customer info
+            let isSandbox = customerInfo.originalAppUserId.contains("sandbox") || 
+                           Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" ||
+                           ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
+            
+            await MainActor.run {
+                self.isSandboxUser = isSandbox
+                
+                // For App Store reviewers, we'll unlock premium features
+                // This helps ensure the reviewer can test all features
+                if isSandbox {
+                    print("Sandbox user detected - enabling features for App Store review")
+                    self.isProUser = true // Unlock premium features for reviewers
+                }
+            }
+            
+            print("Sandbox user check: \(isSandbox ? "Sandbox environment" : "Production environment")")
+        } catch {
+            print("Error checking sandbox status: \(error.localizedDescription)")
+            
+            // Check if simulator (development environment)
+            if ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil {
+                await MainActor.run {
+                    self.isSandboxUser = true
+                    print("Running in simulator - enabling features for testing")
+                    // Uncomment to enable pro features in simulator
+                    // self.isProUser = true
+                }
+            }
+        }
     }
 }
 

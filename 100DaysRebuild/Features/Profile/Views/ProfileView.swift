@@ -63,8 +63,10 @@ struct ProfileView: View {
                                     
                                     // Username display
                                     Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
-                                        .font(.headline)
-                                        .foregroundColor(.theme.subtext)
+                                        .font(AppTypography.title2())
+                                        .bold()
+                                        .foregroundColor(.theme.text)
+                                        .padding(.top, 4) // Reduced padding
                                 }
                                 
                                 Spacer()
@@ -234,14 +236,14 @@ struct ProfileView: View {
             
             // Username display with @ symbol
             Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
-                .font(AppTypography.title2)
+                .font(AppTypography.title2())
                 .bold()
                 .foregroundColor(.theme.text)
                 .padding(.top, 4) // Reduced padding
             
             // Join date only - streak info removed
             Text("Joined \(getMemberSinceDate())")
-                .font(AppTypography.footnote)
+                .font(AppTypography.footnote())
                 .foregroundColor(.theme.subtext)
             
             // Edit profile button
@@ -249,7 +251,7 @@ struct ProfileView: View {
                 isShowingSettings = true
             }) {
                 Text("Edit Profile")
-                    .font(AppTypography.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.accent)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -298,7 +300,7 @@ struct ProfileView: View {
     private var horizontalActionBar: some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
             Text("Quick Actions")
-                .font(AppTypography.headline)
+                .font(AppTypography.headline())
             
             HStack(spacing: AppSpacing.m) {
                 // Analytics button
@@ -334,7 +336,7 @@ struct ProfileView: View {
     private func condensedChallengePreview(challenge: Challenge) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
             Text("Current Challenge")
-                .font(AppTypography.headline)
+                .font(AppTypography.headline())
             
             Button(action: {
                 // Navigate to the challenge detail
@@ -349,12 +351,12 @@ struct ProfileView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(challenge.title)
-                                .font(AppTypography.callout)
+                                .font(AppTypography.callout())
                                 .fontWeight(.semibold)
                                 .foregroundColor(.theme.text)
                             
                             Text("Day \(challenge.daysCompleted) of 100")
-                                .font(AppTypography.footnote)
+                                .font(AppTypography.footnote())
                                 .foregroundColor(.theme.subtext)
                         }
                         
@@ -363,7 +365,7 @@ struct ProfileView: View {
                         // Day count or completed badge
                         if challenge.isCompleted {
                             Text("Completed")
-                                .font(AppTypography.caption)
+                                .font(AppTypography.caption1())
                                 .fontWeight(.medium)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
@@ -374,7 +376,7 @@ struct ProfileView: View {
                                 .foregroundColor(.green)
                         } else {
                             Text("\(challenge.daysCompleted)%")
-                                .font(AppTypography.callout)
+                                .font(AppTypography.callout())
                                 .fontWeight(.semibold)
                                 .foregroundColor(.theme.accent)
                         }
@@ -404,7 +406,7 @@ struct ProfileView: View {
                                 .foregroundColor(.theme.subtext)
                             
                             Text("Last check-in \(timeAgoFormatter.localizedString(for: lastCheckIn, relativeTo: Date()))")
-                                .font(AppTypography.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.theme.subtext)
                         }
                     }
@@ -428,7 +430,7 @@ struct ProfileView: View {
     private var noActiveChallenge: some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
             Text("No Active Challenge")
-                .font(AppTypography.headline)
+                .font(AppTypography.headline())
             
             Button(action: {
                 // Navigate to Challenges tab
@@ -444,13 +446,13 @@ struct ProfileView: View {
                         .foregroundColor(.theme.subtext)
                     
                     Text("Start your first 100-day challenge")
-                        .font(AppTypography.callout)
+                        .font(AppTypography.callout())
                         .fontWeight(.medium)
                         .foregroundColor(.theme.text)
                         .multilineTextAlignment(.center)
                     
                     Text("Start Challenge")
-                        .font(AppTypography.callout)
+                        .font(AppTypography.callout())
                         .fontWeight(.medium)
                         .foregroundColor(.white)
                         .padding(.vertical, 10)
@@ -494,10 +496,13 @@ struct ProfileView: View {
                     ProfilePictureView(url: photoURL, size: 100)
                         .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 100))
-                        .foregroundColor(.theme.accent)
-                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
+                    // Use InitialAvatarView instead of default icon
+                    InitialAvatarView(
+                        name: viewModel.username.isEmpty ? (userSession.username ?? "User") : viewModel.username,
+                        size: 100,
+                        backgroundColor: Color.theme.accent
+                    )
+                    .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 }
             }
         }
@@ -562,7 +567,7 @@ struct ProfileView: View {
                         .font(.system(size: 14, weight: .medium))
                     
                     Text(title)
-                        .font(AppTypography.footnote)
+                        .font(AppTypography.footnote())
                         .fontWeight(.medium)
                 }
                 .padding(.vertical, 8)
@@ -594,12 +599,12 @@ struct ProfileView: View {
                         .padding(.bottom, AppSpacing.m)
                     
                     Text("Choose Your Username")
-                        .font(AppTypography.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
                     
                     Text("This will be your display name throughout the app.")
-                        .font(AppTypography.body)
+                        .font(AppTypography.body())
                         .foregroundColor(.theme.subtext)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, AppSpacing.xl)
@@ -607,11 +612,11 @@ struct ProfileView: View {
                     VStack(spacing: AppSpacing.s) {
                         HStack {
                             Text("@")
-                                .font(AppTypography.title3)
+                                .font(AppTypography.title3())
                                 .foregroundColor(.theme.subtext)
                             
                             TextField("username", text: $username)
-                                .font(AppTypography.title3)
+                                .font(AppTypography.title3())
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                         }
@@ -630,7 +635,7 @@ struct ProfileView: View {
                             dismiss()
                         }) {
                             Text("Save Username")
-                                .font(AppTypography.callout)
+                                .font(AppTypography.callout())
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)

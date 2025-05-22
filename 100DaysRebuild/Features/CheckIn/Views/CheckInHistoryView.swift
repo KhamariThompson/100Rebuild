@@ -205,13 +205,13 @@ struct CheckInHistoryCard: View {
                 // Header with day number and date
                 HStack {
                     Text("Day \(checkIn.dayNumber)")
-                        .font(AppTypography.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.accent)
                     
                     Spacer()
                     
                     Text(checkIn.date, style: .date)
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -248,7 +248,7 @@ struct CheckInHistoryCard: View {
                 // If there's a note, show a preview
                 if let note = checkIn.note, !note.isEmpty {
                     Text(note)
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.text)
                         .lineLimit(2)
                         .padding(.vertical, AppSpacing.xxs)
@@ -258,7 +258,7 @@ struct CheckInHistoryCard: View {
                 if let quote = checkIn.quote {
                     HStack {
                         Text("\"\(quote.text)\"")
-                            .font(AppTypography.caption)
+                            .font(AppTypography.caption1())
                             .italic()
                             .foregroundColor(.theme.subtext)
                             .lineLimit(1)
@@ -271,7 +271,7 @@ struct CheckInHistoryCard: View {
                     Spacer()
                     
                     Image(systemName: "chevron.right")
-                        .font(AppTypography.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
             }

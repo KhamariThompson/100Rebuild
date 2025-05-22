@@ -10,12 +10,13 @@ extension Notification.Name {
 
 struct MainAppView: View {
     @EnvironmentObject var userSession: UserSession
-    @StateObject private var router = NavigationRouter()
-    @StateObject private var subscriptionService = SubscriptionService.shared
-    @StateObject private var notificationService = NotificationService.shared
-    @StateObject private var userStatsService = UserStatsService.shared
-    @StateObject private var viewModel = ProgressDashboardViewModel.shared
+    @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var userStatsService: UserStatsService
+    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
     @EnvironmentObject var themeManager: ThemeManager
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
     @State private var showPaywall = false
@@ -52,9 +53,13 @@ struct MainAppView: View {
                         .tag(1)
                     
                     // Social Feed Tab (Disabled for now)
-                    SocialView()
-                        .environmentObject(router)
-                        .tag(2)
+                    ZStack(alignment: .bottom) {
+                        SocialView()
+                            .environmentObject(router)
+                        
+                        // Remove the Challenge a friend button as it's not implemented yet
+                    }
+                    .tag(2)
                     
                     // Profile Tab
                     ProfileView()
@@ -64,12 +69,10 @@ struct MainAppView: View {
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 // Fix: Use easeOut animation for smoother tab transitions
                 .animation(.easeOut(duration: 0.2), value: router.selectedTab)
-                .onChange(of: router.selectedTab) { oldValue, newValue in
-                    // Debug tab changes
-                    print("Tab changed from \(oldValue) to \(newValue)")
-                }
+                .padding(.bottom, CalAIDesignTokens.tabBarHeight + safeAreaBottom + 10) // Added extra padding
+                .withTabTransition(router: router) // Apply transition effect to prevent flashing
                 
-                // Only show the custom tab bar when tab switching is complete
+                // Only show the custom tab bar
                 VStack {
                     Spacer()
                     customTabBar
@@ -106,6 +109,9 @@ struct MainAppView: View {
             }
         }
         .onAppear {
+            // Calculate safe area for tab bar
+            updateSafeAreaInsets()
+            
             // Check onboarding status - we show subscription options after a short delay
             let workItem = DispatchWorkItem {
                 Task {
@@ -126,18 +132,12 @@ struct MainAppView: View {
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
             
-            // Calculate safe area for tab bar
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
-                safeAreaBottom = window.safeAreaInsets.bottom
-            }
-            
             // Set up tab bar appearance
             setupTabBarAppearance()
         }
-        .onChange(of: safeAreaBottom) { newValue in
-            // Update if safe area changes (rotation)
-            safeAreaBottom = newValue
+        .onChange(of: UIDevice.current.orientation) { _ in
+            // Update safe area when device rotates
+            updateSafeAreaInsets()
         }
         .onReceive(subscriptionService.$showPaywall) { newValue in
             withAnimation {
@@ -258,31 +258,14 @@ struct MainAppView: View {
     
     private var customTabBar: some View {
         VStack(spacing: 0) {
-            Spacer()
+            // Tab bar divider
+            Divider()
+                .opacity(0.2)
             
-            // Tab bar content
-            ZStack(alignment: .top) {
-                // Background with blur effect to match Cal AI style
-                Rectangle()
-                    .fill(Color.theme.surface.opacity(0.95))
-                    .background(
-                        // Add subtle blur for depth
-                        Rectangle()
-                            .fill(Material.ultraThinMaterial)
-                    )
-                    .overlay(
-                        // Add a thin divider line at the top for definition
-                        Rectangle()
-                            .frame(height: 0.5)
-                            .foregroundColor(Color.theme.border.opacity(0.3)),
-                        alignment: .top
-                    )
-                    .shadow(color: Color.theme.shadow.opacity(0.03), radius: 0.5, x: 0, y: -0.5)
-                
-                // Floating action button - positioned to overlay without pushing tab bar up
+            ZStack(alignment: .center) {
+                // Floating action button for creating new challenges
                 Button(action: {
-                    hapticFeedback(.medium)
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         showAddAction = true
                     }
                 }) {
@@ -292,11 +275,21 @@ struct MainAppView: View {
                         .frame(width: 50, height: 50)
                         .background(
                             Circle()
-                                .fill(Color.theme.accent)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.9)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                         )
                         .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
                 }
-                .offset(y: -25) // Positioned to overlay properly without pushing content
+                .offset(y: -30) // Increased offset to make button more visible
                 .zIndex(2) // Ensures it appears above tab bar
                 
                 // Tab items with icons and labels
@@ -314,13 +307,17 @@ struct MainAppView: View {
                             VStack(spacing: 4) {
                                 Image(systemName: item.icon)
                                     .font(.system(size: 20, weight: router.selectedTab == index ? .semibold : .regular))
-                                    .foregroundColor(router.selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
+                                    .foregroundColor(router.selectedTab == index ? 
+                                                    Color.theme.accent : 
+                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
                                 
                                 Text(item.text)
-                                    .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium, design: .rounded))
-                                    .foregroundColor(router.selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
+                                    .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium))
+                                    .foregroundColor(router.selectedTab == index ? 
+                                                    Color.theme.accent : 
+                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
                             }
-                            .frame(height: CalAIDesignTokens.tabBarHeight)
+                            .frame(height: CalAIDesignTokens.tabBarHeight - 10) // Reduced height slightly
                             .frame(maxWidth: .infinity)
                             .contentShape(Rectangle())
                         }
@@ -330,14 +327,18 @@ struct MainAppView: View {
                     }
                 }
                 .padding(.horizontal, 16)
+                .background(Color.theme.surface.opacity(0.98))
             }
             .frame(height: CalAIDesignTokens.tabBarHeight)
             
             // Extra space that extends to the bottom safe area
-            Rectangle()
-                .fill(Color.theme.surface.opacity(0.95))
-                .frame(height: safeAreaBottom)
+            if safeAreaBottom > 0 {
+                Rectangle()
+                    .fill(Color.theme.surface.opacity(0.98))
+                    .frame(height: safeAreaBottom)
+            }
         }
+        .background(Color.theme.surface.opacity(0.98))
         .ignoresSafeArea(edges: .bottom)
         .zIndex(2)
     }
@@ -350,6 +351,16 @@ struct MainAppView: View {
     
     private func setupTabBarAppearance() {
         // Implementation of setupTabBarAppearance method
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func updateSafeAreaInsets() {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            safeAreaBottom = window.safeAreaInsets.bottom
+            print("Safe area bottom updated: \(safeAreaBottom)")
+        }
     }
 }
 
@@ -385,11 +396,11 @@ struct ActionSheetItem: View {
                 // Title and subtitle
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(AppTypography.bodyMedium)
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(isLocked ? .theme.subtext.opacity(0.6) : .theme.text)
                     
                     Text(subtitle)
-                        .font(AppTypography.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(isLocked ? .theme.subtext.opacity(0.5) : .theme.subtext)
                 }
                 
@@ -398,7 +409,7 @@ struct ActionSheetItem: View {
                 // Lock icon for pro-locked features
                 if isLocked {
                     Image(systemName: "lock.fill")
-                        .font(AppTypography.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext.opacity(0.6))
                 }
             }

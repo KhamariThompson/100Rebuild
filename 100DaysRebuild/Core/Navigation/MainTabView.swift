@@ -15,6 +15,7 @@ struct MainTabView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.theme.background)
                         .navigationTitle("Home")
+                        .contentPaddingForTabBar()
                 }
                 .tag(0)
                 
@@ -24,6 +25,7 @@ struct MainTabView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.theme.background)
                         .navigationTitle("Progress")
+                        .contentPaddingForTabBar()
                 }
                 .tag(1)
                 
@@ -33,6 +35,7 @@ struct MainTabView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.theme.background)
                         .navigationTitle("Social")
+                        .contentPaddingForTabBar()
                 }
                 .tag(2)
                 
@@ -42,6 +45,7 @@ struct MainTabView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.theme.background)
                         .navigationTitle("Profile")
+                        .contentPaddingForTabBar()
                 }
                 .tag(3)
             }
@@ -67,7 +71,14 @@ struct MainTabView: View {
                     )
                     .offset(y: router.tabIsChanging ? 100 : 0) // Hide during tab transitions
                     .animation(.spring(response: 0.3, dampingFraction: 0.7), value: router.tabIsChanging)
-                    .shadow(color: Color.theme.shadow.opacity(0.15), radius: 8, x: 0, y: -3)
+                    .shadow(color: Color.theme.shadow.opacity(0.25), radius: 10, x: 0, y: -3)
+                    .background(
+                        Rectangle()
+                            .fill(Color.theme.surface)
+                            .edgesIgnoringSafeArea(.bottom)
+                            .frame(height: 2)
+                            .offset(y: 100)
+                    )
                 }
                 
                 // Floating action menu (replaces the + button with a menu)
@@ -159,19 +170,21 @@ class NavigationRouter: ObservableObject {
     func changeTab(to tab: Int) {
         guard selectedTab != tab else { return }
         
-        withAnimation {
+        // Immediately set changing state
+        withAnimation(.easeOut(duration: 0.1)) {
             tabIsChanging = true
         }
         
-        // Slight delay to allow animation to complete
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
+        // Use shorter delay before changing tab
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeOut(duration: 0.2)) {
                 self.selectedTab = tab
             }
             
             // Reset changing state after tab animation completes
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                withAnimation {
+            // Use shorter duration for better responsiveness
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                withAnimation(.easeOut(duration: 0.2)) {
                     self.tabIsChanging = false
                 }
             }
@@ -183,7 +196,7 @@ class NavigationRouter: ObservableObject {
 struct DynamicTabBarNotchModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .padding(.bottom, getSafeAreaInsets().bottom + 60) // 60 is approximate tab bar height
+            .padding(.bottom, getSafeAreaInsets().bottom + 80) // Increased from 60 to 80 for more space
     }
     
     private func getSafeAreaInsets() -> UIEdgeInsets {
@@ -198,6 +211,11 @@ struct DynamicTabBarNotchModifier: ViewModifier {
 extension View {
     func dynamicTabBarPadding() -> some View {
         self.modifier(DynamicTabBarNotchModifier())
+    }
+    
+    // New modifier for content above tab bar
+    func contentPaddingForTabBar() -> some View {
+        self.padding(.bottom, 90) // Fixed extra padding to ensure content isn't hidden by tab bar
     }
 }
 

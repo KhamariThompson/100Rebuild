@@ -29,7 +29,7 @@ struct ProgressFeatureStatCard: View {
                 }
                 
                 Text(value)
-                    .font(AppTypography.title2)
+                    .font(AppTypography.title2())
                     .foregroundColor(.theme.accent)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
@@ -39,7 +39,7 @@ struct ProgressFeatureStatCard: View {
             
             // Title text for the card
             Text(title)
-                .font(AppTypography.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -111,7 +111,7 @@ struct ProgressFeatureBadgeCard: View {
             
             // Badge title
             Text(badge.title)
-                .font(AppTypography.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .opacity(animateAppear ? 1.0 : 0.7)
@@ -178,7 +178,7 @@ struct ProgressFeatureLoadingStepIndicator: View {
             }
             
             Text(title)
-                .font(AppTypography.caption)
+                .font(AppTypography.caption1())
                 .foregroundColor(isCompleted ? .green : .theme.subtext)
         }
     }
@@ -194,7 +194,7 @@ struct ProgressFeatureFallbackButton: View {
     var body: some View {
         Button(action: action) {
             Text("Continue with sample data")
-                .font(AppTypography.footnote)
+                .font(AppTypography.footnote())
                 .fontWeight(.medium)
                 .foregroundColor(.theme.accent)
                 .padding(.horizontal, AppSpacing.buttonHorizontalPadding)

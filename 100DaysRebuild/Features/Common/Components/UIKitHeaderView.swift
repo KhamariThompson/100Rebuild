@@ -16,7 +16,7 @@ struct UIKitHeaderView: UIViewRepresentable {
         
         if let subtitle = subtitle {
             view.subtitleLabel.text = subtitle
-            view.subtitleLabel.font = UIFont.systemFont(ofSize: AppTypography.FontSize.subheadline, weight: .regular)
+            view.subtitleLabel.font = UIFont.systemFont(ofSize: AppTypography.FontSize.subhead, weight: .regular)
             view.subtitleLabel.textColor = UIColor(Color.theme.subtext)
             view.subtitleLabel.isHidden = false
         } else {

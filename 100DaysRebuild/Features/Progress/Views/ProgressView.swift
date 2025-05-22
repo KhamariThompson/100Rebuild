@@ -138,7 +138,7 @@ struct ProgressView: View {
                         } label: {
                             Image(systemName: "chart.xyaxis.line")
                                 .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
-                                .foregroundColor(.theme.accent)
+                                .foregroundColor(Color.theme.accent)
                         }
                     }
                     .padding(.horizontal, AppSpacing.screenHorizontalPadding)
@@ -146,7 +146,7 @@ struct ProgressView: View {
                     
                     // Content based on state
                     if viewModel.isLoading && !hasLoadedOnce {
-                        loadingView
+                        self.loadingView
                             .transaction { transaction in
                                 transaction.animation = nil // Disable animation for initial load
                             }
@@ -191,7 +191,7 @@ struct ProgressView: View {
         }
         .fixedSheet(isPresented: $showAnalytics) {
             if #available(iOS 16.0, *) {
-                ProgressAnalyticsView()
+                ProgressAnalyticsView(viewModel: viewModel)
             } else {
                 Text("Advanced analytics requires iOS 16 or later.")
                     .padding()
@@ -229,7 +229,7 @@ struct ProgressView: View {
             // 5. Daily Spark Section
             dailySparkSection
             
-            Spacer(minLength: AppSpacing.xl)
+            Spacer(minLength: CalAIDesignTokens.spacingXL)
         }
         .padding(.horizontal)
     }
@@ -241,7 +241,7 @@ struct ProgressView: View {
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 Text("You've checked in \(viewModel.currentStreak) days in a row!")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
+                    .foregroundColor(Color.theme.text)
                     .padding(.horizontal, AppSpacing.s)
                     .multilineTextAlignment(.leading)
             }
@@ -249,43 +249,44 @@ struct ProgressView: View {
             // Stats in a horizontal layout
             HStack(spacing: AppSpacing.m) {
                 // Streak with flame emoji
-                VStack(alignment: .center, spacing: AppSpacing.xxs) {
+                VStack(alignment: .center, spacing: 4) {
                     HStack(spacing: 4) {
                         Text("🔥")
                             .font(.system(size: 22))
                         Text("\(viewModel.currentStreak)")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.theme.text)
+                            .foregroundColor(Color.theme.text)
                     }
                     Text("Current Streak")
                         .font(.caption)
-                        .foregroundColor(.theme.subtext)
+                        .foregroundColor(Color.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
                 
                 // Percent complete
-                VStack(alignment: .center, spacing: AppSpacing.xxs) {
+                VStack(alignment: .center, spacing: 4) {
                     Text("\(Int(viewModel.completionPercentage * 100))%")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.theme.text)
+                        .foregroundColor(Color.theme.text)
                     Text("Complete")
                         .font(.caption)
-                        .foregroundColor(.theme.subtext)
+                        .foregroundColor(Color.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
                 
                 // Days active
-                VStack(alignment: .center, spacing: AppSpacing.xxs) {
+                VStack(alignment: .center, spacing: 4) {
                     Text("\(viewModel.totalChallenges)")
                         .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.theme.text)
+                        .foregroundColor(Color.theme.text)
                     Text("Challenges")
                         .font(.caption)
-                        .foregroundColor(.theme.subtext)
+                        .foregroundColor(Color.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, AppSpacing.s)
+            .padding(.horizontal, 8)
+            .padding(.vertical, AppSpacing.s)
             
             // Optional radial ring progress chart
             ZStack {
@@ -293,13 +294,13 @@ struct ProgressView: View {
                 Circle()
                     .stroke(lineWidth: 16)
                     .opacity(0.2)
-                    .foregroundColor(.theme.accent)
+                    .foregroundColor(Color.theme.accent)
                 
                 // Progress ring
                 Circle()
                     .trim(from: 0.0, to: CGFloat(min(viewModel.completionPercentage, 1.0)))
                     .stroke(style: StrokeStyle(lineWidth: 16, lineCap: .round, lineJoin: .round))
-                    .foregroundColor(.theme.accent)
+                    .foregroundColor(Color.theme.accent)
                     .rotationEffect(Angle(degrees: 270.0))
                     .animation(.easeInOut(duration: 1.0), value: viewModel.completionPercentage)
                 
@@ -307,11 +308,11 @@ struct ProgressView: View {
                 VStack(spacing: 0) {
                     Text("\(Int(viewModel.completionPercentage * 100))%")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(.theme.text)
+                        .foregroundColor(Color.theme.text)
                     
                     Text("complete")
                         .font(.caption)
-                        .foregroundColor(.theme.subtext)
+                        .foregroundColor(Color.theme.subtext)
                 }
             }
             .frame(width: 130, height: 130)
@@ -332,11 +333,11 @@ struct ProgressView: View {
             Text("Milestones & Badges")
                 .font(.title3)
                 .fontWeight(.bold)
-                .foregroundColor(.theme.text)
+                .foregroundColor(Color.theme.text)
             
             if viewModel.earnedBadges.isEmpty {
                 Text("Complete challenges to earn badges!")
-                    .foregroundColor(.theme.subtext)
+                    .foregroundColor(Color.theme.subtext)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, AppSpacing.l)
             } else {
@@ -354,7 +355,7 @@ struct ProgressView: View {
                                 }
                         }
                     }
-                    .padding(.horizontal, AppSpacing.xs)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, AppSpacing.s)
                 }
             }
@@ -375,24 +376,28 @@ struct ProgressView: View {
                 Text("Consistency")
                     .font(.title3)
                     .fontWeight(.bold)
-                    .foregroundColor(.theme.text)
+                    .foregroundColor(Color.theme.text)
                 
                 Spacer()
                 
-                // Optional info button
+                // Info button with tooltip
                 Button(action: {
                     // Future implementation: show information about consistency tracking
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
                 }) {
                     Image(systemName: "info.circle")
-                        .foregroundColor(.theme.subtext)
+                        .foregroundColor(Color.theme.subtext)
                         .font(.system(size: 16))
                 }
                 .buttonStyle(AppScaleButtonStyle())
             }
+            .padding(.bottom, 4)
             
-            // New ConsistencyCalendarView component
+            // Calendar view with proper centering
             ConsistencyCalendarView(dateIntensityMap: viewModel.dateIntensityMap)
-                .padding(.vertical, AppSpacing.xs)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, AppSpacing.s)
         }
         .padding()
         .background(
@@ -400,7 +405,6 @@ struct ProgressView: View {
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .padding(.bottom, AppSpacing.s) // Ensure spacing between sections
     }
     
     // 4. Consolidated Pro Preview Section
@@ -428,12 +432,12 @@ struct ProgressView: View {
                         HStack {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 18))
-                                .foregroundColor(.theme.accent)
+                                .foregroundColor(Color.theme.accent)
                             
                             Text("Pro Feature")
                                 .font(.headline)
                                 .fontWeight(.semibold)
-                                .foregroundColor(.theme.accent)
+                                .foregroundColor(Color.theme.accent)
                             
                             Spacer()
                         }
@@ -441,7 +445,7 @@ struct ProgressView: View {
                         // Pro features description
                         Text("Unlock trends, pace, and detailed insights with Pro")
                             .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.theme.text)
+                            .foregroundColor(Color.theme.text)
                             .multilineTextAlignment(.center)
                             .padding(.vertical, AppSpacing.s)
                         
@@ -465,7 +469,7 @@ struct ProgressView: View {
                             } label: {
                                 Text("Maybe later")
                                     .font(.subheadline)
-                                    .foregroundColor(.theme.subtext)
+                                    .foregroundColor(Color.theme.subtext)
                             }
                         }
                     }
@@ -484,8 +488,12 @@ struct ProgressView: View {
     // 5. Daily Spark Section
     private var dailySparkSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            DailySparkView(currentStreak: viewModel.currentStreak, completionPercentage: viewModel.completionPercentage)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            // Use explicit parameter names to avoid ambiguity
+            DailySparkView(
+                currentStreak: viewModel.currentStreak,
+                completionPercentage: viewModel.completionPercentage
+            )
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
     
@@ -508,7 +516,7 @@ struct ProgressView: View {
                     // Badge icon
                     Image(systemName: badge.iconName)
                         .font(.system(size: 36, weight: .semibold))
-                        .foregroundColor(.theme.accent)
+                        .foregroundColor(Color.theme.accent)
                         .frame(width: 60, height: 60)
                         .background(
                             Circle()
@@ -521,7 +529,7 @@ struct ProgressView: View {
                 // Badge title
                 Text(badge.title)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.theme.text)
+                    .foregroundColor(Color.theme.text)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
@@ -555,7 +563,7 @@ struct ProgressView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.theme.subtext)
+                            .foregroundColor(Color.theme.subtext)
                     }
                     .padding()
                 }
@@ -571,19 +579,19 @@ struct ProgressView: View {
                     
                     Image(systemName: badge.iconName)
                         .font(.system(size: 80, weight: .semibold))
-                        .foregroundColor(.theme.accent)
+                        .foregroundColor(Color.theme.accent)
                 }
                 .padding(.bottom, AppSpacing.l)
                 
                 // Badge info
                 Text(badge.title)
                     .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
+                    .foregroundColor(Color.theme.text)
                     .multilineTextAlignment(.center)
                 
                 Text("You've earned this badge by demonstrating consistency and dedication to your goals.")
-                    .font(.body)
-                    .foregroundColor(.theme.subtext)
+                    .font(.system(size: 16))
+                    .foregroundColor(Color.theme.subtext)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AppSpacing.xl)
                 
@@ -620,22 +628,34 @@ struct ProgressView: View {
     // Loading view with progress indicator
     private var loadingView: some View {
         VStack(spacing: 20) {
-            SwiftUI.ProgressView()
+            // Use ActivityIndicator instead of ProgressView to avoid ambiguity
+            ActivityIndicator()
                 .scaleEffect(1.5)
-                .tint(.theme.accent)
             
             Text("Loading your progress...")
                 .font(.headline)
-                .foregroundColor(.theme.text)
+                .foregroundColor(Color.theme.text)
             
             Text("Hold tight as we fetch your latest data")
                 .font(.subheadline)
-                .foregroundColor(.theme.subtext)
+                .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.top, 40)
+    }
+    
+    // Standard activity indicator to use instead of SwiftUI.ProgressView
+    private struct ActivityIndicator: UIViewRepresentable {
+        func makeUIView(context: Context) -> UIActivityIndicatorView {
+            let view = UIActivityIndicatorView(style: .medium)
+            view.startAnimating()
+            view.color = UIColor(Color.theme.accent)
+            return view
+        }
+        
+        func updateUIView(_ uiView: UIActivityIndicatorView, context: Context) {}
     }
     
     // Error view with retry button
@@ -676,16 +696,16 @@ struct ProgressView: View {
         VStack(spacing: 20) {
             Image(systemName: "chart.bar")
                 .font(.system(size: 50))
-                .foregroundColor(.theme.accent.opacity(0.7))
+                .foregroundColor(Color.theme.accent.opacity(0.7))
             
             Text("No progress data yet")
                 .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(.theme.text)
+                .foregroundColor(Color.theme.text)
             
             Text("Complete challenges to see your progress.")
                 .font(.subheadline)
-                .foregroundColor(.theme.subtext)
+                .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             
@@ -707,18 +727,16 @@ struct ProgressView: View {
 }
 
 // MARK: - Preview
-struct ProgressView_Previews: PreviewProvider {
-    static var previews: some View {
-        SwiftUI.ProgressView()
-            .environmentObject(SubscriptionService.shared)
-            .environmentObject(NotificationService.shared)
-    }
-}
+// Removed preview code that was using mock data for submission to Apple
 
-// Add this at the bottom of the file
+// Helper views for the analytics screen
 struct ProgressAnalyticsView: View {
-    @EnvironmentObject var viewModel: UPViewModel
+    let viewModel: UPViewModel
     @Environment(\.dismiss) private var dismiss
+    
+    init(viewModel: UPViewModel) {
+        self.viewModel = viewModel
+    }
     
     var body: some View {
         NavigationView {
@@ -761,7 +779,7 @@ struct ProgressAnalyticsView: View {
                             Spacer()
                             Text("Activity visualization available in a future update")
                                 .font(.subheadline)
-                                .foregroundColor(.theme.subtext)
+                                .foregroundColor(Color.theme.subtext)
                                 .multilineTextAlignment(.center)
                                 .padding(.vertical, 60)
                             Spacer()
@@ -783,7 +801,7 @@ struct ProgressAnalyticsView: View {
                         dismiss()
                     } label: {
                         Text("Done")
-                            .foregroundColor(.theme.accent)
+                            .foregroundColor(Color.theme.accent)
                             .fontWeight(.medium)
                     }
                     .padding(.trailing)
@@ -806,11 +824,11 @@ struct AnalyticsStatCard: View {
             Text(value)
                 .font(.title)
                 .fontWeight(.bold)
-                .foregroundColor(.theme.accent)
+                .foregroundColor(Color.theme.accent)
             
             Text(title)
                 .font(.caption)
-                .foregroundColor(.theme.subtext)
+                .foregroundColor(Color.theme.subtext)
         }
         .frame(maxWidth: .infinity)
         .padding()
@@ -829,19 +847,19 @@ struct ProgressCircleView: View {
             Circle()
                 .stroke(lineWidth: lineWidth)
                 .opacity(0.3)
-                .foregroundColor(.theme.accent.opacity(0.3))
+                .foregroundColor(Color.theme.accent.opacity(0.3))
             
             Circle()
                 .trim(from: 0.0, to: CGFloat(min(progress, 1.0)))
                 .stroke(style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
-                .foregroundColor(.theme.accent)
+                .foregroundColor(Color.theme.accent)
                 .rotationEffect(Angle(degrees: 270.0))
                 .animation(.linear, value: progress)
             
             VStack {
                 Text("\(Int(progress * 100))%")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
+                    .foregroundColor(Color.theme.text)
             }
         }
         .frame(width: size, height: size)

@@ -11,9 +11,9 @@ struct ConsistencyCalendarView: View {
     @State private var animationProgress: CGFloat = 0
     
     // Settings
-    private let cellSize: CGFloat = 22
-    private let cellSpacing: CGFloat = 4
-    private let cornerRadius: CGFloat = 4
+    private let cellSize: CGFloat = 28
+    private let cellSpacing: CGFloat = 6
+    private let cornerRadius: CGFloat = 6
     
     // Get dates for the last 3 weeks starting correctly aligned with weekdays
     private var calendarDays: [(date: Date, intensity: Int, isToday: Bool)] {
@@ -54,34 +54,39 @@ struct ConsistencyCalendarView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Weekday headers once at the top
+        VStack(alignment: .leading, spacing: 12) {
+            // Weekday headers once at the top with better styling
             HStack(spacing: cellSpacing) {
                 ForEach(Array(Calendar.current.veryShortWeekdaySymbols.enumerated()), id: \.offset) { index, day in
                     Text(day)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.theme.subtext)
                         .frame(width: cellSize)
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 4)
             
-            // Calendar grid
+            // Calendar grid with proper spacing and centering
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellSize), spacing: cellSpacing), count: 7), spacing: cellSpacing) {
                 ForEach(calendarDays, id: \.date) { item in
                     calendarCell(for: item)
                         .id(item.date) // Important for animations
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 8)
             
-            // Legend at the bottom with smaller text and spacing
-            HStack(spacing: 10) {
+            // Legend at the bottom with better styling
+            HStack(spacing: 16) {
                 legendItem(color: Color.gray.opacity(0.2), text: "Missed")
                 legendItem(color: Color.theme.accent, text: "Checked in")
             }
-            .padding(.top, 4)
-            .padding(.horizontal, 2)
+            .padding(.top, 8)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
+        .padding(8)
         .onAppear {
             withAnimation(.easeInOut(duration: 0.5)) {
                 animationProgress = 1.0
@@ -96,36 +101,36 @@ struct ConsistencyCalendarView: View {
             ? Color.theme.accent  // Checked in - filled blue
             : Color.gray.opacity(0.2)  // Missed - light gray
         
-        return RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(color)
-            .frame(width: cellSize, height: cellSize)
-            .overlay(
-                // Today indicator with border
-                Group {
-                    if item.isToday {
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .stroke(Color.theme.accent, lineWidth: 1.5)
-                    }
-                }
-            )
-            .scaleEffect(animationProgress)
-            .opacity(animationProgress)
-            // Add spring animation when cell appears
-            .modifier(CheckInAnimationModifier(
-                intensity: item.intensity,
-                isToday: item.isToday
-            ))
+        return ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(color)
+                .frame(width: cellSize, height: cellSize)
+            
+            // Today indicator with better visibility
+            if item.isToday {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.theme.accent, lineWidth: 2)
+                    .frame(width: cellSize, height: cellSize)
+            }
+        }
+        .scaleEffect(animationProgress)
+        .opacity(animationProgress)
+        // Add spring animation when cell appears
+        .modifier(CheckInAnimationModifier(
+            intensity: item.intensity,
+            isToday: item.isToday
+        ))
     }
     
-    // Legend item helper with smaller styling
+    // Legend item helper with better styling
     private func legendItem(color: Color, text: String) -> some View {
-        HStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 2)
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 3)
                 .fill(color)
-                .frame(width: 10, height: 10)
+                .frame(width: 14, height: 14)
             
             Text(text)
-                .font(.caption2)
+                .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.theme.subtext)
         }
     }
