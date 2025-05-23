@@ -170,25 +170,27 @@ class NavigationRouter: ObservableObject {
     func changeTab(to tab: Int) {
         guard selectedTab != tab else { return }
         
-        // Immediately set changing state
-        withAnimation(.easeOut(duration: 0.1)) {
-            tabIsChanging = true
+        // Prevent changing tabs if already in transition
+        if tabIsChanging {
+            return
         }
         
-        // Use shorter delay before changing tab
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeOut(duration: 0.2)) {
-                self.selectedTab = tab
-            }
-            
-            // Reset changing state after tab animation completes
-            // Use shorter duration for better responsiveness
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    self.tabIsChanging = false
-                }
-            }
+        // Immediately set changing state
+        tabIsChanging = true
+        
+        // Use direct tab change with minimal animation
+        withAnimation(.easeOut(duration: 0.1)) {
+            self.selectedTab = tab
         }
+        
+        // Reset changing state after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            self.tabIsChanging = false
+        }
+    }
+    
+    deinit {
+        print("✅ NavigationRouter released")
     }
 }
 

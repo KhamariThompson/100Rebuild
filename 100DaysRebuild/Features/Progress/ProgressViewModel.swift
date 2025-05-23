@@ -121,6 +121,7 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
     deinit {
         loadTask?.cancel()
         cancellables.removeAll()
+        print("✅ Singleton released: \(Self.self)")
     }
     
     init() {
@@ -344,6 +345,14 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         // Fallback to start date plus days
         return calendar.date(byAdding: .day, value: days, to: challenge.startDate) ?? challenge.startDate
     }
+    
+    // Add a nonisolated method for deinit to use
+    nonisolated func cancelTaskOnly() {
+        Task { @MainActor in
+            loadTask?.cancel()
+            loadTask = nil
+        }
+    }
 }
 
 // MARK: - UPViewModel Implementation
@@ -474,11 +483,17 @@ class ProgressDashboardViewModel: ObservableObject {
     
     // Set up network monitoring
     private func setupNetworkMonitoring() {
-        NetworkMonitor.shared.connectionState
+        // Subscribe to network status changes
+        NotificationCenter.default.publisher(for: NetworkMonitor.networkStatusChanged)
             .receive(on: RunLoop.main)
-            .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
-            .sink { [weak self] isConnected in
-                self?.isNetworkConnected = isConnected
+            .sink { [weak self] notification in
+                guard let self = self else { return }
+                // Extract the isConnected parameter from the notification
+                if let userInfo = notification.userInfo,
+                   let isConnected = userInfo["isConnected"] as? Bool {
+                    // Update our local network status
+                    self.isNetworkConnected = isConnected
+                }
             }
             .store(in: &cancellables)
     }
@@ -521,12 +536,12 @@ class ProgressDashboardViewModel: ObservableObject {
                     print("ProgressDashboardViewModel - Starting data load")
                 }
                 
-                // Create a separate timeout task with more reasonable timeout (6 seconds)
+                // Create a separate timeout task with more reasonable timeout (4 seconds)
                 let timeoutTask = Task {
                     do {
-                        try await Task.sleep(nanoseconds: 6_000_000_000) // 6 seconds timeout
+                        try await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds timeout (reduced from 6)
                         if !Task.isCancelled && self.isLoading {
-                            print("ProgressDashboardViewModel - Loading timed out after 6 seconds")
+                            print("ProgressDashboardViewModel - Loading timed out after 4 seconds")
                             await MainActor.run {
                                 // Don't completely fail if we already have data - just keep old data
                                 if !self.hasData {
@@ -886,23 +901,19 @@ class ProgressDashboardViewModel: ObservableObject {
     }
     
     deinit {
+        print("✅ Released: ProgressDashboardViewModel")
+        loadTask?.cancel()
+        refreshDebounceTimer?.invalidate()
+        cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
-        cancelTaskOnly()
-        print("ProgressDashboardViewModel deinit - resources released")
-    }
-    
-    // Non-isolated method for deinit to use
-    nonisolated func cancelTaskOnly() {
-        Task { @MainActor in
-            loadTask?.cancel()
-            loadTask = nil
-        }
     }
     
     // Main actor method for UI updates
     @MainActor
     func cancelTasks() {
-        cancelTaskOnly()
+        // Cancel any running task
+        loadTask?.cancel()
+        loadTask = nil
         
         // Ensure we update the loading state
         if isLoading {
@@ -931,5 +942,13 @@ class ProgressDashboardViewModel: ObservableObject {
     var lastCheckInDate: Date? { 
         MainActor.assertIsolated()
         return userStatsService.userStats.lastCheckInDate 
+    }
+
+    // Non-isolated method for deinit to use
+    nonisolated func cancelTaskOnly() {
+        Task { @MainActor in
+            loadTask?.cancel()
+            loadTask = nil
+        }
     }
 } 

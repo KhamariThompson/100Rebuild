@@ -92,6 +92,7 @@ class SubscriptionService: NSObject, ObservableObject {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
+        print("✅ Singleton released: \(Self.self)")
     }
     
     @objc private func handleAuthStateChanged() {

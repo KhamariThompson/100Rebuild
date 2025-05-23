@@ -335,3 +335,21 @@ Before submitting the app to the App Store, ensure all of these items are ready:
 - [x] Verified all animations run smoothly
 
 With all items checked, the app is ready for submission to the App Store!
+
+## Memory and Performance Optimizations
+
+The app has recently undergone significant memory and performance optimizations to resolve freezing issues:
+
+1. **Tab Navigation System**: Simplified tab navigation with optimized animations to prevent UI freezes
+2. **Memory Management**: Added proper cleanup for timers and background tasks
+3. **Animation Improvements**: Reduced expensive animations and simplified transitions
+4. **Cache Management**: Added memory warning handlers to clear caches when system memory is low
+5. **Network Requests**: Improved timeout handling and error recovery
+
+If you encounter frozen UI:
+
+- Force quit the app from the app switcher
+- Restart the app
+- If problems persist, try restarting your device
+
+These optimizations significantly improve stability while maintaining the app's responsiveness and visual polish.

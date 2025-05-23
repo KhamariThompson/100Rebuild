@@ -34,6 +34,7 @@ public class NetworkMonitor: ObservableObject {
     
     deinit {
         stopMonitoring()
+        print("✅ Singleton released: \(Self.self)")
     }
     
     private func startMonitoring() {

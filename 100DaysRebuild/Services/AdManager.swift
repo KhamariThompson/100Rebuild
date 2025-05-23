@@ -7,38 +7,36 @@ class AdManager: ObservableObject {
     
     @Published private(set) var isShowingAds = false
     
-    private let subscriptionService = SubscriptionService.shared
+    // Remove direct reference to SubscriptionService to break circular dependency
+    // Instead, we'll check subscription status on-demand
     
     private init() {
-        // Set initial state based on subscription status
-        updateAdState()
+        // Set initial state - default to showing ads
+        isShowingAds = true
         
-        // Subscribe to subscription service changes
-        Task {
-            await monitorSubscriptionChanges()
-        }
+        // Update state based on current subscription status
+        updateAdState()
     }
     
     /// Updates the internal ad state based on Pro status
     func updateAdState() {
-        isShowingAds = !subscriptionService.isProUser
-    }
-    
-    /// Monitor for subscription changes to update ad state
-    private func monitorSubscriptionChanges() async {
-        // For now, we're just checking when we need to display ads
-        // In a real implementation, this would hook into a proper publisher from SubscriptionService
-        
-        // Perform initial check
-        updateAdState()
-        
-        // In a real implementation, we would observe subscription changes 
-        // and update the ad state accordingly
+        // Access SubscriptionService on-demand to avoid circular reference
+        isShowingAds = !SubscriptionService.shared.isProUser
     }
     
     /// Should we show ads to this user?
     func shouldShowAds() -> Bool {
-        return !subscriptionService.isProUser
+        // Access SubscriptionService on-demand to avoid circular reference
+        return !SubscriptionService.shared.isProUser
+    }
+    
+    /// Call this method when subscription status changes to update ad state
+    func refreshAdState() {
+        updateAdState()
+    }
+    
+    deinit {
+        print("✅ Singleton released: \(Self.self)")
     }
 }
 

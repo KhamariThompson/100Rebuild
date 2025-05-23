@@ -104,6 +104,10 @@ public class ThemeManager: ObservableObject {
     public func effectiveColorScheme(defaultScheme: ColorScheme = .light) -> ColorScheme? {
         return currentTheme.toColorScheme(defaultScheme: defaultScheme)
     }
+    
+    deinit {
+        print("✅ Singleton released: \(Self.self)")
+    }
 }
 
 // MARK: - SwiftUI Environment Extensions

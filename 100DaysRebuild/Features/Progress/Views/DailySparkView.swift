@@ -98,13 +98,6 @@ struct DailySparkView: View {
         .onAppear {
             // Start with a random message
             rotationIndex = Int.random(in: 0..<sparkContent.count)
-            
-            // Set up a timer to rotate content
-            Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    rotateContent()
-                }
-            }
         }
     }
     

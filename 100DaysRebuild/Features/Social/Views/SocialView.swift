@@ -6,6 +6,8 @@ struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject var networkMonitor: NetworkMonitor
     @State private var scrollOffset: CGFloat = 0
     
     // Animation states
@@ -314,10 +316,10 @@ struct SocialView: View {
                 .foregroundColor(.theme.text)
                 .padding(.horizontal, AppSpacing.xs)
             
-            // Social media buttons in an enhanced layout
+            // Social media buttons in a safer, simpler layout
             HStack(alignment: .top, spacing: AppSpacing.xl) {
                 // TikTok Button
-                SocialButton(
+                fixedSocialButton(
                     platform: "TikTok",
                     username: "@100days.site",
                     icon: "tiktok-icon",
@@ -325,7 +327,7 @@ struct SocialView: View {
                 )
                 
                 // X/Twitter Button
-                SocialButton(
+                fixedSocialButton(
                     platform: "X",
                     username: "@100DaysHQ",
                     icon: "x-icon",
@@ -333,7 +335,7 @@ struct SocialView: View {
                 )
                 
                 // Instagram Button
-                SocialButton(
+                fixedSocialButton(
                     platform: "Instagram",
                     username: "@100days.site",
                     icon: "instagram-icon",
@@ -360,6 +362,68 @@ struct SocialView: View {
                 .padding(.top, AppSpacing.s)
         }
         .padding(.bottom, AppSpacing.l)
+    }
+    
+    // Simplified social button without animations to fix EXC_BAD_ACCESS issues
+    private func fixedSocialButton(platform: String, username: String, icon: String, url: URL) -> some View {
+        Button {
+            // Open URL
+            UIApplication.shared.open(url)
+            
+            // Haptic feedback
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+        } label: {
+            VStack(spacing: AppSpacing.s) {
+                // Enhanced Icon with better styling
+                ZStack {
+                    Circle()
+                        .fill(getSocialColor(for: platform))
+                        .frame(width: 60, height: 60)
+                        .shadow(color: getSocialColor(for: platform).opacity(0.3), radius: 8, x: 0, y: 3)
+                    
+                    // App icon
+                    Image(icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .foregroundColor(.white)
+                }
+                
+                // Platform name and username
+                VStack(spacing: 4) {
+                    Text(platform)
+                        .font(AppTypography.subhead())
+                        .fontWeight(.semibold)
+                        .foregroundColor(.theme.text)
+                    
+                    Text(username)
+                        .font(AppTypography.footnote())
+                        .foregroundColor(.theme.subtext)
+                }
+            }
+            .padding(AppSpacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 5, x: 0, y: 3)
+            )
+        }
+        .buttonStyle(AppScaleButtonStyle())
+    }
+    
+    // Helper to get background color for different platforms
+    private func getSocialColor(for platform: String) -> Color {
+        switch platform {
+        case "TikTok":
+            return Color.black
+        case "X":
+            return Color(.systemBlue)
+        case "Instagram":
+            return Color.purple
+        default:
+            return Color.theme.accent
+        }
     }
     
     // MARK: - Helper Properties
@@ -625,134 +689,6 @@ struct FeatureTeaseCard: View {
             }
         }
     }
-}
-
-// Social Media Button
-struct SocialButton: View {
-    let platform: String
-    let username: String
-    let icon: String
-    let url: URL
-    
-    @State private var isPressed = false
-    @State private var isHovered = false
-    
-    var body: some View {
-        Button {
-            // Open URL
-            UIApplication.shared.open(url)
-            
-            // Haptic feedback
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
-        } label: {
-            VStack(spacing: AppSpacing.s) {
-                // Enhanced Icon with better styling
-                ZStack {
-                    Circle()
-                        .fill(getSocialBackgroundColor(for: platform))
-                        .frame(width: 60, height: 60)
-                        .shadow(color: getSocialBackgroundColor(for: platform).opacity(0.3), radius: 8, x: 0, y: 3)
-                    
-                    // App icon
-                    getIconView(for: platform, icon: icon)
-                        .font(.system(size: 28))
-                        .foregroundColor(getSocialIconColor(for: platform))
-                }
-                .scaleEffect(isHovered ? 1.05 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-                .onAppear {
-                    // Create subtle hover animation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
-                        withAnimation(.spring()) {
-                            isHovered = true
-                        }
-                        
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            withAnimation(.spring()) {
-                                isHovered = false
-                            }
-                        }
-                    }
-                }
-                
-                // Platform name and username with improved spacing
-                VStack(spacing: 4) {
-                    Text(platform)
-                        .font(AppTypography.subhead())
-                        .fontWeight(.semibold)
-                        .foregroundColor(.theme.text)
-                    
-                    Text(username)
-                        .font(AppTypography.footnote())
-                        .foregroundColor(.theme.subtext)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(AppSpacing.m)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: isPressed ? 2 : 5, x: 0, y: isPressed ? 1 : 3)
-            )
-        }
-        .buttonStyle(AppScaleButtonStyle())
-    }
-    
-    // Get the appropriate icon view based on platform
-    @ViewBuilder
-    private func getIconView(for platform: String, icon: String) -> some View {
-        if ["tiktok-icon", "x-icon", "instagram-icon"].contains(icon) {
-            // Use actual image assets
-            Image(icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 32, height: 32)
-        } else {
-            // Fallback to SF Symbols
-            Image(systemName: getSFSymbolFallback(for: icon))
-        }
-    }
-    
-    // Helper to get background color for different platforms
-    private func getSocialBackgroundColor(for platform: String) -> Color {
-        switch platform {
-        case "TikTok":
-            return Color.black
-        case "X":
-            return Color(.systemBlue)
-        case "Instagram":
-            return Color.purple
-        default:
-            return Color.theme.accent
-        }
-    }
-    
-    // Helper to get icon color for different platforms
-    private func getSocialIconColor(for platform: String) -> Color {
-        switch platform {
-        case "TikTok", "X", "Instagram":
-            return .white
-        default:
-            return Color.theme.accent
-        }
-    }
-    
-    // Helper to get SF Symbol fallbacks if needed
-    private func getSFSymbolFallback(for icon: String) -> String {
-        switch icon {
-        case "tiktok":
-            return "music.note.list"
-        case "x.logo":
-            return "x"
-        case "instagram.logo":
-            return "camera"
-        default:
-            return icon
-        }
-    }
-    
-    @Environment(\.colorScheme) private var colorScheme
 }
 
 /// Loading overlay view

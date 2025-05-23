@@ -40,16 +40,21 @@ extension UIApplication {
             
             // Instead of removing constraints, lower their priority
             for constraint in view.constraints {
-                if constraint.identifier == "assistantHeight" || 
-                   (constraint.firstAttribute == .height && constraint.firstItem === view) {
-                    print("Lowering priority for constraint: \(constraint)")
+                // Safely access constraint identifier to avoid EXC_BAD_ACCESS
+                if let identifier = constraint.identifier, 
+                   (identifier == "assistantHeight") {
+                    print("Lowering priority for constraint with identifier: \(identifier)")
+                    constraint.priority = .defaultLow
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    print("Lowering priority for height constraint affecting view")
                     constraint.priority = .defaultLow
                 }
             }
             
             // Specifically fix the constraint conflict from error message
             for constraint in view.superview?.constraints ?? [] {
-                if constraint.identifier == "assistantView.bottom" {
+                // Safely access constraint identifier
+                if let identifier = constraint.identifier, identifier == "assistantView.bottom" {
                     print("Found assistantView.bottom constraint, lowering priority")
                     constraint.priority = .defaultLow + 1
                 }
@@ -61,7 +66,8 @@ extension UIApplication {
                 if NSStringFromClass(type(of: parent)).contains("UIRemoteKeyboardPlaceholderView") {
                     print("Found _UIRemoteKeyboardPlaceholderView, fixing constraints")
                     for constraint in parent.constraints {
-                        if constraint.identifier == "accessoryView.bottom" {
+                        // Safely access constraint identifier
+                        if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
                             print("Found accessoryView.bottom constraint, lowering priority")
                             constraint.priority = .defaultHigh - 1
                         }
@@ -79,7 +85,8 @@ extension UIApplication {
         if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
             print("Found _UIRemoteKeyboardPlaceholderView directly, fixing constraints")
             for constraint in view.constraints {
-                if constraint.identifier == "accessoryView.bottom" {
+                // Safely access constraint identifier
+                if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
                     print("Found accessoryView.bottom constraint, lowering priority")
                     constraint.priority = .defaultHigh - 1
                 }
@@ -125,18 +132,31 @@ extension UIApplication {
         
         // Fix SystemInputAssistantView
         if viewClassName.contains("SystemInputAssistantView") {
-            for constraint in view.constraints where constraint.identifier == "assistantHeight" {
+            let constraintsToModify: [NSLayoutConstraint] = view.constraints.filter { constraint in
+                // Use a safer approach to check the constraint identifier
+                if let identifier = constraint.identifier {
+                    return identifier == "assistantHeight"
+                } else {
+                    // If constraint has no identifier but is a height constraint affecting this view
+                    return constraint.firstAttribute == .height && constraint.firstItem === view
+                }
+            }
+            
+            for constraint in constraintsToModify {
                 constraint.priority = .defaultLow
-                print("Fixed assistantHeight constraint in SystemInputAssistantView")
+                print("Fixed height constraint in SystemInputAssistantView")
             }
             view.setNeedsLayout()
         }
         
         // Fix _UIRemoteKeyboardPlaceholderView
         if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
-            for constraint in view.constraints where constraint.identifier == "accessoryView.bottom" {
-                constraint.priority = .defaultHigh - 1
-                print("Fixed accessoryView.bottom constraint in _UIRemoteKeyboardPlaceholderView")
+            for constraint in view.constraints {
+                // Safely check identifier to avoid crashes
+                if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
+                    constraint.priority = .defaultHigh - 1
+                    print("Fixed accessoryView.bottom constraint in _UIRemoteKeyboardPlaceholderView")
+                }
             }
             view.setNeedsLayout()
         }
@@ -146,7 +166,8 @@ extension UIApplication {
             // Look for incoming constraints
             for subview in view.subviews {
                 for constraint in subview.constraints {
-                    if constraint.identifier == "assistantView.bottom" {
+                    // Safely check identifier to avoid crashes
+                    if let identifier = constraint.identifier, identifier == "assistantView.bottom" {
                         constraint.priority = .defaultHigh - 1
                         print("Fixed assistantView.bottom constraint in _UIKBCompatInputView subview")
                     }

@@ -192,10 +192,8 @@ struct CheckInAnimationModifier: ViewModifier {
             .scaleEffect(hasAnimated ? 1.0 : (intensity > 0 ? 0.8 : 1.0))
             .animation(.spring(response: 0.3, dampingFraction: 0.6), value: intensity)
             .onAppear {
-                // Small delay to ensure cells animate in sequence
-                DispatchQueue.main.asyncAfter(deadline: .now() + (isToday ? 0.1 : 0.2)) {
-                    hasAnimated = true
-                }
+                // Animate immediately instead of with delay
+                hasAnimated = true
             }
             // Reset animation state if intensity changes
             .onChange(of: intensity) { newValue in
@@ -205,10 +203,8 @@ struct CheckInAnimationModifier: ViewModifier {
                         hasAnimated = false
                     }
                     
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                            hasAnimated = true
-                        }
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        hasAnimated = true
                     }
                 }
             }

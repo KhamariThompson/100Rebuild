@@ -271,4 +271,8 @@ class NotificationService: NSObject, ObservableObject {
         isDailyReminderEnabled = UserDefaults.standard.bool(forKey: "isDailyReminderEnabled")
         isStreakReminderEnabled = UserDefaults.standard.bool(forKey: "isStreakReminderEnabled")
     }
+    
+    deinit {
+        print("✅ Singleton released: \(Self.self)")
+    }
 } 

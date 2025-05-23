@@ -9,19 +9,24 @@ extension Notification.Name {
 }
 
 struct MainAppView: View {
+    // Keep only essential environment objects
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
+    @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
-    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
-    @EnvironmentObject var themeManager: ThemeManager
+    
     @Environment(\.colorScheme) private var colorScheme
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
-    @State private var showPaywall = false
     @State private var showAddAction = false
     @State private var safeAreaBottom: CGFloat = 0
+    
+    // Use StateObject for view-owned ViewModels
+    @StateObject private var viewModel = MainAppViewModel()
     
     // Accessibility settings
     @AppStorage("isLargeTextEnabled") private var isLargeTextEnabled = false
@@ -37,112 +42,60 @@ struct MainAppView: View {
     
     var body: some View {
         ZStack {
-            // Main tab view - using SwiftUI TabView for the container
+            // Main tab view
             ZStack {
                 Color.theme.background.ignoresSafeArea()
                 
                 TabView(selection: $router.selectedTab) {
                     // Challenges Tab
                     ChallengesView()
-                        .environmentObject(router)
                         .tag(0)
                     
                     // Progress Tab
                     ProgressView()
-                        .environmentObject(router)
                         .tag(1)
                     
-                    // Social Feed Tab (Disabled for now)
-                    ZStack(alignment: .bottom) {
-                        SocialView()
-                            .environmentObject(router)
-                        
-                        // Remove the Challenge a friend button as it's not implemented yet
-                    }
-                    .tag(2)
+                    // Social Feed Tab
+                    SocialView()
+                        .tag(2)
                     
                     // Profile Tab
                     ProfileView()
-                        .environmentObject(router)
                         .tag(3)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                // Fix: Use easeOut animation for smoother tab transitions
                 .animation(.easeOut(duration: 0.2), value: router.selectedTab)
-                .padding(.bottom, CalAIDesignTokens.tabBarHeight + safeAreaBottom + 10) // Added extra padding
-                .withTabTransition(router: router) // Apply transition effect to prevent flashing
+                .padding(.bottom, CalAIDesignTokens.tabBarHeight + safeAreaBottom + 10)
                 
-                // Only show the custom tab bar
                 VStack {
                     Spacer()
                     customTabBar
                 }
             }
             
-            // Paywall overlay
-            if showPaywall {
+            // Overlays
+            if viewModel.showPaywall {
                 paywallOverlay
             }
             
-            // Show notification permission request for new users
             if showNotificationSettings {
                 notificationPermissionOverlay
             }
             
-            // Add action overlay when showAddAction is true
             if showAddAction {
                 addActionOverlay
             }
         }
         .ignoresSafeArea(.keyboard)
         .accentColor(Color.theme.accent)
-        // Prevent unwanted animations but allow tab bar to remain visible
-        .transaction { transaction in
-            // Only disable animations for specific properties
-            if router.tabIsChanging {
-                transaction.animation = nil
-            }
+        .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { [weak viewModel] _ in
+            viewModel?.handleNotificationSettingsRequest()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
-            withAnimation {
-                showNotificationSettings = true
-            }
+        .onAppear { [weak viewModel] in
+            viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
-        .onAppear {
-            // Calculate safe area for tab bar
-            updateSafeAreaInsets()
-            
-            // Check onboarding status - we show subscription options after a short delay
-            let workItem = DispatchWorkItem {
-                Task {
-                    // Don't show paywall immediately after user authentication
-                    // Only show paywall if user hasn't seen it before AND has been using the app for some time
-                    if !subscriptionService.showPaywall && !subscriptionService.isProUser {
-                        // Check if user just signed in - in that case, don't show paywall yet
-                        let currentTime = Date()
-                        if let signInTime = userSession.lastSignInTime, 
-                           currentTime.timeIntervalSince(signInTime) > 300 { // Only show if user signed in more than 5 minutes ago
-                            withAnimation {
-                                showPaywall = true
-                                subscriptionService.showPaywall = true // Mark as seen
-                            }
-                        }
-                    }
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
-            
-            // Set up tab bar appearance
-            setupTabBarAppearance()
-        }
-        .onChange(of: UIDevice.current.orientation) { _ in
-            // Update safe area when device rotates
-            updateSafeAreaInsets()
-        }
-        .onReceive(subscriptionService.$showPaywall) { newValue in
-            withAnimation {
-                showPaywall = newValue
-            }
+        .onChange(of: UIDevice.current.orientation) { [weak viewModel] _ in
+            viewModel?.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
         }
     }
     
@@ -208,8 +161,8 @@ struct MainAppView: View {
                     hapticFeedback(.medium)
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         showAddAction = false
-                        // Would show paywall
-                        subscriptionService.showPaywall = true
+                        // Show paywall
+                        viewModel.showPaywallForFeature()
                     }
                 }
                 
@@ -242,16 +195,12 @@ struct MainAppView: View {
     
     private var paywallOverlay: some View {
         PaywallView()
-            .environmentObject(themeManager)
-            .withAppTheme() // Apply theme explicitly to the overlay
             .transition(.opacity)
             .zIndex(100)
     }
     
     private var notificationPermissionOverlay: some View {
         NotificationSettingsView(isPresented: $showNotificationSettings)
-            .environmentObject(themeManager)
-            .withAppTheme() // Apply theme explicitly to the overlay
             .transition(.opacity)
             .zIndex(101)
     }
@@ -347,10 +296,6 @@ struct MainAppView: View {
     private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         let generator = UIImpactFeedbackGenerator(style: style)
         generator.impactOccurred()
-    }
-    
-    private func setupTabBarAppearance() {
-        // Implementation of setupTabBarAppearance method
     }
     
     // MARK: - Helper Methods
@@ -473,13 +418,10 @@ struct ProfileTabView: View {
 
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
-        lightDarkVariants(title: "Main App") {
-            MainAppView()
-                .environmentObject(UserSession.shared)
-                .environmentObject(SubscriptionService.shared)
-                .environmentObject(NotificationService.shared)
-                .environmentObject(ThemeManager.shared)
-        }
+        MainAppView()
+            .environmentObject(UserSession.shared)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(NavigationRouter())
     }
 }
 

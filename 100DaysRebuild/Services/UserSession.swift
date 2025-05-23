@@ -48,23 +48,26 @@ class UserSession: ObservableObject {
     }
     
     deinit {
+        print("⚠️ UserSession deinit started")
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
+            stateListener = nil
         }
         networkMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
+        print("✅ UserSession cleanup completed")
     }
     
     private func setupNetworkMonitoring() {
-        networkMonitor.pathUpdateHandler = { [weak self] path in
+        weak var weakSelf = self
+        networkMonitor.pathUpdateHandler = { path in
             let isConnected = path.status == .satisfied
-            Task { @MainActor in
-                self?.isNetworkAvailable = isConnected
+            Task { @MainActor [weak weakSelf] in
+                guard let self = weakSelf else { return }
+                self.isNetworkAvailable = isConnected
                 
-                // If network becomes available and we're in an error state,
-                // attempt to refresh the auth state
-                if isConnected, case .error = self?.authState {
-                    self?.refreshAuthState()
+                if isConnected, case .error = self.authState {
+                    self.refreshAuthState()
                 }
             }
         }
@@ -119,11 +122,15 @@ class UserSession: ObservableObject {
         // Check for existing listener and remove it
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
+            stateListener = nil
         }
         
-        stateListener = auth.addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in
-                guard let self = self else { return }
+        // Create a weak reference to self for the listener
+        weak var weakSelf = self
+        
+        stateListener = auth.addStateDidChangeListener { _, user in
+            Task { @MainActor [weak weakSelf] in
+                guard let self = weakSelf else { return }
                 
                 if let user = user {
                     print("UserSession: User authenticated - \(user.uid)")
@@ -142,7 +149,7 @@ class UserSession: ObservableObject {
                     self.lastSignInTime = nil
                 }
                 
-                // Notify listeners about auth state change
+                // Notify listeners about auth state change using weak reference
                 self.authStateDidChangeHandler?()
                 
                 // Post notification for SubscriptionService

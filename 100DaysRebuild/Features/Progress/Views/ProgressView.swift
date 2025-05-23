@@ -68,7 +68,7 @@ struct ProgressDailyCheckIn: Identifiable {
 
 // MARK: - Main View
 struct ProgressView: View {
-    @EnvironmentObject var viewModel: UPViewModel
+    @EnvironmentObject var viewModel: ProgressDashboardViewModel
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
@@ -95,6 +95,9 @@ struct ProgressView: View {
     }
     
     private func refreshData() async {
+        // Cancel any existing task first
+        cancelCurrentTask()
+        
         guard shouldRefresh() && !isRefreshing else {
             print("ProgressView - Skipping refresh (too soon or already refreshing)")
             return
@@ -104,9 +107,36 @@ struct ProgressView: View {
         lastRefreshTime = Date()
         
         print("ProgressView - Refreshing data from all sources")
-        await viewModel.loadData(forceRefresh: true)
-        
-        isRefreshing = false
+        loadTask = Task {
+            // Add a timeout to prevent hanging
+            try? await withTimeout(seconds: 5) {
+                await viewModel.loadData(forceRefresh: true)
+            }
+            
+            // Ensure isRefreshing is reset even if there's an error
+            if !Task.isCancelled {
+                isRefreshing = false
+            }
+        }
+    }
+    
+    // Helper timeout function
+    private func withTimeout<T>(seconds: Double, operation: @escaping () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw CancellationError()
+            }
+            
+            // Return first result or throw first error
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
     }
     
     var body: some View {
@@ -191,7 +221,7 @@ struct ProgressView: View {
         }
         .fixedSheet(isPresented: $showAnalytics) {
             if #available(iOS 16.0, *) {
-                ProgressAnalyticsView(viewModel: viewModel)
+                ProgressAnalyticsView()
             } else {
                 Text("Advanced analytics requires iOS 16 or later.")
                     .padding()
@@ -488,7 +518,7 @@ struct ProgressView: View {
     // 5. Daily Spark Section
     private var dailySparkSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Use explicit parameter names to avoid ambiguity
+            // Use explicit parameter names to avoid ambiguity and remove Timer
             DailySparkView(
                 currentStreak: viewModel.currentStreak,
                 completionPercentage: viewModel.completionPercentage
@@ -731,12 +761,8 @@ struct ProgressView: View {
 
 // Helper views for the analytics screen
 struct ProgressAnalyticsView: View {
-    let viewModel: UPViewModel
     @Environment(\.dismiss) private var dismiss
-    
-    init(viewModel: UPViewModel) {
-        self.viewModel = viewModel
-    }
+    @EnvironmentObject private var viewModel: ProgressDashboardViewModel
     
     var body: some View {
         NavigationView {

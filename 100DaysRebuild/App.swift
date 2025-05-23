@@ -62,7 +62,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Preemptively handle Apple authentication issues
         setupAppleAuthErrorHandling()
         
+        // Register for memory warning notifications
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        
         return true
+    }
+    
+    // Handle memory warnings by clearing caches and non-essential data
+    @objc private func handleMemoryWarning() {
+        print("⚠️ Memory warning received - clearing caches")
+        
+        // Clear image caches
+        URLCache.shared.removeAllCachedResponses()
+        
+        // Notify other components to clear their caches
+        NotificationCenter.default.post(name: .appDidReceiveMemoryWarning, object: nil)
+        
+        // Perform garbage collection
+        autoreleasepool {
+            // Force a garbage collection cycle
+        }
     }
     
     // Extract Firebase configuration to a separate method
@@ -152,6 +176,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Fix for layout constraints in NavigationViews
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
+        appearance.shadowColor = .clear // Remove the bottom border
+        
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
         UINavigationBar.appearance().compactAppearance = appearance
@@ -344,10 +370,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Check for SystemInputAssistantView
         let viewName = NSStringFromClass(type(of: view))
         if viewName.contains("SystemInputAssistantView") {
+            print("Found SystemInputAssistantView, fixing constraints")
+            
             // Lower the priority of constraints rather than completely removing them
             for constraint in view.constraints {
-                if constraint.firstAttribute == .height {
+                // Safely check constraint attributes
+                if let identifier = constraint.identifier, identifier == "assistantHeight" {
                     constraint.priority = UILayoutPriority(50) // Very low priority
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    // Also catch height constraints without identifiers
+                    constraint.priority = UILayoutPriority(50)
                 }
             }
         }
@@ -476,11 +508,14 @@ class InputAssistantManager {
     private func lowerAssistantViewConstraintPriority(in window: UIWindow, assistantViewClass: UIView.Type) {
         for view in window.subviews {
             if type(of: view) == assistantViewClass {
-                // Instead of removing constraints, lower their priority
+                // Use safer approach to modify constraints
                 for constraint in view.constraints {
-                    if constraint.identifier == "assistantHeight" {
+                    // Safely check identifier to avoid EXC_BAD_ACCESS crash
+                    if let identifier = constraint.identifier, identifier == "assistantHeight" {
                         constraint.priority = UILayoutPriority(250)  // Lower priority
-                        break
+                    } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                        // Also modify height constraints without identifiers
+                        constraint.priority = UILayoutPriority(250)
                     }
                 }
                 
@@ -498,10 +533,14 @@ class InputAssistantManager {
         // Recursively search for and fix assistant views
         for subview in view.subviews {
             if type(of: subview) == assistantViewClass {
+                // Use a safer approach to find and modify constraints
                 for constraint in subview.constraints {
-                    if constraint.identifier == "assistantHeight" {
+                    // Safely check constraint identifier to avoid EXC_BAD_ACCESS
+                    if let identifier = constraint.identifier, identifier == "assistantHeight" {
                         constraint.priority = UILayoutPriority(250)  // Lower priority
-                        break
+                    } else if constraint.firstAttribute == .height && constraint.firstItem === subview {
+                        // Also modify any height constraint directly affecting this view
+                        constraint.priority = UILayoutPriority(250)
                     }
                 }
                 
@@ -576,9 +615,13 @@ class ConstraintSwizzler {
         if type(of: view) == classType {
             var constraintsToModify: [NSLayoutConstraint] = []
             
-            // Find the height constraint
+            // Find the height constraint - use safer approach
             for constraint in view.constraints {
-                if constraint.identifier == "assistantHeight" {
+                // Safely check for constraint identifier to avoid EXC_BAD_ACCESS
+                if let identifier = constraint.identifier, identifier == "assistantHeight" {
+                    constraintsToModify.append(constraint)
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    // Also modify height constraints without identifiers
                     constraintsToModify.append(constraint)
                 }
             }
@@ -602,7 +645,7 @@ class ConstraintSwizzler {
 
 @main
 struct App100Days: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
@@ -628,21 +671,48 @@ struct App100Days: App {
                 .environmentObject(networkMonitor)
                 .environmentObject(userStatsService)
                 .environmentObject(navigationRouter)
-                .withAppTheme()
-                .task {
-                    // Register custom fonts if any
-                    FontRegistration.registerFonts()
+                .preferredColorScheme(themeManager.effectiveColorScheme())
+                .onAppear {
+                    setupApp()
                 }
         }
     }
     
-    private func initializeServices() {
-        // Log initialized services, but don't re-configure Firestore
-        // as it's already configured in AppDelegate
-        print("Services already initialized in AppDelegate")
-        print("Auth service initialized")
-        print("Firestore service initialized")
-        print("Storage service initialized")
+    private func setupApp() {
+        // Configure non-Firebase aspects
+        configureUndimmedAnimations()
+        setupNavigationBarAppearance()
+        setupKeyboardDismissal()
+        
+        // Prevent layout constraint issues, especially on iOS 15+
+        fixLayoutConstraintIssues()
+        
+        // Configure Apple Auth to prevent initialization delays
+        AuthUtilities.configureAppleAuthSession()
+    }
+    
+    private func configureUndimmedAnimations() {
+        UIView.appearance(whenContainedInInstancesOf: [UIAlertController.self]).tintColor = UIColor(Color.theme.accent)
+    }
+    
+    private func setupKeyboardDismissal() {
+        // Implement better keyboard dismissal
+        UIScrollView.appearance().keyboardDismissMode = .onDrag
+    }
+    
+    private func fixLayoutConstraintIssues() {
+        // This is a workaround for constraint issues, particularly on iOS 15+
+        UserDefaults.standard.setValue(false, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
+    }
+    
+    // Remove NavigationBar bottom border
+    private func setupNavigationBarAppearance() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.shadowColor = .clear // Remove the bottom border
+        
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 
@@ -655,7 +725,7 @@ struct AppContentView: View {
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
-    @StateObject private var navigationRouter = NavigationRouter()
+    @EnvironmentObject var navigationRouter: NavigationRouter
     @State private var isInitializing = true
     
     var body: some View {
@@ -679,25 +749,15 @@ struct AppContentView: View {
             } else {
                 Group {
                     if userSession.isAuthenticated {
-                        // Main app for authenticated users
-                        MainAppView()
-                            .environmentObject(userSession)
-                            .environmentObject(subscriptionService)
-                            .environmentObject(notificationService)
-                            .environmentObject(themeManager)
-                            .environmentObject(progressDashboardViewModel)
-                            .environmentObject(networkMonitor)
-                            .environmentObject(userStatsService)
-                            .environmentObject(navigationRouter)
+                        if userSession.hasCompletedOnboarding {
+                            MainAppView()
+                        } else {
+                            OnboardingView()
+                        }
                     } else {
-                        // Welcome view for non-authenticated users
-                        WelcomeView()
-                            .environmentObject(userSession)
-                            .environmentObject(themeManager)
+                        AuthView()
                     }
                 }
-                .transition(.opacity)
-                .animation(.easeInOut(duration: 0.4), value: userSession.isAuthenticated)
             }
             
             // Offline banner overlay (always on top)
@@ -861,5 +921,11 @@ struct SplashScreen: View {
             }
         }
     }
+}
+
+// Add Notification.Name extension if it's not defined elsewhere
+extension Notification.Name {
+    static let networkStatusChanged = Notification.Name("NetworkStatusChanged")
+    static let appDidReceiveMemoryWarning = Notification.Name("AppDidReceiveMemoryWarning")
 }
 

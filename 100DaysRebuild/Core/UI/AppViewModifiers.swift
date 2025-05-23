@@ -130,19 +130,13 @@ struct TabTransitionModifier: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .opacity(router.tabIsChanging ? 0 : 1)
-            .blur(radius: router.tabIsChanging ? 5 : 0)
-            .animation(.easeInOut(duration: 0.2), value: router.tabIsChanging)
+            .opacity(router.tabIsChanging ? 0.6 : 1)
+            .animation(.easeInOut(duration: 0.15), value: router.tabIsChanging)
             .overlay(
-                // Add loading indicator during transition for better UX
-                ZStack {
+                Group {
                     if router.tabIsChanging {
                         Color.theme.background
-                            .opacity(0.5)
-                        
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
+                            .opacity(0.3)
                     }
                 }
             )

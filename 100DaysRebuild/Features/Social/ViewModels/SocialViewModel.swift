@@ -66,7 +66,14 @@ class SocialViewModel: ObservableObject {
     }
     
     deinit {
+        print("✅ Released: SocialViewModel")
         NotificationCenter.default.removeObserver(self)
+        // Cancel any async tasks
+        Task {
+            await MainActor.run {
+                isLoading = false
+            }
+        }
     }
     
     // MARK: - Public Methods
