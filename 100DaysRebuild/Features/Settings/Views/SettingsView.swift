@@ -88,6 +88,11 @@ struct SettingsView: View {
     var body: some View {
         // Break up the complex body expression into smaller components
         bodyContent
+            .sheet(isPresented: $subscriptionService.showPaywall) {
+                PaywallView()
+                    .environmentObject(subscriptionService)
+                    .environmentObject(themeManager)
+            }
     }
     
     // Main body content extracted to a separate computed property
