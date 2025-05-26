@@ -65,7 +65,7 @@ struct MainAppView: View {
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
                 .animation(.easeOut(duration: 0.2), value: router.selectedTab)
-                .padding(.bottom, CalAIDesignTokens.tabBarHeight + safeAreaBottom + 10)
+                .padding(.bottom, CalAIDesignTokens.tabBarHeight + 10)
                 
                 VStack {
                     Spacer()
@@ -279,13 +279,6 @@ struct MainAppView: View {
                 .background(Color.theme.surface.opacity(0.98))
             }
             .frame(height: CalAIDesignTokens.tabBarHeight)
-            
-            // Extra space that extends to the bottom safe area
-            if safeAreaBottom > 0 {
-                Rectangle()
-                    .fill(Color.theme.surface.opacity(0.98))
-                    .frame(height: safeAreaBottom)
-            }
         }
         .background(Color.theme.surface.opacity(0.98))
         .ignoresSafeArea(edges: .bottom)
