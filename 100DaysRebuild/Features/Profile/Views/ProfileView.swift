@@ -17,6 +17,11 @@ struct ProfileView: View {
     @State private var isShowingAnalytics = false
     @State private var isShowingNewChallenge = false
     @State private var isShowingUsernamePrompt = false
+    @State private var isShowingPhotoOptions = false
+    @State private var isShowingCameraPicker = false
+    @State private var isShowingPhotoLibrary = false
+    @State private var isShowingImageCropper = false
+    @State private var selectedImage: UIImage?
     @FocusState private var isUsernameFocused: Bool
     @State private var scrollOffset: CGFloat = 0
     
@@ -151,27 +156,104 @@ struct ProfileView: View {
                     dismissButton: .default(Text("OK"))
                 )
             }
-            .fullScreenCover(isPresented: $isShowingUsernamePrompt) {
-                UsernamePromptView(username: $viewModel.newUsername, onSave: {
+            .confirmationDialog("Choose Photo Source", isPresented: $isShowingPhotoOptions) {
+                Button("Camera") {
+                    isShowingCameraPicker = true
+                }
+                Button("Photo Library") {
+                    isShowingPhotoLibrary = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .photosPicker(
+                isPresented: $isShowingPhotoLibrary,
+                selection: $viewModel.selectedPhoto,
+                matching: .images,
+                photoLibrary: .shared()
+            )
+            .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
+                if let newValue = newValue {
+                    // Pre-load the image data
                     Task {
-                        await viewModel.saveUsername()
+                        do {
+                            let data = try await newValue.loadTransferable(type: Data.self)
+                            if let data = data, let image = UIImage(data: data) {
+                                // Immediately set the image and show cropper
+                                selectedImage = image
+                                isShowingImageCropper = true
+                            }
+                        } catch {
+                            print("Error loading image: \(error)")
+                        }
                     }
-                })
+                }
             }
-            .fixedSheet(isPresented: $isShowingSettings) {
-                SettingsView()
+            .sheet(isPresented: $isShowingCameraPicker) {
+                ImagePicker(selectedImage: $selectedImage, isPresented: $isShowingCameraPicker, source: .camera)
+                    .onDisappear {
+                        if let image = selectedImage {
+                            // Immediately show cropper when camera image is selected
+                            isShowingImageCropper = true
+                        }
+                    }
             }
-            .fixedSheet(isPresented: $isShowingAnalytics) {
-                Text("Profile Analytics")
-                    .font(.title)
-                    .padding()
+            .sheet(isPresented: $isShowingImageCropper) {
+                if let image = selectedImage {
+                    NavigationView {
+                        ImageCropperView(
+                            image: image,
+                            onCrop: { croppedImage in
+                                Task {
+                                    await MainActor.run {
+                                        viewModel.profileImage = croppedImage
+                                    }
+                                    await viewModel.processAndUploadImage(croppedImage)
+                                }
+                                isShowingImageCropper = false
+                                selectedImage = nil
+                            },
+                            onCancel: {
+                                isShowingImageCropper = false
+                                selectedImage = nil
+                            }
+                        )
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
+                    .ignoresSafeArea()
+                }
             }
-            .fixedSheet(isPresented: $isShowingNewChallenge) {
-                Text("New Challenge")
-                    .font(.title)
-                    .padding()
+            .sheet(isPresented: $isShowingSettings) {
+                NavigationView {
+                    SettingsView()
+                }
+            }
+            .sheet(isPresented: $isShowingAnalytics) {
+                NavigationView {
+                    Text("Profile Analytics")
+                        .font(.title)
+                        .padding()
+                }
+            }
+            .sheet(isPresented: $isShowingNewChallenge) {
+                NavigationView {
+                    Text("New Challenge")
+                        .font(.title)
+                        .padding()
+                }
+            }
+            .sheet(isPresented: $isShowingUsernamePrompt) {
+                NavigationView {
+                    UsernamePromptView(username: $viewModel.newUsername, onSave: {
+                        Task {
+                            await viewModel.saveUsername()
+                        }
+                    })
+                }
             }
             .onAppear {
+                // Apply fixes for photo picker presentation
+                AppFixes.shared.applyAllFixes()
+                
                 // Load user profile data
                 viewModel.loadUserProfile()
                 
@@ -207,39 +289,21 @@ struct ProfileView: View {
     
     // Hero Section with avatar, username, and join date
     private var profileHeroSection: some View {
-        VStack(spacing: 12) { // Reduced spacing between elements
-            ZStack {
-                // Profile Image
-                profileImageView
-                
-                // Edit photo button overlay
-                Circle()
-                    .fill(Color.black.opacity(0.4))
-                    .frame(width: 100, height: 100)
-                    .overlay(
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 30))
-                            .foregroundColor(.white)
-                    )
-                    .opacity(0.7)
-                    .photoSourcePicker(
-                        showSourceOptions: $viewModel.showPhotoSourceOptions,
-                        showCameraPicker: $viewModel.showCameraPicker,
-                        photosPickerSelection: $viewModel.selectedPhoto
-                    )
-                    .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
-                        if newValue != nil {
-                            viewModel.updateProfilePhoto()
-                        }
+        VStack(spacing: 12) {
+            // Profile Image with tap gesture
+            profileImageView
+                .onTapGesture {
+                    DispatchQueue.main.async {
+                        isShowingPhotoOptions = true
                     }
-            }
+                }
             
             // Username display with @ symbol
             Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
                 .font(AppTypography.title2())
                 .bold()
                 .foregroundColor(.theme.text)
-                .padding(.top, 4) // Reduced padding
+                .padding(.top, 4)
             
             // Join date only - streak info removed
             Text("Joined \(getMemberSinceDate())")

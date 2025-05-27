@@ -47,6 +47,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Configure RevenueCat after Firebase
         configureRevenueCat()
         
+        // Apply all app fixes using AppFixes utility
+        AppFixes.shared.applyAllFixes()
+        
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
         
