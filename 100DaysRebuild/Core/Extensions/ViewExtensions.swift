@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+import Foundation
+import Combine
+
+// Import for NavigationDebugModifier
+import UIKit.UIResponder
+import UIKit.UITextField
+import UIKit.UITextView
 
 // MARK: - UIApplication Extension to disable input assistants
 extension UIApplication {
@@ -19,14 +26,13 @@ extension UIApplication {
                     }
                 }
             } else {
-                // Fallback for older iOS versions
-                // Warning: Using deprecated UIApplication.windows
-                #if DEBUG
-                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                
-                for window in UIApplication.shared.windows {
-                    disableInputAssistantInView(window)
+                // Fallback for older iOS versions using the same Scene-based lookup
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        for window in windowScene.windows {
+                            disableInputAssistantInView(window)
+                        }
+                    }
                 }
             }
         }
@@ -114,10 +120,9 @@ extension UIApplication {
                     }
                 }
             } else {
-                #if DEBUG
-                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                windows = UIApplication.shared.windows
+                windows = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .flatMap { $0.windows }
             }
             
             // Search for the specific views mentioned in the error
@@ -189,6 +194,7 @@ extension View {
     func circularAvatarStyle(size: CGFloat, borderColor: Color = .theme.accent, borderWidth: CGFloat = 2) -> some View {
         return self
             .frame(width: size, height: size)
+            .aspectRatio(contentMode: .fill)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -282,11 +288,17 @@ extension View {
                     showCameraPicker.wrappedValue = true
                 }
                 Button("Photo Library") {
-                    // This will trigger the PhotosPicker
+                    // Trigger PhotosPicker by setting a temporary selection
+                    photosPickerSelection.wrappedValue = nil
                 }
                 Button("Cancel", role: .cancel) {}
             }
-            .photoPickerTrigger(selection: photosPickerSelection)
+            .photosPicker(
+                isPresented: showSourceOptions,
+                selection: photosPickerSelection,
+                matching: .images,
+                photoLibrary: .shared()
+            )
     }
 }
 
@@ -512,9 +524,38 @@ extension UIResponder {
     }
 }
 
-// NavigationDebounceModifier is defined in AppViewModifiers.swift
+// NOTE: NavigationDebounceModifier and NavigationDebugModifier are defined elsewhere
+// NavigationDebounceModifier is in this file for constraint fixing
+// NavigationDebugModifier is in AppViewModifiers.swift for view appearance logging
 
 // MARK: - Button Styles
 
 // NOTE: ScaleButtonStyle has been moved to Core/DesignSystem/Buttons.swift
 // Please use AppScaleButtonStyle from there instead.
+
+// MARK: - Navigation Constraint Fix Modifier
+/// Helps fix layout constraint warnings when navigating between views
+struct NavigationDebounceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                // Delay just enough to prevent keyboard snapshot warnings
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    // Fix any layout constraint issues
+                    UIApplication.fixConstraintConflict()
+                }
+            }
+    }
+}
+
+extension View {
+    /// Apply navigation constraint fixes to avoid layout warnings
+    func withNavigationFixes() -> some View {
+        self.modifier(NavigationDebounceModifier())
+    }
+    
+    /// Add logging for view appearance/disappearance for debugging
+    func withNavigationDebug() -> some View {
+        self.modifier(NavigationDebugModifier())
+    }
+}

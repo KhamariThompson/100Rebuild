@@ -213,6 +213,20 @@ struct PaywallView: View {
                         errorMessage = "Could not restore your previous purchase. Please try again later."
                     case .timeout:
                         errorMessage = "The purchase timed out. Please check your internet connection and try again."
+                    case .networkOffline:
+                        errorMessage = "You appear to be offline. Please check your internet connection and try again."
+                    case .networkError:
+                        errorMessage = "There was a network error. Please check your connection and try again."
+                    case .purchasePending:
+                        errorMessage = "Your purchase is pending approval. It will be available once approved."
+                    case .receiptInUse:
+                        errorMessage = "This receipt is already in use with a different account."
+                    case .productNotFound:
+                        errorMessage = "The subscription product could not be found. Please try again later."
+                    case .verificationFailed:
+                        errorMessage = "Purchase verification failed. Please contact support if this persists."
+                    case .userCancelled:
+                        errorMessage = "The purchase was cancelled."
                     case .unknown:
                         errorMessage = "An unknown error occurred. Please try again later."
                     }
@@ -278,7 +292,25 @@ struct PaywallView: View {
                         errorMessage = "Please sign in to your App Store account to restore purchases."
                     case .restoreFailed:
                         errorMessage = "Could not restore your previous purchase. Please try again later."
-                    default:
+                    case .timeout:
+                        errorMessage = "The restore operation timed out. Please check your internet connection and try again."
+                    case .networkOffline:
+                        errorMessage = "You appear to be offline. Please check your internet connection and try again."
+                    case .networkError:
+                        errorMessage = "There was a network error. Please check your connection and try again."
+                    case .purchasePending:
+                        errorMessage = "Your purchase is pending approval. It will be available once approved."
+                    case .receiptInUse:
+                        errorMessage = "This receipt is already in use with a different account."
+                    case .productNotFound:
+                        errorMessage = "The subscription product could not be found. Please try again later."
+                    case .verificationFailed:
+                        errorMessage = "Purchase verification failed. Please contact support if this persists."
+                    case .userCancelled:
+                        errorMessage = "The restore operation was cancelled."
+                    case .purchaseFailed:
+                        errorMessage = "There was an error with your previous purchase. Please contact support."
+                    case .unknown:
                         errorMessage = "An error occurred while restoring purchases. Please try again."
                     }
                 } else {
@@ -444,7 +476,7 @@ struct PaywallView: View {
                 Text(price)
                     .font(AppTypography.title3())
                     .fontWeight(.bold)
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
             }
             .zIndex(1)
             
@@ -457,7 +489,7 @@ struct PaywallView: View {
                 
                 Text("per month")
                     .font(AppTypography.headline())
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                     .padding(.leading, 30)
             }
             .padding(.leading, -15)
@@ -696,11 +728,12 @@ struct PaywallView: View {
                 HStack {
                     Text("Upgrade Now")
                         .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
                     
                     Text("- \(price)/month")
                         .font(.system(size: 16))
+                        .foregroundColor(.black)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
                 .background(

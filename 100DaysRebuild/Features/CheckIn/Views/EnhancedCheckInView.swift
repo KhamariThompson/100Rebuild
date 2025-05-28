@@ -151,13 +151,14 @@ struct EnhancedCheckInView: View {
             
             ScrollView {
                 VStack(spacing: AppSpacing.l) {
-                    // Header card
-                    VStack(spacing: AppSpacing.m) {
-                        headerView
-                        progressView
-                    }
-                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                    .padding(.top, AppSpacing.s)
+                    // Challenge title card
+                    challengeTitleCard
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.top, AppSpacing.l)
+                    
+                    // Progress card
+                    progressView
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                     
                     // Journal card
                     journalCard
@@ -175,7 +176,7 @@ struct EnhancedCheckInView: View {
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                         .padding(.bottom, AppSpacing.l)
                 }
-                .padding(.top, AppSpacing.m)
+                .padding(.top, AppSpacing.xl)
             }
             .safeAreaInset(edge: .top) {
                 HStack {
@@ -194,36 +195,92 @@ struct EnhancedCheckInView: View {
                     
                     Spacer()
                     
-                    Text("Check In")
+                    Text("Day \(challenge.daysCompleted + 1) Check-In")
                         .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
                         .foregroundColor(.theme.text)
                     
                     Spacer()
+                    
+                    // Balance the layout with an invisible element
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 24, height: 24)
                 }
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                .padding(.vertical, AppSpacing.s)
+                .background(
+                    Color.theme.background
+                        .opacity(0.95)
+                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 3, x: 0, y: 2)
+                        .blur(radius: 0.2)
+                )
             }
         }
     }
     
-    // MARK: - Individual Content Sections
+    // MARK: - UI Components
+    
+    // Challenge title card with icon
+    private var challengeTitleCard: some View {
+        VStack(alignment: .center, spacing: AppSpacing.s) {
+            // Challenge icon
+            Image(systemName: getChallengeIcon(title: challenge.title))
+                .font(.system(size: 36))
+                .foregroundColor(.theme.accent)
+                .frame(width: 72, height: 72)
+                .background(
+                    Circle()
+                        .fill(Color.theme.accent.opacity(0.12))
+                )
+                .padding(.bottom, AppSpacing.xs)
+            
+            // Challenge title
+            Text(challenge.title)
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.theme.text)
+                .multilineTextAlignment(.center)
+            
+            // Day counter
+            Text("Day \(challenge.daysCompleted + 1) of 100")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.theme.subtext)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.08), radius: 8, x: 0, y: 4)
+        )
+    }
     
     private var headerView: some View {
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
-            Text("Day \(challenge.daysCompleted + 1)")
-                .font(AppTypography.title2())
-                .fontWeight(.bold)
-                .foregroundColor(.theme.accent)
+            HStack {
+                // Date of check-in
+                Text(formattedDate)
+                    .font(AppTypography.caption1())
+                    .foregroundColor(.theme.subtext)
+                
+                Spacer()
+                
+                // Streak indicator
+                HStack(spacing: AppSpacing.xxs) {
+                    Image(systemName: "flame.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: AppSpacing.iconSizeSmall))
+                    
+                    Text("\(challenge.streakCount)")
+                        .font(AppTypography.caption1())
+                        .foregroundColor(.theme.subtext)
+                }
+            }
             
-            Text(challenge.title)
+            // Day indicator
+            Text("Day \(challenge.daysCompleted + 1) of 100")
                 .font(AppTypography.headline())
                 .foregroundColor(.theme.text)
-            
-            Text(formattedDate)
-                .font(AppTypography.subhead())
-                .foregroundColor(.theme.subtext)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-        .padding(.top, AppSpacing.xs)
     }
     
     private var progressView: some View {
@@ -276,346 +333,208 @@ struct EnhancedCheckInView: View {
     
     private var journalCard: some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
-            // Card header
+            // Section title
             HStack {
-                Text("Journal Your Progress")
-                    .font(.system(size: 18, weight: .semibold))
+                Image(systemName: "text.book.closed")
+                    .foregroundColor(.theme.accent)
+                    .font(.system(size: AppSpacing.iconSizeSmall))
+                
+                Text("Journal Entry")
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
                 
                 Spacer()
                 
                 // Character count indicator
                 Text("\(journalText.count)/500")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(journalText.count > 450 ? (journalText.count > 500 ? .red : .orange) : .theme.subtext)
-                    .opacity(journalText.isEmpty ? 0 : 1)
-                    .animation(.easeInOut(duration: 0.2), value: journalText.count)
+                    .font(AppTypography.caption2())
+                    .foregroundColor(journalText.count > 450 ? (journalText.count >= 500 ? .red : .orange) : .theme.subtext)
             }
             
-            // Improved journal text editor
+            // Text editor with placeholder
             ZStack(alignment: .topLeading) {
-                // Background with subtle gradient
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(isJournalFocused ? Color.theme.accent.opacity(0.7) : Color.theme.border, lineWidth: 1)
-                    )
-                    .shadow(color: isJournalFocused ? Color.theme.accent.opacity(0.1) : Color.clear, radius: 4, x: 0, y: 2)
-                
-                // Placeholder text
                 if journalText.isEmpty {
-                    Text("Share today's progress, insights, or thoughts...")
-                        .font(.system(size: 16))
-                        .foregroundColor(.theme.subtext.opacity(0.6))
-                        .padding(AppSpacing.m)
+                    Text("How did you feel about your progress today? (Optional)")
+                        .font(AppTypography.body())
+                        .foregroundColor(.theme.subtext.opacity(0.7))
+                        .padding(.top, 8)
+                        .padding(.leading, 4)
                 }
                 
-                // Actual text editor
                 TextEditor(text: $journalText)
-                    .font(.system(size: 16))
-                    .foregroundColor(.theme.text)
                     .focused($isJournalFocused)
-                    .scrollContentBackground(.hidden)
+                    .font(AppTypography.body())
+                    .foregroundColor(.theme.text)
+                    .frame(minHeight: 100)
                     .background(Color.clear)
-                    .frame(minHeight: 120, maxHeight: 200)
-                    .padding(AppSpacing.s)
-                    .onChange(of: journalText) { newValue in
-                        // Limit to 500 characters
+                    .onChange(of: journalText) { oldValue, newValue in
+                        // Limit text to 500 characters
                         if newValue.count > 500 {
                             journalText = String(newValue.prefix(500))
-                            
-                            // Provide haptic feedback for exceeding limit
-                            let generator = UINotificationFeedbackGenerator()
-                            generator.notificationOccurred(.warning)
                         }
                     }
             }
-            
-            // Optional inspirational prompt
-            if journalText.isEmpty && !isJournalFocused {
-                HStack(spacing: AppSpacing.xs) {
-                    Image(systemName: "lightbulb.fill")
-                        .font(.system(size: 12))
-                        .foregroundColor(.yellow.opacity(0.8))
-                    
-                    Text("Tip: Journaling helps track your progress over time")
-                        .font(.system(size: 12))
-                        .foregroundColor(.theme.subtext)
-                        .italic()
-                }
-                .padding(.top, 4)
-                .padding(.horizontal, 4)
-            }
+            .padding(AppSpacing.xs)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius - 4)
+                    .fill(Color.theme.surface.opacity(0.5))
+            )
         }
-        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-        .padding(.vertical, AppSpacing.m)
+        .padding(AppSpacing.cardPadding)
         .background(
             AppComponents.Card {
-                EmptyView()
+                VStack {
+                    // Your content here
+                }
             }
-            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
         )
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
     }
     
     private var photoUploadCard: some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
-            // Card header
+            // Section title
             HStack {
-                Text("Photo (Optional)")
-                    .font(.system(size: 18, weight: .semibold))
+                Image(systemName: "photo")
+                    .foregroundColor(.theme.accent)
+                    .font(.system(size: AppSpacing.iconSizeSmall))
+                
+                Text("Add Photo")
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
                 
                 Spacer()
                 
-                // Reset button - only show when image is selected
                 if selectedImage != nil {
-                    Button(action: {
-                        // Give haptic feedback
-                        let generator = UIImpactFeedbackGenerator(style: .light)
-                        generator.impactOccurred()
-                        
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedImage = nil
-                        }
-                    }) {
+                    Button(action: { selectedImage = nil }) {
                         Text("Clear")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.theme.accent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(
-                                Capsule()
-                                    .stroke(Color.theme.accent, lineWidth: 1)
-                            )
+                            .font(AppTypography.footnote())
+                            .foregroundColor(.red)
                     }
-                    .transition(.opacity.combined(with: .scale))
                 }
             }
             
-            // Image selection area
-            VStack {
+            // Photo selection area
+            ZStack {
                 if let image = selectedImage {
-                    // Selected image view with better styling
-                    ZStack(alignment: .topTrailing) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFit()
-                            .cornerRadius(12)
-                            .transition(.opacity.combined(with: .scale))
-                            .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.theme.border, lineWidth: 1)
-                            )
-                    }
-                    .frame(maxHeight: 200)
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 200)
+                        .cornerRadius(AppSpacing.cardCornerRadius - 4)
                 } else {
-                    // Photo picker button with better styling
-                    Button(action: {
-                        isShowingImagePicker = true
-                    }) {
+                    PhotosPicker(
+                        selection: $photoItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
                         VStack(spacing: AppSpacing.s) {
                             Image(systemName: "camera")
-                                .font(.system(size: 30))
-                                .foregroundColor(.theme.accent)
-                                .padding(.bottom, 4)
+                                .font(.system(size: 32))
+                                .foregroundColor(.theme.accent.opacity(0.8))
                             
-                            Text("Add a photo")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.theme.accent)
-                            
-                            Text("Tap to select from your library")
-                                .font(.system(size: 12))
+                            Text("Tap to add a photo (Optional)")
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.theme.subtext)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, AppSpacing.l)
+                        .frame(maxWidth: .infinity, minHeight: 120)
                         .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.theme.border.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [5]))
-                                .background(Color.theme.surface.opacity(0.5))
-                                .cornerRadius(12)
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius - 4)
+                                .fill(Color.theme.surface.opacity(0.5))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius - 4)
+                                        .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
+                                )
                         )
                     }
-                    .buttonStyle(AppScaleButtonStyle())
                 }
             }
-            .sheet(isPresented: $isShowingImagePicker) {
-                ImagePicker(selectedImage: $selectedImage, isPresented: $isShowingImagePicker, source: .photoLibrary)
-                    .onDisappear {
-                        if let selectedImage = selectedImage {
-                            // Process selected image - just update viewModel.selectedImage
-                            viewModel.selectedImage = selectedImage
-                            
-                            // Give haptic feedback for successful selection
-                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                            generator.impactOccurred()
-                        }
-                    }
+            .onChange(of: photoItem) { oldValue, newValue in
+                if let newValue = newValue {
+                    loadTransferable(from: newValue)
+                }
             }
         }
-        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-        .padding(.vertical, AppSpacing.m)
+        .padding(AppSpacing.cardPadding)
         .background(
             AppComponents.Card {
                 EmptyView()
             }
-            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
         )
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
     }
     
     private var timerCard: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Title with timer icon
-            HStack(spacing: AppSpacing.xs) {
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            // Section title
+            HStack {
                 Image(systemName: "timer")
-                    .font(.system(size: AppSpacing.iconSizeSmall))
                     .foregroundColor(.theme.accent)
+                    .font(.system(size: AppSpacing.iconSizeSmall))
                 
-                Text("Timer Session")
+                Text("Time Your Activity")
                     .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
+                
+                Spacer()
             }
             
             // Timer display and controls
             VStack(spacing: AppSpacing.m) {
-                HStack {
-                    Text(formattedElapsedTime)
-                        .font(.system(size: 42, weight: .bold, design: .monospaced))
-                        .foregroundColor(.theme.text)
-                        .frame(minWidth: 120)
-                    
-                    Spacer()
-                    
-                    // Timer controls
-                    HStack(spacing: AppSpacing.m) {
-                        Button(action: {
-                            if timerRunning {
-                                stopTimer()
-                            } else {
-                                startTimer()
-                            }
-                            
-                            // Give haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                            generator.impactOccurred()
-                            
-                        }) {
-                            Image(systemName: timerRunning ? "pause.fill" : "play.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .frame(width: 48, height: 48)
-                                .background(
-                                    Circle()
-                                        .fill(Color.theme.accent)
-                                )
-                        }
-                        
-                        Button(action: {
-                            resetTimer()
-                            
-                            // Give haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.impactOccurred()
-                            
-                        }) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 20))
-                                .foregroundColor(.theme.accent)
-                                .frame(width: 44, height: 44)
-                                .background(
-                                    Circle()
-                                        .stroke(Color.theme.accent, lineWidth: 1.5)
-                                )
-                        }
-                    }
-                }
+                // Elapsed time display
+                Text(formattedElapsedTime)
+                    .font(.system(size: 48, weight: .medium, design: .monospaced))
+                    .foregroundColor(timerRunning ? .theme.accent : .theme.text)
+                    .frame(maxWidth: .infinity)
                 
-                // Progress indicator
-                if timerRunning || elapsedTime > 0 {
-                    HStack(spacing: AppSpacing.xs) {
-                        Image(systemName: "hourglass")
-                            .font(.system(size: AppSpacing.iconSizeSmall))
-                            .foregroundColor(.theme.accent)
-                            .opacity(timerRunning ? 1.0 : 0.5)
-                        
-                        Text(timerRunning ? "Timer running..." : "Timer paused")
-                            .font(AppTypography.caption1())
-                            .foregroundColor(.theme.subtext)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    HStack(spacing: AppSpacing.xs) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: AppSpacing.iconSizeSmall))
-                            .foregroundColor(.theme.accent)
-                        
-                        Text("This challenge requires a timed session")
-                            .font(AppTypography.caption1())
-                            .foregroundColor(.theme.subtext)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Start/Stop button
+                Button(action: toggleTimer) {
+                    Text(timerRunning ? "Stop Timer" : "Start Timer")
+                        .font(AppTypography.headline())
+                        .foregroundColor(.white)
+                        .padding(.vertical, AppSpacing.s)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius - 4)
+                                .fill(timerRunning ? Color.red : Color.theme.accent)
+                        )
                 }
             }
+            .padding(AppSpacing.s)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius - 4)
+                    .fill(Color.theme.surface.opacity(0.5))
+            )
         }
-        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-        .padding(.vertical, AppSpacing.m)
+        .padding(AppSpacing.cardPadding)
         .background(
             AppComponents.Card {
                 EmptyView()
             }
-            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
         )
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
     }
     
     private var checkInButton: some View {
-        Button(action: {
-            // Add haptic feedback for better user experience
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
-            
-            performCheckIn()
-        }) {
+        Button(action: performCheckIn) {
             HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 20))
-                
-                Text("Complete Check-In")
-                    .font(.system(size: 18, weight: .bold))
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, AppSpacing.buttonVerticalPadding)
-            .background(
-                ZStack {
-                    // Base gradient
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    
-                    // Subtle animation overlay for visual interest
-                    if isValidCheckIn && !viewModel.isLoading {
-                        HStack(spacing: 0) {
-                            ForEach(0..<5) { i in
-                                Rectangle()
-                                    .fill(Color.white.opacity(0.1))
-                                    .frame(width: 30, height: 60)
-                                    .rotationEffect(.degrees(45))
-                                    .offset(x: CGFloat.random(in: -120...120))
-                                    .blendMode(.plusLighter)
-                            }
-                        }
-                        .mask(
-                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                .fill(Color.white)
-                        )
-                    }
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                        .padding(.trailing, 10)
                 }
-                .cornerRadius(AppSpacing.cardCornerRadius)
-                .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 4)
+                
+                Text("Complete Day \(challenge.daysCompleted + 1)")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.black)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.m)
+            .background(
+                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                    .fill(Color.theme.accent)
+                    .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 4)
             )
             .overlay(
                 // Loading indicator when in progress
@@ -634,6 +553,16 @@ struct EnhancedCheckInView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func performCheckIn() {
+        Task {
+            await viewModel.checkIn(
+                for: challenge,
+                timedDuration: Int(elapsedTime / 60)
+            )
+            showSuccessView = true
+        }
+    }
     
     private var formattedDate: String {
         let formatter = DateFormatter()
@@ -664,50 +593,39 @@ struct EnhancedCheckInView: View {
         }
     }
     
-    private func startTimer() {
-        timerRunning = true
-        
-        if elapsedTime == 0 {
-            timerStartTime = Date()
-        } else {
-            // Resume from current elapsed time
-            timerStartTime = Date().addingTimeInterval(-elapsedTime)
-        }
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
-            guard let startTime = timerStartTime else { return }
-            elapsedTime = Date().timeIntervalSince(startTime)
-        }
-    }
-    
-    private func stopTimer() {
-        timerRunning = false
-        timer?.invalidate()
-        timer = nil
-    }
-    
-    private func resetTimer() {
-        stopTimer()
-        elapsedTime = 0
-        timerStartTime = nil
-    }
-    
-    private func performCheckIn() {
-        // Stop timer if running
+    private func toggleTimer() {
         if timerRunning {
-            stopTimer()
-        }
-        
-        // Process check-in
-        Task {
-            await viewModel.checkIn(
-                for: challenge,
-                timedDuration: elapsedTime > 0 ? Int(elapsedTime) : nil
-            )
+            // Stop the timer
+            timer?.invalidate()
+            timerRunning = false
+        } else {
+            // Start the timer
+            timerStartTime = Date()
+            timerRunning = true
             
-            // Show success view after check-in
-            if !viewModel.showError {
-                showSuccessView = true
+            // Create a timer that fires every second
+            timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+                if let startTime = timerStartTime {
+                    elapsedTime = Date().timeIntervalSince(startTime) + elapsedTime
+                    timerStartTime = Date()
+                }
+            }
+        }
+    }
+    
+    private func loadTransferable(from imageSelection: PhotosPickerItem) {
+        imageSelection.loadTransferable(type: Data.self) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let data):
+                    if let data = data, let image = UIImage(data: data) {
+                        self.selectedImage = image
+                    } else {
+                        print("Failed to load image data")
+                    }
+                case .failure(let error):
+                    print("Image transfer failed: \(error)")
+                }
             }
         }
     }

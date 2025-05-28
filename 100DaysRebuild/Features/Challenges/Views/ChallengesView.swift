@@ -587,6 +587,8 @@ struct EditChallengeSheet: View {
     @State private var title: String
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isTitleFocused: Bool
+    @State private var showDeleteConfirmation = false
+    @State private var isSaving = false
     
     init(viewModel: ChallengesViewModel, challenge: Challenge) {
         self.viewModel = viewModel
@@ -596,75 +598,241 @@ struct EditChallengeSheet: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                if viewModel.isOffline {
-                    Section {
-                        HStack {
-                            Image(systemName: "wifi.slash")
-                                .foregroundColor(.yellow)
-                            Text("You're offline. Changes will be saved locally.")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
+            ZStack {
+                Color.theme.background.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if viewModel.isOffline {
+                            HStack {
+                                Image(systemName: "wifi.slash")
+                                    .foregroundColor(.yellow)
+                                Text("You're offline. Changes will be saved locally.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.yellow.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .padding(.bottom, 8)
+                        }
+                        
+                        // Challenge Title Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Challenge Title")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            TextField("Enter challenge title", text: $title)
+                                .font(.body)
+                                .padding()
+                                .background(Color.theme.surface)
+                                .cornerRadius(12)
+                                .focused($isTitleFocused)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.theme.accent.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+                        
+                        // Challenge Progress Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Progress Details")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                                .padding(.bottom, 4)
+                            
+                            // Progress bar
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Days Completed")
+                                        .font(.subheadline)
+                                        .foregroundColor(.theme.text)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(challenge.daysCompleted) / 100")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.theme.accent)
+                                }
+                                
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        // Background track
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(height: 12)
+                                        
+                                        // Filled portion with gradient
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [.theme.accent, .theme.accent.opacity(0.7)]),
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                            .frame(width: max(12, geo.size.width * challenge.progressPercentage), height: 12)
+                                    }
+                                }
+                                .frame(height: 12)
+                            }
+                            .padding(.bottom, 8)
+                            
+                            Divider()
+                                .padding(.vertical, 4)
+                            
+                            // Stats grid
+                            VStack(spacing: 16) {
+                                // Current Streak
+                                HStack(spacing: 16) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "flame.fill")
+                                            .foregroundColor(.orange)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Current Streak")
+                                                .font(.subheadline)
+                                                .foregroundColor(.theme.subtext)
+                                            
+                                            Text("\(challenge.streakCount) days")
+                                                .font(.headline)
+                                                .foregroundColor(.theme.text)
+                                        }
+                                    }
+                                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                                    
+                                    // Started On
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "calendar")
+                                            .foregroundColor(.theme.accent)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Started On")
+                                                .font(.subheadline)
+                                                .foregroundColor(.theme.subtext)
+                                            
+                                            Text(challenge.startDate, style: .date)
+                                                .font(.headline)
+                                                .foregroundColor(.theme.text)
+                                        }
+                                    }
+                                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                                }
+                                
+                                Divider()
+                                
+                                // Last Modified
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock")
+                                        .foregroundColor(.theme.accent)
+                                        .font(.system(size: 18))
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Last Modified")
+                                            .font(.subheadline)
+                                            .foregroundColor(.theme.subtext)
+                                        
+                                        Text(challenge.lastModified, style: .date)
+                                            .font(.headline)
+                                            .foregroundColor(.theme.text)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding()
+                        .background(Color.theme.surface)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        
+                        // Save Button
+                        Button(action: {
+                            isSaving = true
+                            Task {
+                                await viewModel.updateChallenge(id: challenge.id, title: title)
+                                isSaving = false
+                                dismiss()
+                            }
+                        }) {
+                            HStack {
+                                if isSaving {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .padding(.trailing, 8)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18))
+                                }
+                                
+                                Text("Save Changes")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(title.isEmpty ? Color.gray : Color.theme.accent)
+                            )
+                        }
+                        .disabled(title.isEmpty || isSaving)
+                        
+                        // Delete Button
+                        Button(action: {
+                            showDeleteConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 18))
+                                
+                                Text("Archive Challenge")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red.opacity(0.7), lineWidth: 1)
+                            )
+                        }
+                        .alert("Archive Challenge?", isPresented: $showDeleteConfirmation) {
+                            Button("Cancel", role: .cancel) {}
+                            Button("Archive", role: .destructive) {
+                                Task {
+                                    await viewModel.archiveChallenge(challenge)
+                                    dismiss()
+                                }
+                            }
+                        } message: {
+                            Text("This will archive your challenge and it won't appear in your active challenges list. Your progress data will be preserved.")
                         }
                     }
-                }
-                
-                Section(header: Text("Challenge Details")) {
-                    TextField("Title", text: $title)
-                        .focused($isTitleFocused)
-                }
-                
-                Section(header: Text("Challenge Progress")) {
-                    HStack {
-                        Text("Days Completed")
-                        Spacer()
-                        Text("\(challenge.daysCompleted) / 100")
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Current Streak")
-                        Spacer()
-                        Text("\(challenge.streakCount) days")
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Started On")
-                        Spacer()
-                        Text(challenge.startDate, style: .date)
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Last Modified")
-                        Spacer()
-                        Text(challenge.lastModified, style: .date)
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-                
-                Section {
-                    Button("Save Changes") {
-                        Task {
-                            await viewModel.updateChallenge(id: challenge.id, title: title)
-                            dismiss()
-                        }
-                    }
-                    .disabled(title.isEmpty)
-                }
-                
-                Section {
-                    Button("Delete Challenge", role: .destructive) {
-                        Task {
-                            await viewModel.archiveChallenge(challenge)
-                            dismiss()
-                        }
-                    }
+                    .padding()
                 }
             }
             .navigationTitle("Edit Challenge")
-            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.theme.accent)
+                }
+            }
             .onAppear {
                 // Auto-focus the title field when the view appears
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {

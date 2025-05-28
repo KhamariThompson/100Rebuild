@@ -3,6 +3,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import Network
 import Firebase
+import RevenueCat
 
 enum AuthState {
     case loading
@@ -15,10 +16,10 @@ enum AuthState {
 class UserSession: ObservableObject {
     static let shared = UserSession()
     
-    @Published private(set) var authState: AuthState = .loading
-    @Published private(set) var isAuthenticated = false
+    @Published var authState: AuthState = .loading
+    @Published var isAuthenticated = false
     @Published private(set) var hasCompletedOnboarding = false
-    @Published private(set) var currentUser: FirebaseAuth.User?
+    @Published var currentUser: FirebaseAuth.User?
     @Published private(set) var username: String?
     @Published private(set) var photoURL: URL?
     @Published var isNetworkAvailable = true
@@ -255,11 +256,10 @@ class UserSession: ObservableObject {
         } catch {
             print("UserSession: Error loading user profile - \(error.localizedDescription)")
             // Log detailed error info for debugging
-            if let nsError = error as NSError? {
-                print("UserSession: Error domain: \(nsError.domain), code: \(nsError.code)")
-                if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-                    print("UserSession: Underlying error: \(underlyingError.localizedDescription)")
-                }
+            let nsError = error as NSError
+            print("UserSession: Error domain: \(nsError.domain), code: \(nsError.code)")
+            if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("UserSession: Underlying error: \(underlyingError.localizedDescription)")
             }
             
             self.errorMessage = "Error loading profile: \(error.localizedDescription)"
@@ -478,62 +478,135 @@ class UserSession: ObservableObject {
     func signOutWithoutThrowing() async {
         print("DEBUG: UserSession: Starting sign out process")
         
+        // Create a variable to track whether we've successfully signed out
+        var didSignOut = false
+        
+        // Reset state first to avoid race conditions with navigation
+        await MainActor.run {
+            // Reset state before attempting Firebase sign out
+            // This ensures UI transitions happen immediately
+            authState = .signedOut
+            currentUser = nil
+            isAuthenticated = false
+            errorMessage = nil
+            
+            // Immediately post notification to trigger navigation
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ForceNavigateToWelcome"),
+                object: nil
+            )
+        }
+        
+        // Create a task for Firebase sign out
+        // Using a separate task allows us to continue even if sign out fails
+        let signOutTask = Task {
+            do {
+                // Add a small delay to ensure UI updates before Firebase operations
+                try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                
+                // Remove existing auth state listener first
+                if let listener = stateListener {
+                    auth.removeStateDidChangeListener(listener)
+                    stateListener = nil
+                    print("DEBUG: UserSession: Removed auth state listener")
+                }
+                
+                // Try to sign out using Firebase Auth
+                try auth.signOut()
+                print("DEBUG: UserSession: Successfully signed out from Firebase Auth")
+                
+                // Now reset remaining state properties
+                await MainActor.run {
+                    username = nil
+                    photoURL = nil
+                    hasCompletedOnboarding = false
+                    lastSignInTime = nil
+                }
+                
+                // Force post a notification about auth state change
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("AuthStateChanged"),
+                    object: nil
+                )
+                
+                // Set up a new auth state listener
+                setupAuthStateListener()
+                
+                // Mark as successfully signed out
+                didSignOut = true
+                
+                print("DEBUG: UserSession: Successfully completed sign out process")
+            } catch let error {
+                print("DEBUG: UserSession: Error during sign out - \(error.localizedDescription)")
+                
+                // Even if Firebase sign out fails, ensure state is reset
+                await forceResetState()
+                
+                // Mark as signed out despite error (we've reset state)
+                didSignOut = true
+            }
+        }
+        
+        // Create a timeout task
+        let timeoutTask = Task {
+            try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            if !didSignOut {
+                print("DEBUG: UserSession: Sign out timed out, forcing state reset")
+                signOutTask.cancel()
+                await forceResetState()
+            }
+        }
+        
+        // Wait for either sign out to complete or timeout
+        // If timeout, forceResetState will be called
         do {
-            // Remove existing auth state listener first
+            try await signOutTask.value
+            timeoutTask.cancel()
+        } catch {
+            // Task was cancelled or failed
+            if !didSignOut {
+                await forceResetState()
+            }
+            timeoutTask.cancel()
+        }
+    }
+    
+    // Helper method to force state reset in case of sign out failure
+    private func forceResetState() async {
+        await MainActor.run {
+            // Remove listener if it exists
             if let listener = stateListener {
                 auth.removeStateDidChangeListener(listener)
                 stateListener = nil
             }
             
-            // Try to sign out using Firebase Auth
-            try auth.signOut()
+            // Reset all state properties
+            authState = .signedOut
+            currentUser = nil
+            isAuthenticated = false
+            username = nil
+            photoURL = nil
+            hasCompletedOnboarding = false
+            errorMessage = nil
+            lastSignInTime = nil
             
-            // Reset local state immediately
-            await MainActor.run {
-                authState = .signedOut
-                currentUser = nil
-                isAuthenticated = false
-                username = nil
-                photoURL = nil
-                hasCompletedOnboarding = false
-                errorMessage = nil
-                lastSignInTime = nil
-            }
+            // Post navigation notification to ensure UI updates
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ForceNavigateToWelcome"),
+                object: nil
+            )
             
-            // Force post a notification about auth state change
+            // Force post auth state change notification
             NotificationCenter.default.post(
                 name: NSNotification.Name("AuthStateChanged"),
                 object: nil
             )
-            
-            // Set up a new auth state listener
-            setupAuthStateListener()
-            
-            print("DEBUG: UserSession: Successfully signed out user")
-        } catch {
-            print("DEBUG: UserSession: Error during sign out - \(error.localizedDescription)")
-            
-            // Even if Firebase sign out fails, reset local state
-            await MainActor.run {
-                authState = .signedOut
-                currentUser = nil
-                isAuthenticated = false
-                username = nil
-                photoURL = nil
-                hasCompletedOnboarding = false
-                errorMessage = nil
-                lastSignInTime = nil
-            }
-            
-            // Force post a notification about auth state change
-            NotificationCenter.default.post(
-                name: NSNotification.Name("AuthStateChanged"),
-                object: nil
-            )
-            
-            // Set up a new auth state listener
-            setupAuthStateListener()
         }
+        
+        // Set up a new auth state listener
+        setupAuthStateListener()
+        
+        print("DEBUG: UserSession: Forced state reset completed")
     }
     
     func updateUsername(_ newUsername: String) async throws {
@@ -683,17 +756,104 @@ class UserSession: ObservableObject {
                          userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
         }
         
+        // Create a timeout task
+        let timeoutTask = Task {
+            try await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            throw NSError(domain: "UserSession", code: 102,
+                         userInfo: [NSLocalizedDescriptionKey: "Account deletion timed out. Please try again later."])
+        }
+        
         do {
+            // Check if user was recently authenticated
+            let lastAuthTime = user.metadata.lastSignInDate ?? Date(timeIntervalSince1970: 0)
+            let timeSinceAuth = Date().timeIntervalSince(lastAuthTime)
+            
+            // If it's been more than 30 minutes since authentication, require reauthentication
+            if timeSinceAuth > 1800 {
+                throw NSError(domain: "UserSession", code: 103,
+                             userInfo: [NSLocalizedDescriptionKey: "For security reasons, you need to sign in again before deleting your account."])
+            }
+            
             // 1. Delete all user data from Firestore first
+            print("Starting user data deletion for userId: \(userId)")
             try await FirebaseService.shared.deleteUserData(userId: userId)
+            print("Successfully deleted user data from Firestore")
             
-            // 2. Delete the actual Firebase Auth account
+            // 2. Unlink from RevenueCat if needed
+            try? await Purchases.shared.logOut()
+            print("Logged out from RevenueCat")
+            
+            // 3. Clear cached content
+            try? await URLCache.shared.removeAllCachedResponses()
+            print("Cleared URL cache")
+            
+            // 4. Delete the actual Firebase Auth account
             try await user.delete()
+            print("Successfully deleted Firebase Auth account")
             
-            // 3. Clean up local state - Auth state listener will handle this
+            // 5. Reset local state
+            await MainActor.run {
+                // Remove auth state listener first to prevent race conditions
+                if let listener = self.stateListener {
+                    auth.removeStateDidChangeListener(listener)
+                    self.stateListener = nil
+                }
+                
+                // Reset important state properties
+                self.authState = .signedOut
+                self.currentUser = nil
+                self.isAuthenticated = false
+                self.username = nil
+                self.photoURL = nil
+                self.hasCompletedOnboarding = false
+                self.errorMessage = nil
+                self.lastSignInTime = nil
+            }
+            
+            // Post notification for app-wide state reset
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserAccountDeleted"),
+                object: nil
+            )
+            
+            // Cancel the timeout task
+            timeoutTask.cancel()
+            
+            // Add a small delay to allow state updates to propagate
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // 6. Reinitialize auth state listener for future sign-ins
+            setupAuthStateListener()
+            
+            return
         } catch {
-            authState = .error(error)
-            errorMessage = "Error deleting account: \(error.localizedDescription)"
+            // Cancel the timeout task
+            timeoutTask.cancel()
+            
+            // Log the specific error
+            print("Error during account deletion: \(error.localizedDescription)")
+            
+            // Set error state but don't reset other properties
+            await MainActor.run {
+                self.authState = .error(error)
+                self.errorMessage = "Error deleting account: \(error.localizedDescription)"
+            }
+            
+            // Re-throw with enhanced context if needed
+            let nsError = error as NSError
+            if nsError.domain == AuthErrorDomain {
+                switch nsError.code {
+                case AuthErrorCode.requiresRecentLogin.rawValue:
+                    throw NSError(domain: "UserSession", code: 104,
+                                userInfo: [NSLocalizedDescriptionKey: "For security reasons, you need to sign in again before deleting your account."])
+                case AuthErrorCode.networkError.rawValue:
+                    throw NSError(domain: "UserSession", code: 105,
+                                userInfo: [NSLocalizedDescriptionKey: "Network error. Please check your connection and try again."])
+                default:
+                    break
+                }
+            }
+            
             throw error
         }
     }

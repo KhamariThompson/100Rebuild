@@ -56,13 +56,80 @@ class AuthService {
     func resetPassword(email: String) async -> Bool {
         do {
             print("AuthService: Sending password reset email to: \(email)")
-            try await Auth.auth().sendPasswordReset(withEmail: email)
-            print("AuthService: Password reset email sent successfully")
-            await userSession.handlePasswordResetSuccess(email: email)
-            return true
+            if email.isEmpty {
+                let error = NSError(domain: "AuthService", code: 101, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Email address cannot be empty"])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            if !email.contains("@") || !email.contains(".") {
+                let error = NSError(domain: "AuthService", code: 102, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Please enter a valid email address"])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            // Check network availability
+            guard NetworkMonitor.shared.isConnected else {
+                let error = NSError(domain: "AuthService", code: 103, 
+                                  userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network and try again."])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            // Set timeout for the operation
+            let resetTask = Task {
+                try await Auth.auth().sendPasswordReset(withEmail: email)
+            }
+            
+            // Create a timeout task
+            let timeoutTask = Task {
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                resetTask.cancel()
+                throw NSError(domain: "AuthService", code: 104,
+                            userInfo: [NSLocalizedDescriptionKey: "Password reset request timed out. Please try again."])
+            }
+            
+            do {
+                // Wait for reset task to complete
+                try await resetTask.value
+                timeoutTask.cancel()
+                
+                print("AuthService: Password reset email sent successfully")
+                await userSession.handlePasswordResetSuccess(email: email)
+                return true
+            } catch {
+                timeoutTask.cancel()
+                throw error
+            }
         } catch {
-            print("AuthService: Password reset failed - \(error.localizedDescription)")
-            await userSession.handlePasswordResetError(error, email: email)
+            let nsError = error as NSError
+            
+            // Handle specific Firebase Auth errors with user-friendly messages
+            let errorMessage: String
+            if nsError.domain == AuthErrorDomain {
+                switch nsError.code {
+                case AuthErrorCode.userNotFound.rawValue:
+                    errorMessage = "No account exists with this email address."
+                case AuthErrorCode.invalidEmail.rawValue:
+                    errorMessage = "The email address is invalid."
+                case AuthErrorCode.tooManyRequests.rawValue:
+                    errorMessage = "Too many requests. Please try again later."
+                default:
+                    errorMessage = "Failed to send password reset email: \(nsError.localizedDescription)"
+                }
+            } else if nsError.domain == NSURLErrorDomain {
+                errorMessage = "Network error. Please check your connection and try again."
+            } else {
+                errorMessage = "Failed to send password reset email: \(nsError.localizedDescription)"
+            }
+            
+            let customError = NSError(domain: "AuthService", code: nsError.code, 
+                                    userInfo: [NSLocalizedDescriptionKey: errorMessage])
+            
+            print("AuthService: Password reset failed - \(customError.localizedDescription)")
+            await userSession.handlePasswordResetError(customError, email: email)
             return false
         }
     }
@@ -214,7 +281,7 @@ class AuthService {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         let hashString = hashedData.compactMap {
-            String(format: "%%02x", $0)
+            String(format: "%02x", $0)
         }.joined()
         
         return hashString

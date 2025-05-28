@@ -47,9 +47,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Configure RevenueCat after Firebase
         configureRevenueCat()
         
-        // Apply all app fixes using AppFixes utility
-        AppFixes.shared.applyAllFixes()
-        
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
         
@@ -364,8 +361,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap { $0.windows }
         } else {
-            // For iOS < 15, use the deprecated API
-            return UIApplication.shared.windows
+            // For iOS < 15, use the Scene-based lookup which is safer than the deprecated API
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
     }
     
@@ -495,14 +494,13 @@ class InputAssistantManager {
                     }
                 }
             } else {
-                // For iOS < 15, use the deprecated API
-                #if DEBUG
-                print("Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                
-                // swiftlint:disable:next deprecated
-                for window in UIApplication.shared.windows {
-                    self.lowerAssistantViewConstraintPriority(in: window, assistantViewClass: assistantViewClass)
+                // For iOS < 15, use the Scene-based lookup
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        for window in windowScene.windows {
+                            self.lowerAssistantViewConstraintPriority(in: window, assistantViewClass: assistantViewClass)
+                        }
+                    }
                 }
             }
         }
@@ -603,8 +601,10 @@ class ConstraintSwizzler {
                 }
             }
         } else {
-            // For iOS < 15, use the deprecated API
-            windows = UIApplication.shared.windows
+            // For iOS < 15, use the Scene-based lookup
+            windows = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
         
         // Find and fix constraints in each window
@@ -657,6 +657,7 @@ struct App100Days: App {
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var userStatsService = UserStatsService.shared
     @StateObject private var navigationRouter = NavigationRouter()
+    @StateObject private var badgeService = BadgeService.shared
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -674,6 +675,7 @@ struct App100Days: App {
                 .environmentObject(networkMonitor)
                 .environmentObject(userStatsService)
                 .environmentObject(navigationRouter)
+                .environmentObject(badgeService)
                 .preferredColorScheme(themeManager.effectiveColorScheme())
                 .onAppear {
                     setupApp()
@@ -728,39 +730,54 @@ struct AppContentView: View {
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
-    @EnvironmentObject var navigationRouter: NavigationRouter
+    @EnvironmentObject var badgeService: BadgeService
+    @StateObject private var navigationRouter = NavigationRouter()
     @State private var isInitializing = true
+    @State private var forceWelcomeView = false
+    
+    // Track previous auth state to prevent flickering
+    @State private var previousAuthState: Bool? = nil
     
     var body: some View {
         ZStack {
-            // Background color for the entire app
+            // Background color for the entire app - always present for consistent visual
             Color.theme.background
                 .ignoresSafeArea()
             
-            // Content based on state
+            // Content based on state with controlled transitions
             if isInitializing {
+                // Initial splash screen
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
                         // Delay to show splash screen briefly
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            withAnimation(.easeInOut(duration: 0.4)) {
+                            // Capture auth state before finishing initialization
+                            previousAuthState = userSession.isAuthenticated
+                            
+                            withAnimation(Animation.easeInOut(duration: 0.4)) {
                                 isInitializing = false
                             }
                         }
                     }
             } else {
+                // Controlled view transitions based on authentication state
                 Group {
-                    if userSession.isAuthenticated {
-                        if userSession.hasCompletedOnboarding {
-                            MainAppView()
-                        } else {
-                            OnboardingView()
-                        }
+                    if shouldShowWelcomeView {
+                        WelcomeView()
+                            .transition(.opacity)
+                    } else if !userSession.hasCompletedOnboarding {
+                        OnboardingView()
+                            .transition(.opacity)
                     } else {
-                        AuthView()
+                        MainAppView()
+                            .transition(.opacity)
                     }
                 }
+                .environmentObject(navigationRouter)
+                .animation(Animation.easeInOut(duration: 0.3), value: userSession.isAuthenticated)
+                .animation(Animation.easeInOut(duration: 0.3), value: userSession.hasCompletedOnboarding)
+                .animation(Animation.easeInOut(duration: 0.3), value: forceWelcomeView)
             }
             
             // Offline banner overlay (always on top)
@@ -770,10 +787,41 @@ struct AppContentView: View {
                     Spacer()
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut, value: networkMonitor.isConnected)
+                .animation(Animation.easeInOut, value: networkMonitor.isConnected)
                 .zIndex(100) // Ensure it's on top
             }
         }
+        .onChange(of: userSession.isAuthenticated) { _, newValue in
+            // Only animate if we have a previous state and it's different
+            if let previous = previousAuthState, previous != newValue {
+                withAnimation(Animation.easeInOut(duration: 0.3)) {
+                    // Update state with animation
+                }
+            }
+            // Always update the previous state
+            previousAuthState = newValue
+        }
+        .onAppear {
+            // Listen for force navigation to welcome screen
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("ForceNavigateToWelcome"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                withAnimation(Animation.easeInOut(duration: 0.3)) {
+                    forceWelcomeView = true
+                    // Reset after a short delay to prevent issues with future sign-ins
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        forceWelcomeView = false
+                    }
+                }
+            }
+        }
+    }
+    
+    // Computed property to determine if welcome view should show
+    private var shouldShowWelcomeView: Bool {
+        return !userSession.isAuthenticated || forceWelcomeView
     }
 }
 
@@ -912,13 +960,13 @@ struct SplashScreen: View {
             .opacity(opacity)
             .onAppear {
                 // Subtle animations
-                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                withAnimation(Animation.spring(response: 0.8, dampingFraction: 0.7)) {
                     opacity = 1.0
                     scale = 1.0
                 }
                 
                 // Subtle rotation animation for the checkmark
-                withAnimation(.easeInOut(duration: 1.2)) {
+                withAnimation(Animation.easeInOut(duration: 1.2)) {
                     rotation = 360
                 }
             }

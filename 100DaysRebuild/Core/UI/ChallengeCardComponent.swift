@@ -12,10 +12,19 @@ public struct ChallengeCardComponent: View {
     @State private var isAnimating = false
     @State private var scale: CGFloat = 1.0
     @State private var isPressed = false
+    @State private var confettiCounter = 0
     
     // Display state
     @State private var isPerformingCheckIn = false
     @State private var isCheckedIn = false
+    @State private var showConfetti = false
+    
+    // Background tint based on challenge type
+    private var backgroundTint: Color {
+        // Generate a subtle background tint based on challenge title
+        let hue = Double(abs(challenge.title.hashValue % 360)) / 360.0
+        return Color(hue: hue, saturation: 0.1, brightness: 1.0)
+    }
     
     // Changed from public to internal initializer since Challenge is an internal type
     init(challenge: Challenge, onCheckIn: @escaping () -> Void) {
@@ -44,9 +53,13 @@ public struct ChallengeCardComponent: View {
         
         // Optimistically update UI immediately
         isCheckedIn = true
+        showConfetti = true
         
         // Call the check-in action (which will show the check-in sheet)
         onCheckIn()
+        
+        // Animate checkmark completion
+        confettiCounter += 1
         
         // Reset animation after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -55,6 +68,11 @@ public struct ChallengeCardComponent: View {
                 scale = 1.0
             }
             isPerformingCheckIn = false
+            
+            // Stop confetti after the animation duration
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                showConfetti = false
+            }
         }
     }
     
@@ -69,7 +87,7 @@ public struct ChallengeCardComponent: View {
                     .frame(width: 36, height: 36)
                     .background(
                         Circle()
-                            .fill(Color.theme.accent.opacity(0.08))
+                            .fill(Color.theme.accent.opacity(0.12))
                     )
                 
                 VStack(alignment: .leading, spacing: AppSpacing.xxs) {
@@ -86,29 +104,24 @@ public struct ChallengeCardComponent: View {
                 
                 Spacer()
                 
-                // Streak & completion % on right side
-                VStack(alignment: .trailing, spacing: AppSpacing.xxs) {
-                    // Streak count with flame emoji
-                    HStack(spacing: 4) {
-                        Text("🔥")
-                            .font(.system(size: 13))
-                        Text("\(challenge.streakCount)")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(.theme.text)
-                    }
-                    
-                    // Completion percentage
-                    Text("\(Int(challenge.progressPercentage * 100))%")
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
-                        .foregroundColor(.theme.accent)
-                }
+                // Tag showing challenge type with custom tint
+                Text(getChallengeTag())
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(backgroundTint)
+                    )
+                    .padding(.trailing, 2)
             }
             .padding(.horizontal, AppSpacing.m)
             .padding(.top, AppSpacing.m)
             .padding(.bottom, AppSpacing.s)
             
             // Progress bar
-            ProgressBarView(progress: challenge.progressPercentage)
+            ChallengeProgressBar(progress: Double(challenge.daysCompleted) / 100.0)
                 .padding(.horizontal, AppSpacing.m)
             
             // Check-in button or completed status
@@ -120,13 +133,47 @@ public struct ChallengeCardComponent: View {
         .background(
             RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(0.06), radius: 4, x: 0, y: 1)
+                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 6, x: 0, y: 2)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .stroke(backgroundTint, lineWidth: 1)
+                        .opacity(0.5)
+                )
+        )
+        .overlay(
+            ZStack {
+                if showConfetti {
+                    ConfettiView(intensity: 1.0, duration: 3.0)
+                        .allowsHitTesting(false)
+                        .id(confettiCounter) // Force view refresh on each check-in
+                }
+            }
         )
         .scaleEffect(scale)
         .onAppear {
             // Start subtle pulse animation for active challenges
             withAnimation(Animation.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
                 isAnimating = true
+            }
+        }
+    }
+    
+    // Get a tag for the challenge type
+    private func getChallengeTag() -> String {
+        if challenge.isTimed {
+            return "Timed"
+        } else {
+            let lowercaseTitle = challenge.title.lowercased()
+            if lowercaseTitle.contains("workout") || lowercaseTitle.contains("exercise") {
+                return "Fitness"
+            } else if lowercaseTitle.contains("read") || lowercaseTitle.contains("book") {
+                return "Reading"
+            } else if lowercaseTitle.contains("meditat") {
+                return "Wellness"
+            } else if lowercaseTitle.contains("code") || lowercaseTitle.contains("program") {
+                return "Coding"
+            } else {
+                return "Daily"
             }
         }
     }
@@ -154,12 +201,12 @@ public struct ChallengeCardComponent: View {
             } else if challenge.isCompletedToday || isCheckedIn {
                 // Today's check-in completed
                 HStack {
-                    Image(systemName: "checkmark.circle")
+                    Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                     
                     Text("Completed Today")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundColor(.theme.text)
+                        .foregroundColor(.green.opacity(0.8))
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
@@ -172,13 +219,9 @@ public struct ChallengeCardComponent: View {
                 // Needs check-in today
                 Button(action: handleCheckIn) {
                     HStack {
-                        Text("Check In")
+                        Text("Mark Complete ✅")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        Image(systemName: "checkmark.circle")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(.black)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
@@ -195,7 +238,7 @@ public struct ChallengeCardComponent: View {
 }
 
 /// A simple progress bar view to display challenge progress
-struct ProgressBarView: View {
+struct ChallengeProgressBar: View {
     let progress: Double
     
     var body: some View {

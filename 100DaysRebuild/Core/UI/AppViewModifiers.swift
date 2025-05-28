@@ -124,25 +124,6 @@ struct FixNavigationLayoutModifier: ViewModifier {
     }
 }
 
-// MARK: - Tab Transition Modifier
-struct TabTransitionModifier: ViewModifier {
-    @ObservedObject var router: NavigationRouter
-    
-    func body(content: Content) -> some View {
-        content
-            .opacity(router.tabIsChanging ? 0.6 : 1)
-            .animation(.easeInOut(duration: 0.15), value: router.tabIsChanging)
-            .overlay(
-                Group {
-                    if router.tabIsChanging {
-                        Color.theme.background
-                            .opacity(0.3)
-                    }
-                }
-            )
-    }
-}
-
 // MARK: - Card Shadow Modifier
 struct CardShadowModifier: ViewModifier {
     let shadowRadius: CGFloat
@@ -291,11 +272,6 @@ extension View {
         }
     }
     
-    /// Applies a transition effect during tab changes
-    func withTabTransition(router: NavigationRouter) -> some View {
-        self.modifier(TabTransitionModifier(router: router))
-    }
-    
     /// Applies a standard card shadow
     func cardShadow(radius: CGFloat = 10, opacity: Double = 0.1) -> some View {
         self.modifier(CardShadowModifier(shadowRadius: radius, shadowOpacity: opacity))
@@ -327,7 +303,7 @@ extension View {
 
 // MARK: - Navigation Debug Modifier
 /// A modifier that helps debug navigation issues by printing path changes
-struct NavigationDebounceModifier: ViewModifier {
+struct NavigationDebugModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onAppear {

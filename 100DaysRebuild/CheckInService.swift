@@ -296,6 +296,11 @@ public class CheckInService {
                     return
                 }
                 
+                // Check for badge unlocks after successful check-in
+                Task {
+                    await BadgeService.shared.evaluateBadgesAfterCheckIn(challengeId: challengeId)
+                }
+                
                 continuation.resume(returning: true)
             }
         }

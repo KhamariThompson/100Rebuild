@@ -30,7 +30,7 @@ struct NewChallengeView: View {
         "checkmark.circle.fill", "figure.run", "book.fill", "heart.fill", 
         "brain.head.profile", "drop.fill", "camera.fill", "music.note",
         "paintbrush.fill", "gamecontroller.fill", "leaf.fill", "sun.max.fill",
-        "moon.fill", "guitar", "briefcase.fill", "pills.fill",
+        "moon.fill", "music.note.list", "briefcase.fill", "pills.fill",
         "fork.knife", "cup.and.saucer.fill", "bicycle", "clock.fill"
     ]
     
@@ -614,7 +614,7 @@ struct NewChallengeView: View {
         case 3: return "laptopcomputer"
         case 4: return "brain.head.profile"
         case 5: return "drop.fill"
-        case 6: return "pencil.and.paper" 
+        case 6: return "doc.text.fill" 
         case 7: return "camera.fill"
         case 8: return "music.note"
         default: return "star.fill"

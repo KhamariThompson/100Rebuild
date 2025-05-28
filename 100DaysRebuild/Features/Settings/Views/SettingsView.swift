@@ -51,6 +51,9 @@ struct SettingsView: View {
     var initialSection: SettingsSectionType?
     @State private var scrollToSection: SettingsSectionType?
     
+    // Add a state variable to track if view is active
+    @State private var viewIsActive = true
+    
     // State
     @State private var activeSheet: ActiveSheet?
     @State private var isRestoringPurchases = false
@@ -78,6 +81,11 @@ struct SettingsView: View {
     @State private var isUpdatingDisplayName = false
     @State private var displayNameErrorMessage: String? = nil
     
+    // Bio state
+    @State private var userBio: String = ""
+    @State private var isEditingBio = false
+    @State private var isUpdatingBio = false
+    
     // Presentation and gestures 
     @State private var dragOffset: CGFloat = 0
     private var isDraggable: Bool = true
@@ -92,6 +100,22 @@ struct SettingsView: View {
                 PaywallView()
                     .environmentObject(subscriptionService)
                     .environmentObject(themeManager)
+            }
+            .onAppear {
+                viewIsActive = true
+                syncWithNotificationService()
+                selectedTheme = themeManager.currentTheme
+                
+                // Load user's display name
+                Task {
+                    await loadUserProfile()
+                }
+                
+                // Scroll to the specified section if needed
+                scrollToInitialSectionIfNeeded()
+            }
+            .onDisappear {
+                viewIsActive = false
             }
     }
     
@@ -117,7 +141,6 @@ struct SettingsView: View {
                 )
             )
         )
-        .environment(\.isGestureActive, isGestureActive)
     }
     
     // Extract sheet presentation to a separate method
@@ -230,18 +253,6 @@ struct SettingsView: View {
     // Apply event handlers
     private func applyEventHandlers(_ content: some View) -> some View {
         content
-            .onAppear {
-                syncWithNotificationService()
-                selectedTheme = themeManager.currentTheme
-                
-                // Load user's display name
-                Task {
-                    await loadUserProfile()
-                }
-                
-                // Scroll to the specified section if needed
-                scrollToInitialSectionIfNeeded()
-            }
             .onReceive(NotificationCenter.default.publisher(for: .appThemeDidChange)) { notification in
                 // Update selectedTheme when it changes externally
                 if let themeRawValue = notification.object as? String,
@@ -255,21 +266,20 @@ struct SettingsView: View {
     
     // Extract drag gesture to a separate method
     private func applyDragGesture(_ content: some View) -> some View {
-        content.gesture(
-            isDraggable ? 
-            DragGesture(minimumDistance: 20)
+        if !isDraggable {
+            return content
+        }
+        
+        return content.gesture(
+            DragGesture(minimumDistance: 50) // Increase minimum distance significantly to avoid conflicts with taps
                 .onChanged { gesture in
-                    // Only capture vertical drags
-                    if abs(gesture.translation.height) > abs(gesture.translation.width) {
-                        if gesture.translation.height > 0 {
-                            isGestureActive = true
-                            self.dragOffset = gesture.translation.height
-                        }
+                    // Only capture vertical drags that are clearly downward
+                    if gesture.translation.height > 30 && abs(gesture.translation.height) > abs(gesture.translation.width) * 2 {
+                        self.dragOffset = min(gesture.translation.height, 200) // Limit maximum drag
                     }
                 }
                 .onEnded { gesture in
-                    isGestureActive = false
-                    if gesture.translation.height > 100 {
+                    if gesture.translation.height > 150 {
                         withAnimation(.easeOut) {
                             self.dismiss()
                         }
@@ -279,7 +289,6 @@ struct SettingsView: View {
                         }
                     }
                 }
-            : nil
         )
     }
     
@@ -316,7 +325,7 @@ struct SettingsView: View {
                         .foregroundColor(Color.theme.accent)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     .padding(.leading, 16)
                     
                     Spacer()
@@ -333,7 +342,7 @@ struct SettingsView: View {
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(Color.theme.accent)
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     .padding(.trailing, 16)
                 }
                 .padding(.top, 8)
@@ -429,8 +438,7 @@ struct SettingsView: View {
                                     }
                                 } label: {
                                     if isUpdatingDisplayName {
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle())
+                                        safeProgressView()
                                     } else {
                                         Text("Save")
                                             .font(.system(size: 15, weight: .medium))
@@ -472,6 +480,72 @@ struct SettingsView: View {
                                 .font(.system(size: 13))
                                 .foregroundColor(.red)
                                 .padding(.bottom, 4)
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    // Bio editing
+                    HStack {
+                        HStack(spacing: 8) {
+                            Image(systemName: "text.quote")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(Color.theme.accent.opacity(0.8))
+                            
+                            if isEditingBio {
+                                TextField("Your bio", text: $userBio)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(Color.theme.text)
+                            } else {
+                                Text(userBio.isEmpty ? "Add your bio" : userBio)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(userBio.isEmpty ? Color.theme.subtext : Color.theme.text)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, 14)
+                        
+                        Spacer()
+                        
+                        if isEditingBio {
+                            // Save button
+                            Button {
+                                Task {
+                                    await updateBio()
+                                }
+                            } label: {
+                                if isUpdatingBio {
+                                    safeProgressView()
+                                } else {
+                                    Text("Save")
+                                        .font(.system(size: 15, weight: .medium))
+                                        .foregroundColor(Color.theme.accent)
+                                }
+                            }
+                            .buttonStyle(AppScaleButtonStyle())
+                            .disabled(isUpdatingBio)
+                            
+                            // Cancel button
+                            Button {
+                                isEditingBio = false
+                                loadBio() // Reset to original value
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(Color.theme.subtext)
+                            }
+                            .buttonStyle(AppScaleButtonStyle())
+                            .padding(.leading, 8)
+                        } else {
+                            // Edit button
+                            Button {
+                                isEditingBio = true
+                            } label: {
+                                Text("Edit")
+                                    .font(.system(size: 15, weight: .medium))
+                                    .foregroundColor(Color.theme.accent)
+                            }
+                            .buttonStyle(AppScaleButtonStyle())
                         }
                     }
                     
@@ -547,8 +621,9 @@ struct SettingsView: View {
                         activeSheet = .changeEmail
                     } label: {
                         SettingsRow(icon: "envelope.fill", title: "Change Email", color: .theme.text, showChevron: true)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     
                     Divider()
                     
@@ -557,8 +632,9 @@ struct SettingsView: View {
                         activeSheet = .changePassword
                     } label: {
                         SettingsRow(icon: "lock.fill", title: "Change Password", color: .theme.text, showChevron: true)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     
                     Divider()
                     
@@ -569,8 +645,9 @@ struct SettingsView: View {
                         }
                     } label: {
                         SettingsRow(icon: "arrow.right.square", title: "Sign Out", color: .theme.text, showChevron: true)
+                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     .disabled(isPerformingAction)
                     
                     Divider()
@@ -585,17 +662,16 @@ struct SettingsView: View {
                             color: .red, 
                             showChevron: true
                         )
+                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     .disabled(isPerformingAction)
                     
                     // Show a progress indicator if account action is in progress
                     if isPerformingAction {
                         HStack {
                             Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .padding(.vertical, 10)
+                            safeProgressView()
                             Spacer()
                         }
                     }
@@ -646,8 +722,9 @@ struct SettingsView: View {
                             AppStoreHelper.openSubscriptionManagement()
                         } label: {
                             SettingsRow(icon: "creditcard", title: "Manage Subscription", color: .theme.text, showChevron: true)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(AppScaleButtonStyle())
+                        .buttonStyle(PlainButtonStyle())
                     } else {
                         Button {
                             subscriptionService.presentSubscriptionSheet()
@@ -658,8 +735,9 @@ struct SettingsView: View {
                                 color: Color.yellow, 
                                 showChevron: true
                             )
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(AppScaleButtonStyle())
+                        .buttonStyle(PlainButtonStyle())
                     }
                     
                     Divider()
@@ -675,16 +753,16 @@ struct SettingsView: View {
                                 color: .theme.text, 
                                 showChevron: true
                             )
+                            .contentShape(Rectangle())
                             
                             if isRestoringPurchases {
                                 Spacer()
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle())
-                                    .padding(.trailing, 8)
+                                safeProgressView()
+                                .padding(.trailing, 8)
                             }
                         }
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .buttonStyle(PlainButtonStyle())
                     .disabled(isRestoringPurchases)
                 }
                 .padding(.vertical, 0)
@@ -704,14 +782,15 @@ struct SettingsView: View {
                             color: .red, 
                             showChevron: true
                         )
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(PlainButtonStyle())
                     .disabled(isPerformingAction)
                     
                     if isPerformingAction {
                         HStack {
                             Spacer()
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
+                            safeProgressView()
                             Spacer()
                         }
                         .padding(.vertical, 10)
@@ -830,14 +909,26 @@ struct SettingsView: View {
                             .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                             .onChange(of: isSoundEnabled) { _, _ in
-                                Task { await updateNotificationSettings() }
+                                Task { 
+                                    do {
+                                        await updateNotificationSettings()
+                                    } catch {
+                                        print("Error updating notification settings: \(error.localizedDescription)")
+                                    }
+                                }
                             }
                         
                         Toggle("Vibration", isOn: $isVibrationEnabled)
                             .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
                             .onChange(of: isVibrationEnabled) { _, _ in
-                                Task { await updateNotificationSettings() }
+                                Task { 
+                                    do {
+                                        await updateNotificationSettings()
+                                    } catch {
+                                        print("Error updating notification settings: \(error.localizedDescription)")
+                                    }
+                                }
                             }
                     }
                     .padding(.vertical, 4)
@@ -985,7 +1076,7 @@ struct SettingsView: View {
                     Divider()
                     
                     Button {
-                        if let twitterURL = URL(string: "https://twitter.com/100daysapp") {
+                        if let twitterURL = URL(string: "https://twitter.com/100daysHQ") {
                             UIApplication.shared.open(twitterURL)
                         }
                     } label: {
@@ -1003,13 +1094,13 @@ struct SettingsView: View {
         SettingsSection(title: "Legal", icon: "doc.plaintext.fill") {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 0) {
-                    Link(destination: URL(string: "https://100days.site/privacy")!) {
+                    Link(destination: URL(string: "https://100days.site/privacy") ?? URL(string: "https://100days.site")!) {
                         SettingsRow(icon: "hand.raised.fill", title: "Privacy Policy", color: .theme.text, showChevron: true)
                     }
                     
                     Divider()
                     
-                    Link(destination: URL(string: "https://100days.site/terms")!) {
+                    Link(destination: URL(string: "https://100days.site/terms") ?? URL(string: "https://100days.site")!) {
                         SettingsRow(icon: "doc.text.fill", title: "Terms of Service", color: .theme.text, showChevron: true)
                     }
                 }
@@ -1032,7 +1123,7 @@ struct SettingsView: View {
                     Divider()
                         .padding(.vertical, 8)
                     
-                    Link(destination: URL(string: "https://100days.site")!) {
+                    Link(destination: URL(string: "https://100days.site") ?? URL(string: "https://apple.com")!) {
                         SettingsRow(icon: "globe", title: "Visit Website", color: .theme.text, showChevron: true)
                     }
                 }
@@ -1142,76 +1233,52 @@ struct SettingsView: View {
             errorMessage = ""  // Set to empty string instead of nil
         }
         
-        // Create a timeout task
-        let timeoutTask = Task {
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            if isPerformingAction {
-                print("DEBUG: Sign out operation timed out")
-                await MainActor.run {
-                    errorMessage = "Sign out timed out. Please try again."
-                    showingError = true
-                    isPerformingAction = false
-                }
-            }
-        }
-        
-        do {
-            // Check network availability first
-            guard userSession.isNetworkAvailable else {
-                throw NSError(domain: "SettingsView", 
-                             code: 100, 
-                             userInfo: [NSLocalizedDescriptionKey: "No internet connection available"])
+        // Define a cancellation source to properly handle task cancellation
+        let cancellationTask = Task {
+            // First dismiss this view to prevent updating UI after sign out
+            await MainActor.run {
+                // Post navigation notification first to prepare app for transition
+                print("DEBUG: Posting ForceNavigateToWelcome notification")
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("ForceNavigateToWelcome"),
+                    object: nil
+                )
+                
+                // Important: Immediately dismiss this view to prevent any UI updates after sign out
+                print("DEBUG: Dismissing Settings view before sign out")
+                self.dismiss()
             }
             
-            print("DEBUG: Starting sign out process")
+            // Short delay to allow dismissal to complete
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
             
-            // Force sign out by calling signOutWithoutThrowing
+            // Now proceed with sign out - after the view is dismissed
             await userSession.signOutWithoutThrowing()
             
-            // Wait for auth state to update
-            var authStateUpdated = false
-            for i in 0..<20 { // Try for up to 2 seconds
-                if case .signedOut = userSession.authState {
-                    print("DEBUG: Auth state updated to signedOut")
-                    authStateUpdated = true
-                    break
-                }
-                print("DEBUG: Auth state check attempt \(i + 1)")
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-            }
+            print("DEBUG: Sign out completed after view dismissal")
             
-            if !authStateUpdated {
-                print("DEBUG: Auth state did not update properly")
-                // Force sign out by calling signOutWithoutThrowing again
-                await userSession.signOutWithoutThrowing()
-            }
-            
-            // Dismiss the settings view
-            print("DEBUG: Dismissing settings view")
-            await MainActor.run {
-                isPerformingAction = false
-                dismiss()
-            }
-        } catch {
-            print("DEBUG: Error during sign out: \(error.localizedDescription)")
-            await MainActor.run {
-                errorMessage = "Failed to sign out: \(error.localizedDescription)"
-                showingError = true
-                isPerformingAction = false
+            // No need to update UI state after this as the view is already dismissed
+        }
+        
+        // Create a timeout task that will cancel the operation if it takes too long
+        let timeoutTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            if !cancellationTask.isCancelled {
+                print("DEBUG: Sign out operation timed out")
+                cancellationTask.cancel()
                 
-                // Force sign out by calling signOutWithoutThrowing
-                Task {
-                    await userSession.signOutWithoutThrowing()
-                    // Dismiss after a short delay to show the error
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        dismiss()
-                    }
+                // Since we may have failed to dismiss, try again to dismiss the view
+                await MainActor.run {
+                    self.dismiss()
                 }
+                
+                // Force sign out after timeout
+                await userSession.signOutWithoutThrowing()
             }
         }
         
-        // Cancel the timeout task
-        timeoutTask.cancel()
+        // Allow the tasks to run independently
+        // We don't need to wait for them to complete since we're dismissing the view
     }
     
     private func handleDeleteAccount() async {
@@ -1259,7 +1326,9 @@ struct SettingsView: View {
                 activeSheet = nil
                 
                 // Now dismiss the view
-                dismiss()
+                withAnimation {
+                    dismiss()
+                }
             }
         } catch {
             print("DEBUG: Error during account deletion: \(error.localizedDescription)")
@@ -1433,12 +1502,13 @@ struct SettingsView: View {
         }
     }
     
-    // Load user profile including display name
+    // Load user profile including display name and bio
     private func loadUserProfile() async {
         guard let userId = userSession.currentUser?.uid else { 
             // Handle case when user is not signed in
             await MainActor.run {
                 displayName = ""
+                userBio = ""
             }
             return 
         }
@@ -1453,6 +1523,7 @@ struct SettingsView: View {
             
             await MainActor.run {
                 displayName = profile?.displayName ?? ""
+                userBio = profile?.bio ?? "Building my best habits 1 day at a time 💪"
                 isPerformingAction = false
             }
         } catch {
@@ -1463,6 +1534,7 @@ struct SettingsView: View {
                 
                 // Set empty defaults to avoid null references
                 displayName = ""
+                userBio = "Building my best habits 1 day at a time 💪"
             }
             
             print("Failed to load user profile: \(error.localizedDescription)")
@@ -1516,6 +1588,58 @@ struct SettingsView: View {
             await MainActor.run {
                 isUpdatingDisplayName = false
                 displayNameErrorMessage = "Failed to update name: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    // Load just the bio field
+    private func loadBio() {
+        Task {
+            guard let userId = userSession.currentUser?.uid else { return }
+            
+            do {
+                let document = try await Firestore.firestore()
+                    .collection("users")
+                    .document(userId)
+                    .getDocument()
+                
+                if document.exists, let data = document.data() {
+                    await MainActor.run {
+                        self.userBio = data["bio"] as? String ?? "Building my best habits 1 day at a time 💪"
+                    }
+                }
+            } catch {
+                print("Error loading user bio: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    // Update the user's bio in Firestore
+    private func updateBio() async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
+        await MainActor.run {
+            isUpdatingBio = true
+        }
+        
+        do {
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["bio": userBio])
+            
+            await MainActor.run {
+                isUpdatingBio = false
+                isEditingBio = false
+                showSuccessMessage = true
+                successMessage = "Bio updated successfully"
+            }
+        } catch {
+            print("Error updating bio: \(error.localizedDescription)")
+            await MainActor.run {
+                isUpdatingBio = false
+                errorMessage = "Failed to update bio"
+                showingError = true
             }
         }
     }
@@ -1799,6 +1923,19 @@ struct SettingsView: View {
             scrollToSection = section
         }
     }
+    
+    // Helper function to safely handle ProgressView
+    private func safeProgressView() -> some View {
+        Group {
+            if viewIsActive {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle())
+            } else {
+                // Empty view when component is not active
+                EmptyView()
+            }
+        }
+    }
 }
 
 // MARK: - Supporting Views
@@ -1919,7 +2056,6 @@ struct SettingsRow: View {
     let color: Color
     let showChevron: Bool
     @State private var isPressed = false
-    @Environment(\.isGestureActive) private var isGestureActive
     
     init(
         icon: String,
@@ -1972,20 +2108,7 @@ struct SettingsRow: View {
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: isPressed)
         .contentShape(Rectangle())
-        // Remove the gesture that interferes with the button action
         .onAppear { isPressed = false }
-    }
-}
-
-// Add environment key for gesture state
-private struct IsGestureActiveKey: EnvironmentKey {
-    static let defaultValue = false
-}
-
-extension EnvironmentValues {
-    var isGestureActive: Bool {
-        get { self[IsGestureActiveKey.self] }
-        set { self[IsGestureActiveKey.self] = newValue }
     }
 }
 

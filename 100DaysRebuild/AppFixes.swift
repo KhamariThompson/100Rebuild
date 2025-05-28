@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 import AuthenticationServices
 import RevenueCat
-import ObjectiveC.runtime
 
 /// Utility class to handle all app-wide fixes
 class AppFixes {
@@ -26,101 +25,6 @@ class AppFixes {
         
         // Fix input system constraints
         fixInputConstraints()
-        
-        // Fix photo picker presentation issues
-        fixPhotoPickerPresentationIssues()
-    }
-    
-    // MARK: - Photo Picker Presentation Fix
-    
-    private func fixPhotoPickerPresentationIssues() {
-        print("Applying photo picker presentation fixes...")
-        
-        // Add observer for view controller presentation
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleViewControllerPresentation),
-            name: UIViewController.willPresentNotification,
-            object: nil
-        )
-        
-        // Swizzle UIViewController's present method to ensure proper presentation
-        swizzleViewControllerPresentation()
-    }
-    
-    @objc private func handleViewControllerPresentation(notification: Notification) {
-        guard let presentingVC = notification.object as? UIViewController,
-              let presentedVC = presentingVC.presentedViewController else {
-            return
-        }
-        
-        // Check if this is a PhotoPicker presentation with potential detachment issues
-        if NSStringFromClass(type(of: presentedVC)).contains("PhotosPicker") || 
-           NSStringFromClass(type(of: presentedVC)).contains("PHPicker") {
-            
-            // Ensure presenting VC is in a window hierarchy
-            if presentingVC.view.window == nil {
-                print("Warning: Presenting photo picker from detached view controller.")
-                
-                // Find a valid view controller to present from
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let window = windowScene.windows.first,
-                   let rootVC = window.rootViewController {
-                    
-                    // Find the topmost presented view controller
-                    let topmostVC = findTopmostViewController(rootVC)
-                    
-                    // Re-present from the properly attached view controller
-                    DispatchQueue.main.async {
-                        presentingVC.dismiss(animated: false) {
-                            topmostVC.present(presentedVC, animated: true)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    // Public method to find the topmost view controller
-    func findTopmostViewController(_ viewController: UIViewController) -> UIViewController {
-        if let presentedVC = viewController.presentedViewController {
-            return findTopmostViewController(presentedVC)
-        }
-        
-        if let navigationController = viewController as? UINavigationController,
-           let topVC = navigationController.topViewController {
-            return findTopmostViewController(topVC)
-        }
-        
-        if let tabBarController = viewController as? UITabBarController,
-           let selectedVC = tabBarController.selectedViewController {
-            return findTopmostViewController(selectedVC)
-        }
-        
-        return viewController
-    }
-    
-    private func swizzleViewControllerPresentation() {
-        // Register a fix for SwiftUI view controller presentations
-        exchangeImplementations(
-            UIViewController.self,
-            #selector(UIViewController.present(_:animated:completion:)),
-            #selector(UIViewController.swizzled_present(_:animated:completion:))
-        )
-    }
-    
-    private func exchangeImplementations(_ cls: AnyClass, _ originalSelector: Selector, _ swizzledSelector: Selector) {
-        guard let originalMethod = class_getInstanceMethod(cls, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(cls, swizzledSelector) else {
-            return
-        }
-        
-        // Add the swizzled method to the class if it doesn't exist
-        if class_addMethod(cls, originalSelector, method_getImplementation(swizzledMethod), method_getTypeEncoding(swizzledMethod)) {
-            class_replaceMethod(cls, swizzledSelector, method_getImplementation(originalMethod), method_getTypeEncoding(originalMethod))
-        } else {
-            method_exchangeImplementations(originalMethod, swizzledMethod)
-        }
     }
     
     // MARK: - Layout Constraint Fixes
@@ -231,7 +135,9 @@ class AppFixes {
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap { $0.windows }
         } else {
-            return UIApplication.shared.windows
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
     }
     
@@ -562,81 +468,4 @@ extension View {
             .fixedSize(horizontal: false, vertical: true)
             .layoutPriority(1)
     }
-}
-
-// MARK: - UIViewController Extension for Swizzling
-
-extension UIViewController {
-    @objc func swizzled_present(_ viewControllerToPresent: UIViewController, animated: Bool, completion: (() -> Void)? = nil) {
-        // Check if this is a PhotoPicker presentation with potential issues
-        if NSStringFromClass(type(of: viewControllerToPresent)).contains("PhotosPicker") || 
-           NSStringFromClass(type(of: viewControllerToPresent)).contains("PHPicker") {
-            
-            // Ensure presenting VC is in a window hierarchy
-            if self.view.window == nil {
-                print("Fixed: Detected presentation of photo picker from detached view controller.")
-                
-                // Find a valid view controller to present from
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let window = windowScene.windows.first,
-                   let rootVC = window.rootViewController {
-                    
-                    // Find the topmost presented view controller
-                    let topmostVC = AppFixes.shared.findTopmostViewController(rootVC)
-                    
-                    // Present from the properly attached view controller
-                    topmostVC.swizzled_present(viewControllerToPresent, animated: animated, completion: completion)
-                    return
-                }
-            }
-        }
-        
-        // Call the original implementation for normal cases
-        self.swizzled_present(viewControllerToPresent, animated: animated, completion: completion)
-    }
-}
-
-// MARK: - ConstraintSwizzler class for constraint fixes
-class ConstraintSwizzler {
-    let classType: AnyClass
-    
-    init(classType: AnyClass) {
-        self.classType = classType
-    }
-    
-    func swizzleUpdateConstraints() {
-        let originalSelector = #selector(UIView.updateConstraints)
-        let swizzledSelector = #selector(UIView.swizzled_updateConstraints)
-        
-        guard let originalMethod = class_getInstanceMethod(classType, originalSelector),
-              let swizzledMethod = class_getInstanceMethod(UIView.self, swizzledSelector) else {
-            return
-        }
-        
-        method_exchangeImplementations(originalMethod, swizzledMethod)
-    }
-}
-
-// Extension for UIView swizzling
-extension UIView {
-    @objc func swizzled_updateConstraints() {
-        // Call the original implementation first
-        self.swizzled_updateConstraints()
-        
-        // Check if this is a SystemInputAssistantView
-        let viewName = NSStringFromClass(type(of: self))
-        if viewName.contains("SystemInputAssistantView") {
-            // Fix the problematic constraints
-            for constraint in self.constraints {
-                if constraint.firstAttribute == .height && constraint.relation == .equal {
-                    constraint.priority = UILayoutPriority(250) // Lower priority
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Notification extension
-extension Notification.Name {
-    static let appDidReceiveMemoryWarning = Notification.Name("appDidReceiveMemoryWarning")
 } 

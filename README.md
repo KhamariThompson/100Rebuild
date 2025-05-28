@@ -28,49 +28,49 @@ Before you begin, ensure you have the following installed:
 ## 🏗️ Project Structure
 
 ```
-100Days/
+100DaysRebuild/
 ├── App/
-│   ├── App100Days.swift        # Main app entry point
-│   └── AppDelegate.swift       # App lifecycle and Firebase setup
+│   └── App.swift               # Main app entry point with AppDelegate
 ├── Core/
 │   ├── DesignSystem/
 │   │   ├── Colors.swift        # Color palette and theme
 │   │   ├── Typography.swift    # Typography system
-│   │   ├── Buttons.swift       # Reusable button styles
-│   │   └── Components/         # Reusable UI components
-│   └── Utils/
-│       ├── BaseViewModel.swift # Base view model protocol
-│       └── Extensions/         # Swift extensions
+│   │   ├── ButtonStyles.swift  # Reusable button styles
+│   │   ├── ThemeManager.swift  # Theme management
+│   │   ├── AppSpacing.swift    # Spacing constants
+│   │   ├── Components.swift    # Reusable UI components
+│   │   ├── StatCard.swift      # Statistics cards
+│   │   └── ProgressComponents.swift # Progress UI components
+│   ├── UI/                     # Common UI components
+│   ├── Navigation/             # Navigation helpers
+│   ├── Extensions/             # Swift extensions
+│   └── Utils/                  # Utility functions
 ├── Features/
-│   ├── Auth/
-│   │   ├── Views/             # Login, Signup, Password Reset
-│   │   └── ViewModels/        # Auth logic
-│   ├── Challenges/
-│   │   ├── Views/             # Challenge list, creation, details
-│   │   └── ViewModels/        # Challenge management
-│   ├── Progress/
-│   │   ├── Views/             # Progress dashboard, charts
-│   │   └── ViewModels/        # Progress calculations
-│   ├── Reminders/
-│   │   ├── Views/             # Reminder settings
-│   │   └── ViewModels/        # Notification logic
-│   └── Social/
-│       ├── Views/             # Social features UI
-│       └── ViewModels/        # Social features logic
-├── Models/
-│   ├── Challenge.swift        # Challenge data model
-│   ├── User.swift            # User data model
-│   └── Progress.swift        # Progress tracking model
+│   ├── Auth/                   # Authentication
+│   ├── Challenges/             # Challenge management
+│   ├── CheckIn/                # Daily check-in functionality
+│   ├── Progress/               # Progress tracking and visualization
+│   ├── Profile/                # User profile
+│   ├── Reminders/              # Notification settings
+│   ├── Settings/               # App settings
+│   ├── Social/                 # Social sharing features
+│   ├── Subscription/           # Pro subscription features
+│   └── TimerSession/           # Timer functionality
+├── Models/                     # Data models
 ├── Services/
-│   ├── FirebaseService.swift  # Firebase integration
+│   ├── FirebaseService.swift   # Firebase integration
 │   ├── NotificationService.swift # Local notifications
-│   ├── AuthService.swift     # Authentication service
-│   └── SubscriptionService.swift # RevenueCat integration
-├── Resources/
-│   ├── Assets.xcassets       # Asset catalog
-│   └── Fonts/                # Custom fonts
+│   ├── AuthService.swift       # Authentication service
+│   ├── SubscriptionService.swift # RevenueCat integration
+│   ├── ChallengeService.swift  # Challenge data management
+│   ├── CheckInService.swift    # Check-in functionality
+│   ├── UserSession.swift       # User state management
+│   ├── ProgressService.swift   # Progress calculations
+│   └── NetworkMonitor.swift    # Network connectivity monitoring
+├── Resources/                  # Assets and resources
+├── Configuration/              # App configuration
 └── SupportingFiles/
-    ├── Info.plist            # App configuration
+    ├── Info.plist              # App configuration
     └── GoogleService-Info.plist # Firebase config
 ```
 
@@ -80,14 +80,12 @@ Before you begin, ensure you have the following installed:
 
 ```bash
 git clone https://github.com/KhamariThompson/100Rebuild.git
-cd 100Days
+cd 100DaysRebuild
 ```
 
 ### 2. Install Dependencies
 
 ```bash
-
-
 # Install project dependencies
 pod install
 ```
@@ -97,7 +95,7 @@ pod install
 1. Create a new Firebase project at [Firebase Console](https://console.firebase.google.com/)
 2. Add an iOS app to your Firebase project
 3. Download `GoogleService-Info.plist`
-4. Place `GoogleService-Info.plist` in the `SupportingFiles` directory
+4. Place `GoogleService-Info.plist` in the `100DaysRebuild` directory
 5. Enable Authentication and Firestore in Firebase Console
 
 ### 4. RevenueCat Setup
@@ -105,18 +103,18 @@ pod install
 1. Create a RevenueCat account
 2. Set up your product and entitlement in the RevenueCat dashboard
 3. Ensure your "pro" entitlement is properly configured
-4. The production API key is already configured in the app
+4. Update the API key in SubscriptionService.swift if needed
 
 ### 5. Build and Run
 
-1. Open `100Days.xcworkspace` (not .xcodeproj)
+1. Open `100DaysRebuild.xcworkspace` (not .xcodeproj)
 2. Select your development team in Xcode
 3. Choose a simulator or device
 4. Build and run (⌘R)
 
 ## 🎨 Design System
 
-The app uses a modern, dark-themed design system:
+The app uses a comprehensive, modern design system:
 
 ### Colors
 
@@ -138,22 +136,11 @@ The app uses a modern, dark-themed design system:
 
 - Cards with 16pt corner radius
 - Subtle shadows and gradients
-- Consistent spacing (8pt grid)
+- Consistent spacing using AppSpacing constants
 - Animated transitions
+- Standardized button styles
 
 ## 🔧 Configuration
-
-### Environment Variables
-
-Create a `Configuration/Config.xcconfig` file with your development or production configuration:
-
-```xcconfig
-// For development
-#include "Development.xcconfig"
-
-// For production
-// #include "Production.xcconfig"
-```
 
 ### API Security
 
@@ -223,80 +210,50 @@ If you still encounter issues, you may need to:
 2. Look for duplicate class/struct definitions across the project
 3. Verify that the same frameworks aren't being imported multiple times through different dependency paths
 
-# 100Days Challenge App - Technical Improvements
+## Technical Improvements
 
-This document summarizes the technical improvements made to the 100Days Challenge App to address various issues and enhance the user experience.
+### Authentication System Rebuild
 
-## Fixed Issues
+The authentication system has been completely redesigned to provide a more reliable authentication experience:
 
-### Authentication View Improvements (AuthView.swift)
-
-- Fixed binding vs FocusState issue by changing the EmailPasswordForm component to use @Binding for focusedField instead of @FocusState
-- Removed unnecessary try expressions from async calls that don't throw
-- Created non-throwing wrappers in the ViewModel for all auth operations:
-  - signInWithEmail(email:password:) - non-throwing wrapper for auth.signIn
-  - signUpWithEmail(email:password:) - non-throwing wrapper for auth.createUser
-  - signInWithGoogle() - handles finding rootViewController and error handling
-  - signInWithApple() - wraps the throwing signInWithAppleInternal with error handling
-  - resetPassword(email:) - non-throwing wrapper for auth.sendPasswordReset
-  - signOutWithoutThrowing() - non-throwing wrapper for auth.signOut
-- Updated SettingsView.swift and ProfileViewModel.swift to use the signOutWithoutThrowing() method consistently
-
-### Apple Sign-In Authentication Issues
-
-- Added guards against multiple simultaneous auth operations
-- Improved error handling to properly distinguish between user cancellation and actual errors
-- Enhanced authentication flow with proper loading states to prevent UI glitches
-
-### Navigation Constraint Errors
-
-- Fixed SFAuthenticationViewController constraint conflicts by:
-  - Implementing ephemeral web browser sessions
-  - Adding proper delay before presenting authentication views
-  - Ensuring proper cleanup after authentication is completed or canceled
+- Consolidated authentication methods in AuthService class
+- Implemented proper error handling and network awareness
+- Created non-throwing wrappers for all auth operations
+- Fixed Apple Sign-In issues with proper authentication flow
 
 ### Check-In Functionality Improvements
 
-- Fixed issue where tapping on the challenge card would incorrectly bring up the edit page
-- Removed the problematic tap gesture that was causing the wrong sheet to appear
-- Ensured check-in button triggers the proper check-in flow without navigation conflicts
-- Added validation to prevent check-in attempts for challenges that are already completed
+- Implemented robust check-in validation
+- Fixed navigation conflicts between check-in and edit flows
+- Added proper streak counting and statistics updates
+- Enhanced data persistence with Firestore
 
-### Profile Statistics Accuracy
+### Performance Optimizations
 
-- Modified the challenge counting logic to only include active (non-archived) challenges
-- Improved data loading from Firestore with proper filtering
-- Enhanced error handling for profile data retrieval
+- Reduced Firebase cache size from 100MB to 10MB
+- Implemented memory warning handlers
+- Optimized animations and UI transitions
+- Improved network request handling with timeout management
+- Added offline mode support with recovery mechanisms
 
-### UI Appearance and Keyboard Handling
+### UI/UX Enhancements
 
-- Improved navigation bar appearance settings to prevent constraint conflicts
-- Enhanced keyboard handling at the application level
-- Implemented cleaner navigation appearance with shadow removal
+- Implemented comprehensive design system with consistent typography, colors and spacing
+- Fixed navigation bar appearance and constraint issues
+- Enhanced keyboard handling
+- Added proper loading states throughout the app
 
-## Technical Implementation Details
-
-The improvements focused on:
-
-1. Better state management for authentication flows
-2. Proper view controller lifecycle management
-3. Clear separation between different user actions (check-in vs. editing)
-4. Accurate data queries and state updates
-5. Robust error handling with user-friendly messages
-
-These changes should provide a more stable and intuitive user experience while addressing the specific technical issues that were occurring in the app.
-
-# App Store Submission Checklist
+## App Store Submission Checklist
 
 Before submitting the app to the App Store, ensure all of these items are ready:
 
-## Required Assets
+### Required Assets
 
 - [x] App icon in all required sizes (1024x1024 for App Store)
 - [x] Screenshots for all supported device sizes
 - [x] App preview videos (optional but recommended)
 
-## Metadata
+### Metadata
 
 - [x] App name: 100Days
 - [x] App description
@@ -306,7 +263,7 @@ Before submitting the app to the App Store, ensure all of these items are ready:
 - [x] Marketing URL (optional)
 - [x] Copyright information
 
-## Technical Requirements
+### Technical Requirements
 
 - [x] All features are fully functional
 - [x] Data is properly saved to Firebase/Firestore
@@ -317,7 +274,7 @@ Before submitting the app to the App Store, ensure all of these items are ready:
 - [x] Fixed all constraint issues in SFAuthenticationViewController
 - [x] Optimized memory usage for large challenge lists
 
-## Compliance
+### Compliance
 
 - [x] Privacy policy implemented and accessible in the app
 - [x] Terms of Service implemented and accessible in the app
@@ -326,7 +283,7 @@ Before submitting the app to the App Store, ensure all of these items are ready:
 - [x] Subscription products configured in App Store Connect
 - [x] In-app purchases tested and working
 
-## Final Testing
+### Final Testing
 
 - [x] Tested on multiple iOS versions
 - [x] Verified proper functionality on slow network connections
@@ -334,13 +291,11 @@ Before submitting the app to the App Store, ensure all of these items are ready:
 - [x] Ensured dark mode support works correctly
 - [x] Verified all animations run smoothly
 
-With all items checked, the app is ready for submission to the App Store!
-
 ## Memory and Performance Optimizations
 
-The app has recently undergone significant memory and performance optimizations to resolve freezing issues:
+The app has undergone significant memory and performance optimizations to resolve freezing issues:
 
-1. **Tab Navigation System**: Simplified tab navigation with optimized animations to prevent UI freezes
+1. **Tab Navigation System**: Simplified tab navigation with optimized animations
 2. **Memory Management**: Added proper cleanup for timers and background tasks
 3. **Animation Improvements**: Reduced expensive animations and simplified transitions
 4. **Cache Management**: Added memory warning handlers to clear caches when system memory is low

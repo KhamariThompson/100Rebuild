@@ -147,11 +147,11 @@ struct ChallengeCardView: View {
                     HStack {
                         Text("Check In")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                         
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(.black.opacity(0.8))
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
@@ -228,10 +228,27 @@ struct ChallengeCardView: View {
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 20)
+            RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.08), radius: 10, x: 0, y: 4)
+                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 2, x: 0, y: 1)
+                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 10, x: 0, y: 6)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.theme.accent.opacity(0.3),
+                            Color.theme.accent.opacity(0.05)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .scaleEffect(scale)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: scale)
         .padding(.horizontal)
         .padding(.vertical, 8)
         .onAppear {

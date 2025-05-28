@@ -34,7 +34,7 @@ public struct AppPrimaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppTypography.body(.medium))
-            .foregroundColor(.white)
+            .foregroundColor(.black)
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .background(
@@ -150,7 +150,7 @@ public struct PrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 16, weight: .medium))
             .frame(maxWidth: .infinity, minHeight: height)
-            .foregroundColor(isEnabled ? .white : .white.opacity(0.7))
+            .foregroundColor(isEnabled ? .black : .black.opacity(0.7))
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isEnabled 

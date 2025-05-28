@@ -23,15 +23,13 @@ public enum FontRegistration {
     ///   - name: The name of the font file without extension
     ///   - fileExtension: The file extension (ttf, otf)
     private static func registerFont(withName name: String, withExtension fileExtension: String) {
-        guard let fontURL = Bundle.main.url(forResource: name, withExtension: fileExtension),
-              let fontDataProvider = CGDataProvider(url: fontURL as CFURL),
-              let font = CGFont(fontDataProvider) else {
+        guard let fontURL = Bundle.main.url(forResource: name, withExtension: fileExtension) else {
             print("FontRegistration: Failed to load font \(name).\(fileExtension)")
             return
         }
         
         var error: Unmanaged<CFError>?
-        if !CTFontManagerRegisterGraphicsFont(font, &error) {
+        if !CTFontManagerRegisterFontsForURL(fontURL as CFURL, .process, &error) {
             print("FontRegistration: Failed to register font \(name).\(fileExtension)")
             if let error = error?.takeRetainedValue() {
                 print("FontRegistration: Error: \(error)")

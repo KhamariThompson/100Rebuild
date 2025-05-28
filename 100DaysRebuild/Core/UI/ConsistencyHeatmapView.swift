@@ -57,16 +57,22 @@ public struct ConsistencyHeatmapView: View {
                 .foregroundColor(.theme.text)
             
             VStack(spacing: AppSpacing.xs) {
-                // Day of week labels
-                HStack(spacing: 4) {
-                    ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { index, label in
-                        Text(label)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.theme.subtext)
-                            .frame(width: cellSize)
+                // Day of week labels - centered row
+                HStack {
+                    Spacer()
+                    
+                    // Weekday labels perfectly centered
+                    HStack(spacing: 4) {
+                        ForEach(weekdayLabels, id: \.self) { label in
+                            Text(label)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.theme.subtext)
+                                .frame(width: cellSize)
+                        }
                     }
+                    
+                    Spacer()
                 }
-                .padding(.leading, 30) // Offset to align with grid
                 
                 // Week rows
                 ForEach(0..<gridData.count, id: \.self) { weekIndex in

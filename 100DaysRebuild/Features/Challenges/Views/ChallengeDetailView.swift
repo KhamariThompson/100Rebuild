@@ -56,7 +56,7 @@ struct ChallengeDetailView: View {
                                 Text(challenge.isCompletedToday ? "Completed Today" : "Start Timer Session")
                                     .font(.headline)
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
@@ -79,7 +79,7 @@ struct ChallengeDetailView: View {
                                 Text("Check In for Today")
                                     .font(.headline)
                             }
-                            .foregroundColor(.white)
+                            .foregroundColor(.black)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(

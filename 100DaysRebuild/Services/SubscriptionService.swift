@@ -191,7 +191,7 @@ class SubscriptionService: NSObject, ObservableObject {
                 }
             } catch {
                 // Handle "No active account" error
-                if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+                if let nsError = error as? NSError, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
                     print("StoreKit: No active account, ignoring.")
                 } else {
                     print("Unhandled transaction error: \(error.localizedDescription)")
@@ -227,68 +227,66 @@ class SubscriptionService: NSObject, ObservableObject {
     }
     
     private func updateSubscriptionStatus() async {
-        // Check RevenueCat subscription status first
-        do {
-            let customerInfo = try await Purchases.shared.customerInfo()
-            
-            // Check if "pro" entitlement is active
-            let isPro = customerInfo.entitlements["pro"]?.isActive ?? false
-            let expirationDate = customerInfo.entitlements["pro"]?.expirationDate
-            
-            await MainActor.run {
-                self.isProUser = isPro
-                self.renewalDate = expirationDate
-            }
-            
-            // Log entitlements for debugging
-            for (entitlementId, entitlement) in customerInfo.entitlements.active {
-                print("Active entitlement: \(entitlementId), expires: \(String(describing: entitlement.expirationDate))")
-            }
-            
-            // If we found an active subscription in RevenueCat, we're done
-            if isPro {
-                return
-            }
-        } catch {
-            // Handle "No active account" error
-            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
-                print("StoreKit: No active account, ignoring when checking RevenueCat subscription.")
-            } else {
-                print("Failed to check RevenueCat subscription: \(error.localizedDescription)")
-            }
-        }
+        isLoading = true
+        error = nil
         
-        // Fallback to StoreKit 2 if RevenueCat check failed
-        let detachedTask = Task.detached {
-            do {
+        do {
+            // First check RevenueCat for entitlements
+            let customerInfo = try await Purchases.shared.customerInfo()
+            self.customerInfo = customerInfo
+            
+            // Check active entitlements - looking specifically for "pro" entitlement
+            let activeEntitlements = customerInfo.entitlements.active
+            let hasPro = activeEntitlements["pro"]?.isActive ?? false
+            self.renewalDate = activeEntitlements["pro"]?.expirationDate
+            
+            // Fallback check: verify receipt directly with StoreKit
+            var hasActiveStoreKitSubscription = false
+            
+            if !hasPro {
+                // Verify with StoreKit as a fallback
                 for await result in Transaction.currentEntitlements {
-                    if case .verified(let transaction) = result {
-                        Task { @MainActor in
-                            self.isProUser = true
-                            self.renewalDate = transaction.expirationDate
-                        }
-                        return
+                    if case .verified(let transaction) = result, 
+                       productIds.contains(transaction.productID),
+                       transaction.revocationDate == nil,
+                       (transaction.expirationDate == nil || transaction.expirationDate ?? Date.distantPast > Date()) {
+                        // Valid subscription found
+                        hasActiveStoreKitSubscription = true
+                        
+                        // Log discrepancy for debugging
+                        print("WARNING: StoreKit shows active subscription but RevenueCat doesn't - syncing status")
+                        break
                     }
                 }
-            } catch {
-                // Handle "No active account" error
-                if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
-                    print("StoreKit: No active account, ignoring when checking currentEntitlements.")
-                } else {
-                    print("Failed to check StoreKit entitlements: \(error.localizedDescription)")
-                }
             }
             
-            Task { @MainActor in
-                // If StoreKit and RevenueCat both show no subscription, update state to non-pro
-                self.isProUser = false
-                self.renewalDate = nil
+            // Set pro status based on either verification method
+            let isActivePro = hasPro || hasActiveStoreKitSubscription
+            
+            // Only update published property if there's a change to avoid UI flicker
+            if self.isProUser != isActivePro {
+                print("Updating pro status: \(isActivePro)")
+                self.isProUser = isActivePro
+                
+                // Log status update
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": isActivePro]
+                )
             }
-        }
-        
-        // Add a timeout to prevent hanging
-        await withTimeout(seconds: 5) {
-            await detachedTask.value
+            
+            // Force sync with RevenueCat if there's a discrepancy
+            if hasActiveStoreKitSubscription && !hasPro {
+                print("Forcing sync with RevenueCat due to status discrepancy")
+                try? await Purchases.shared.syncPurchases()
+            }
+            
+            isLoading = false
+        } catch {
+            self.error = error
+            isLoading = false
+            print("Error updating subscription status: \(error.localizedDescription)")
         }
     }
     
@@ -344,17 +342,35 @@ class SubscriptionService: NSObject, ObservableObject {
             // Cache the offerings for future use
             self.cachedOfferings = offerings
             
+            // Validate offering identifiers against expected values
+            let expectedOfferingId = "default_offerings"
+            let expectedEntitlementId = "pro"
+            
             // Check if we have the default offering configured
             if let current = offerings.current {
                 print("Current offering available: \(current.identifier)")
                 print("Packages in offering: \(current.availablePackages.map { $0.identifier })")
                 
+                // Validate offering ID matches expected
+                if current.identifier != expectedOfferingId {
+                    print("Warning: Current offering ID (\(current.identifier)) doesn't match expected (\(expectedOfferingId))")
+                }
+                
+                // Check for monthly package
                 let hasMonthlyPackage = current.availablePackages.contains { 
                     $0.storeProduct.productIdentifier == monthlyProductID 
                 }
                 
                 if hasMonthlyPackage {
                     print("Monthly package found with correct product ID")
+                    
+                    // Validate entitlement ID
+                    if let customerInfo = try? await Purchases.shared.customerInfo(),
+                       !customerInfo.entitlements.all.keys.contains(expectedEntitlementId) {
+                        print("Warning: Entitlement ID 'pro' not found in customer info. Available entitlements: \(customerInfo.entitlements.all.keys.joined(separator: ", "))")
+                        // Continue anyway as this might be normal for non-subscribers
+                    }
+                    
                     await MainActor.run {
                         self.offeringsLoaded = true
                         self.errorLoadingOfferings = false
@@ -437,77 +453,174 @@ class SubscriptionService: NSObject, ObservableObject {
         let productID = plan.rawValue
         print("Attempting to purchase product: \(productID)")
         
-        // Try RevenueCat first if we have offerings
-        if let offerings = await getOfferings(), let offering = offerings.current {
-            print("Using cached RevenueCat offerings")
-            
-            if let package = offering.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) {
-                print("Found matching package: \(package.identifier) with product ID: \(package.storeProduct.productIdentifier)")
-                
-                do {
-                    let result = try await Purchases.shared.purchase(package: package)
-                    print("Purchase successful - entitlements: \(result.customerInfo.entitlements.active.keys.joined(separator: ", "))")
-                    
-                    // Update pro status from result
-                    await MainActor.run {
-                        let activeEntitlements = result.customerInfo.entitlements.active
-                        self.isProUser = activeEntitlements["pro"]?.isActive ?? false
-                        self.renewalDate = activeEntitlements["pro"]?.expirationDate
-                    }
-                    
-                    // Purchase succeeded
-                    return
-                } catch {
-                    // Handle "No active account" error
-                    if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
-                        print("StoreKit: No active account during purchase, attempting fallback to direct StoreKit.")
-                    } else {
-                        print("RevenueCat purchase failed: \(error.localizedDescription)")
-                    }
-                    // Fall through to StoreKit approach as fallback
-                }
-            } else {
-                print("No matching package found for product ID: \(productID)")
-                // Fall through to StoreKit approach as fallback
-            }
-        } else {
-            print("No RevenueCat offerings available, using StoreKit directly")
+        // Check for network connectivity first
+        guard NetworkMonitor.shared.isConnected else {
+            throw SubscriptionError.networkOffline
         }
         
-        // Fallback to StoreKit 2
-        guard let product = availableProducts.first(where: { $0.id == productID }) else {
-            print("Product not found in available products: \(productID)")
-            print("Available products: \(availableProducts.map { $0.id })")
-            throw SubscriptionError.purchaseFailed
+        // Set up timeout tracking
+        let timeoutSeconds: TimeInterval = 30.0
+        let purchaseTimeout = Task {
+            try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            throw SubscriptionError.timeout
         }
         
         do {
-            print("Attempting StoreKit purchase for product: \(product.id)")
-            let result = try await product.purchase()
-            
-            switch result {
-            case .success(let verification):
-                if case .verified(let transaction) = verification {
-                    print("StoreKit purchase successful for: \(product.id)")
-                    await transaction.finish()
-                    await updateSubscriptionStatus()
+            // Try RevenueCat first if we have offerings
+            if let offerings = await getOfferings(), let offering = offerings.current {
+                print("Using cached RevenueCat offerings")
+                
+                if let package = offering.availablePackages.first(where: { $0.storeProduct.productIdentifier == productID }) {
+                    print("Found matching package: \(package.identifier) with product ID: \(package.storeProduct.productIdentifier)")
+                    
+                    do {
+                        // Create a task for the purchase operation - update to use PurchaseResultData which is the correct type
+                        let purchaseTask = Task<PurchaseResultData, Error> {
+                            return try await Purchases.shared.purchase(package: package)
+                        }
+                        
+                        // Wait for either the purchase or the timeout
+                        let purchaseResult: PurchaseResultData
+                        do {
+                            purchaseResult = try await withThrowingTimeout(seconds: timeoutSeconds) {
+                                try await purchaseTask.value
+                            }
+                            // Cancel the timeout task
+                            purchaseTimeout.cancel()
+                        } catch {
+                            // Cancel the purchase task if it timed out
+                            purchaseTask.cancel()
+                            purchaseTimeout.cancel()
+                            throw error
+                        }
+                        
+                        // Extract data from the result, handling optional transaction
+                        let customerInfo = purchaseResult.customerInfo
+                        
+                        print("Purchase successful - entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        
+                        // Update pro status from result
+                        await MainActor.run {
+                            let activeEntitlements = customerInfo.entitlements.active
+                            self.isProUser = activeEntitlements["pro"]?.isActive ?? false
+                            self.renewalDate = activeEntitlements["pro"]?.expirationDate
+                            
+                            // Post notification for subscription change
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("SubscriptionStatusChanged"),
+                                object: nil,
+                                userInfo: ["isProUser": self.isProUser]
+                            )
+                        }
+                        
+                        // Purchase succeeded
+                        return
+                    } catch {
+                        // Handle "No active account" error
+                        let nsError = error as NSError
+                        if nsError.domain == "ASDErrorDomain" && nsError.code == 509 {
+                            print("StoreKit: No active account during purchase, attempting fallback to direct StoreKit.")
+                        } else if error is CancellationError || nsError.domain == NSURLErrorDomain {
+                            print("Network or cancellation error: \(error.localizedDescription)")
+                            throw SubscriptionError.networkError
+                        } else if nsError.domain == "RevenueCat.ErrorCode" {
+                            // Check RevenueCat error codes
+                            let errorCode = nsError.code
+                            
+                            if errorCode == 7 { // Payment Pending
+                                throw SubscriptionError.purchasePending
+                            } else if errorCode == 5 { // Receipt Already In Use
+                                throw SubscriptionError.receiptInUse
+                            } else {
+                                print("RevenueCat purchase error: \(nsError)")
+                            }
+                        } else {
+                            print("RevenueCat purchase failed: \(error.localizedDescription)")
+                        }
+                        // Fall through to StoreKit approach as fallback
+                    }
+                } else {
+                    print("No matching package found for product ID: \(productID)")
+                    // Fall through to StoreKit approach as fallback
                 }
-            case .userCancelled:
-                print("User cancelled purchase")
-                throw SubscriptionError.purchaseFailed
-            case .pending:
-                print("Purchase pending")
-            @unknown default:
-                print("Unknown purchase result")
-                throw SubscriptionError.unknown
+            } else {
+                print("No RevenueCat offerings available, using StoreKit directly")
+            }
+            
+            // Fallback to StoreKit 2
+            guard let product = availableProducts.first(where: { $0.id == productID }) else {
+                print("Product not found in available products: \(productID)")
+                print("Available products: \(availableProducts.map { $0.id })")
+                throw SubscriptionError.productNotFound
+            }
+            
+            do {
+                print("Attempting StoreKit purchase for product: \(product.id)")
+                
+                // Create a task for the purchase operation
+                let purchaseTask = Task<Product.PurchaseResult, Error> {
+                    return try await product.purchase()
+                }
+                
+                // Wait for either the purchase or the timeout
+                let result: Product.PurchaseResult
+                do {
+                    result = try await withThrowingTimeout(seconds: timeoutSeconds) {
+                        try await purchaseTask.value
+                    }
+                    // Cancel the timeout task
+                    purchaseTimeout.cancel()
+                } catch {
+                    // Cancel the purchase task if it timed out
+                    purchaseTask.cancel()
+                    purchaseTimeout.cancel()
+                    throw error
+                }
+                
+                switch result {
+                case .success(let verification):
+                    if case .verified(let transaction) = verification {
+                        print("StoreKit purchase successful for: \(product.id)")
+                        await transaction.finish()
+                        await updateSubscriptionStatus()
+                    } else {
+                        print("StoreKit purchase verification failed")
+                        throw SubscriptionError.verificationFailed
+                    }
+                case .userCancelled:
+                    print("User cancelled purchase")
+                    throw SubscriptionError.userCancelled
+                case .pending:
+                    print("Purchase pending")
+                    throw SubscriptionError.purchasePending
+                @unknown default:
+                    print("Unknown purchase result")
+                    throw SubscriptionError.unknown
+                }
+            } catch {
+                // Handle "No active account" error
+                let nsError = error as NSError
+                if nsError.domain == "ASDErrorDomain" && nsError.code == 509 {
+                    print("StoreKit: No active account when purchasing directly, likely not signed into App Store.")
+                    throw SubscriptionError.notSignedIntoAppStore
+                } else if error is CancellationError || nsError.domain == NSURLErrorDomain {
+                    print("Network or cancellation error: \(error.localizedDescription)")
+                    throw SubscriptionError.networkError
+                } else {
+                    print("Purchase error: \(error.localizedDescription)")
+                    throw SubscriptionError.purchaseFailed
+                }
             }
         } catch {
-            // Handle "No active account" error
-            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
-                print("StoreKit: No active account when purchasing directly, likely not signed into App Store.")
-                throw SubscriptionError.notSignedIntoAppStore
+            // Cancel the timeout task if any other error occurred
+            purchaseTimeout.cancel()
+            
+            // Re-throw appropriate error
+            if let subscriptionError = error as? SubscriptionError {
+                throw subscriptionError
+            } else if error is CancellationError {
+                throw SubscriptionError.timeout
             } else {
-                print("Purchase error: \(error.localizedDescription)")
                 throw SubscriptionError.purchaseFailed
             }
         }
@@ -531,20 +644,68 @@ class SubscriptionService: NSObject, ObservableObject {
     
     func restorePurchases() async throws {
         print("Restoring purchases via RevenueCat")
-        // Try to restore via RevenueCat
+        
+        // Check for network connectivity first
+        guard NetworkMonitor.shared.isConnected else {
+            throw SubscriptionError.networkOffline
+        }
+        
+        // Set up timeout tracking
+        let timeoutSeconds: TimeInterval = 20.0
+        let restoreTimeout = Task {
+            try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            throw SubscriptionError.timeout
+        }
+        
         do {
-            let customerInfo = try await Purchases.shared.restorePurchases()
+            // Create a task for the restore operation
+            let restoreTask = Task<CustomerInfo, Error> {
+                return try await Purchases.shared.restorePurchases()
+            }
+            
+            // Wait for either the restore or the timeout
+            let customerInfo: CustomerInfo
+            do {
+                customerInfo = try await withThrowingTimeout(seconds: timeoutSeconds) {
+                    try await restoreTask.value
+                }
+                // Cancel the timeout task
+                restoreTimeout.cancel()
+            } catch {
+                // Cancel the restore task if it timed out
+                restoreTask.cancel()
+                restoreTimeout.cancel()
+                throw error
+            }
+            
             print("Restore purchases successful - entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
             
             await MainActor.run {
                 self.isProUser = customerInfo.entitlements["pro"]?.isActive ?? false
                 self.renewalDate = customerInfo.entitlements["pro"]?.expirationDate
+                
+                // Post notification for subscription change
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": self.isProUser]
+                )
             }
         } catch {
+            // Cancel the timeout task if any other error occurred
+            restoreTimeout.cancel()
+            
             // Handle "No active account" error
-            if let nsError = error as NSError?, nsError.domain == "ASDErrorDomain", nsError.code == 509 {
+            let nsError = error as NSError
+            if nsError.domain == "ASDErrorDomain" && nsError.code == 509 {
                 print("StoreKit: No active account when restoring, likely not signed into App Store.")
                 throw SubscriptionError.notSignedIntoAppStore
+            } else if error is CancellationError {
+                print("Restore purchases timeout")
+                throw SubscriptionError.timeout
+            } else if nsError.domain == NSURLErrorDomain {
+                print("Network error during restore: \(error.localizedDescription)")
+                throw SubscriptionError.networkError
             } else {
                 print("Failed to restore purchases with RevenueCat: \(error.localizedDescription)")
                 throw SubscriptionError.restoreFailed
@@ -558,6 +719,17 @@ class SubscriptionService: NSObject, ObservableObject {
     
     // For refreshing the subscription status
     func refreshSubscriptionStatus() async {
+        print("Forcing subscription status refresh")
+        
+        // First try to sync purchases with RevenueCat
+        do {
+            try await Purchases.shared.syncPurchases()
+            print("Successfully synced purchases with RevenueCat")
+        } catch {
+            print("Failed to sync purchases: \(error.localizedDescription)")
+        }
+        
+        // Then update subscription status
         await updateSubscriptionStatus()
     }
     
@@ -623,8 +795,26 @@ class SubscriptionService: NSObject, ObservableObject {
             
             // Check environment by examining the customer info
             let isSandbox = customerInfo.originalAppUserId.contains("sandbox") || 
-                           Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" ||
                            ProcessInfo.processInfo.environment["SIMULATOR_DEVICE_NAME"] != nil
+            
+            // Check if we're in a sandbox environment using StoreKit
+            if #available(iOS 15.0, *) {
+                do {
+                    // Use shared transaction in a safer way
+                    let verificationResult = try? await AppTransaction.shared
+                    if case .verified(let appTransaction) = verificationResult {
+                        // Now access the environment property on the actual AppTransaction
+                        let isSandboxTransaction = appTransaction.environment == .sandbox
+                        if isSandboxTransaction {
+                            await MainActor.run {
+                                self.isSandboxUser = true
+                            }
+                        }
+                    }
+                } catch {
+                    print("Error checking App Store environment: \(error.localizedDescription)")
+                }
+            }
             
             await MainActor.run {
                 self.isSandboxUser = isSandbox
@@ -670,4 +860,11 @@ enum SubscriptionError: Error {
     case restoreFailed
     case timeout
     case unknown
+    case networkOffline
+    case networkError
+    case purchasePending
+    case receiptInUse
+    case productNotFound
+    case verificationFailed
+    case userCancelled
 } 

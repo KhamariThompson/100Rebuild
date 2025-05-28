@@ -64,7 +64,7 @@ struct ConsistencyCalendarView: View {
                         .frame(width: cellSize)
                 }
             }
-            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.bottom, 4)
             
             // Calendar grid with proper spacing and centering
@@ -196,7 +196,7 @@ struct CheckInAnimationModifier: ViewModifier {
                 hasAnimated = true
             }
             // Reset animation state if intensity changes
-            .onChange(of: intensity) { newValue in
+            .onChange(of: intensity) { oldValue, newValue in
                 if newValue > 0 {
                     // Briefly scale down and then back up to create a "pop" effect
                     withAnimation(.easeInOut(duration: 0.1)) {

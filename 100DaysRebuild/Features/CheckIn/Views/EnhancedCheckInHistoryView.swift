@@ -1,487 +1,214 @@
 import SwiftUI
-import Firebase
+import FirebaseFirestore
+import FirebaseAuth
 
 struct EnhancedCheckInHistoryView: View {
     let challenge: Challenge
-    
-    @StateObject private var viewModel: CheckInHistoryViewModel
-    @State private var viewMode: ViewMode = .timeline
+    @StateObject private var viewModel: EnhancedCheckInHistoryViewModel
+    @State private var selectedDate: Date = Date()
+    @State private var showingImagePicker = false
+    @State private var showingDetailView = false
     @State private var selectedCheckIn: Models_CheckInRecord?
-    @State private var showDetailView = false
-    @State private var selectedDate: Date?
-    @State private var selectedCheckIns: [Models_CheckInRecord] = []
-    @State private var scrollOffset: CGFloat = 0
-    
-    // Custom gradient for check-in history header
-    private let historyGradient = LinearGradient(
-        gradient: Gradient(colors: [Color.theme.accent, Color.orange]),
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-    
-    // View mode options
-    enum ViewMode {
-        case timeline
-        case calendar
-    }
     
     init(challenge: Challenge) {
         self.challenge = challenge
-        self._viewModel = StateObject(wrappedValue: CheckInHistoryViewModel(challenge: challenge))
+        self._viewModel = StateObject(wrappedValue: EnhancedCheckInHistoryViewModel(challenge: challenge))
     }
     
     var body: some View {
-        ZStack(alignment: .top) {
-            // Background
-            Color.theme.background
-                .ignoresSafeArea()
-            
-            // Content with scroll tracking
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Spacer to push content below the header
-                    Color.clear
-                        .frame(height: CalAIDesignTokens.headerHeight)
-                    
-                    // Mode Toggle
-                    Picker("View Mode", selection: $viewMode) {
-                        Text("Timeline").tag(ViewMode.timeline)
-                        Text("Calendar").tag(ViewMode.calendar)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    
-                    // Main content
-                    if viewModel.isLoading && viewModel.checkIns.isEmpty {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .frame(maxHeight: .infinity)
-                    } else if viewModel.checkIns.isEmpty {
-                        emptyStateView
-                    } else {
-                        Group {
-                            switch viewMode {
-                            case .timeline:
-                                timelineView
-                            case .calendar:
-                                calendarView
-                            }
-                        }
-                    }
-                }
-                .trackScrollOffset($scrollOffset)
-            }
-            
-            // Overlay the dynamic header
-            ScrollAwareHeaderView(
-                title: "Check-In History",
-                scrollOffset: $scrollOffset,
-                subtitle: challenge.title,
-                accentGradient: historyGradient
-            ) {
-                // Display stats about this challenge's check-ins
-                if !viewModel.checkIns.isEmpty {
-                    HStack(spacing: 16) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                            Text("\(challenge.daysCompleted) days")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                        
-                        HStack(spacing: 4) {
-                            Image(systemName: "flame.fill")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Text("Streak: \(challenge.streakCount)")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                    }
-                }
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    Task {
-                        await viewModel.loadInitialCheckIns()
-                    }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                }
-            }
-        }
-        .sheet(isPresented: $showDetailView) {
-            if let checkIn = selectedCheckIn {
-                CheckInDetailModalView(
-                    viewModel: viewModel,
-                    checkIn: checkIn,
-                    challengeTitle: challenge.title
-                )
-            }
-        }
-        .alert("Error", isPresented: $viewModel.showError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(viewModel.errorMessage)
-        }
-        .onAppear {
-            Task {
-                await viewModel.loadInitialCheckIns()
-            }
-        }
-    }
-    
-    // MARK: - Empty State View
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.system(size: 60))
-                .foregroundColor(.theme.subtext.opacity(0.5))
-            
-            Text("No check-ins yet")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Text("Complete your first day to see it here")
-                .font(.subheadline)
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
-            
-            Button(action: {
-                // Navigate to check-in view
-            }) {
-                Text("Check In Now")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.vertical, 12)
-                    .padding(.horizontal, 24)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.accent)
-                    )
-            }
-            .padding(.top, 16)
-        }
-        .padding()
-        .frame(maxHeight: .infinity)
-    }
-    
-    // MARK: - Timeline View
-    
-    private var timelineView: some View {
-        ScrollView {
-            LazyVStack(spacing: 24, pinnedViews: [.sectionHeaders]) {
-                // Group check-ins by month
-                ForEach(Array(viewModel.groupedCheckIns.keys.sorted().reversed()), id: \.self) { monthYear in
-                    Section(header: timelineMonthHeader(monthYear)) {
-                        ForEach(viewModel.groupedCheckIns[monthYear] ?? []) { checkIn in
-                            TimelineCheckInCard(checkIn: checkIn)
-                                .onTapGesture {
-                                    selectedCheckIn = checkIn
-                                    showDetailView = true
-                                }
-                        }
-                    }
-                }
-                
-                // Load more indicator
-                if viewModel.hasMoreData {
-                    Button(action: {
-                        Task {
-                            await viewModel.loadMoreCheckInsIfNeeded()
-                        }
-                    }) {
-                        HStack {
-                            Text("Load More")
-                                .font(.subheadline)
-                            
-                            if viewModel.isLoading {
-                                ProgressView()
-                                    .padding(.leading, 4)
-                            }
-                        }
-                        .foregroundColor(.theme.accent)
-                        .padding(.vertical, 12)
-                    }
-                    .padding(.bottom, 30)
-                }
-            }
-            .padding(.horizontal)
-        }
-        .background(Color.theme.background)
-    }
-    
-    private func timelineMonthHeader(_ monthYear: String) -> some View {
-        HStack {
-            Text(monthYear)
-                .font(.headline)
-                .foregroundColor(.theme.text)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 3, x: 0, y: 1)
-                )
-            
-            Spacer()
-        }
-        .padding(.vertical, 8)
-        .background(Color.theme.background)
-    }
-    
-    // MARK: - Calendar View
-    
-    private var calendarView: some View {
         VStack(spacing: 0) {
-            // Month selector
+            // Calendar header
             HStack {
-                Button(action: {
-                    let newDate = Calendar.current.date(
-                        byAdding: .month,
-                        value: -1,
-                        to: viewModel.selectedMonth
-                    ) ?? viewModel.selectedMonth
-                    viewModel.setSelectedMonth(newDate)
-                }) {
+                Button(action: { viewModel.previousMonth() }) {
                     Image(systemName: "chevron.left")
                         .foregroundColor(.theme.accent)
-                        .padding(8)
                 }
                 
                 Spacer()
                 
-                // Current month display
-                Text(monthYearString(from: viewModel.selectedMonth))
+                Text(viewModel.currentMonthYear)
                     .font(.headline)
                     .foregroundColor(.theme.text)
                 
                 Spacer()
                 
-                Button(action: {
-                    let newDate = Calendar.current.date(
-                        byAdding: .month,
-                        value: 1,
-                        to: viewModel.selectedMonth
-                    ) ?? viewModel.selectedMonth
-                    viewModel.setSelectedMonth(newDate)
-                }) {
+                Button(action: { viewModel.nextMonth() }) {
                     Image(systemName: "chevron.right")
                         .foregroundColor(.theme.accent)
-                        .padding(8)
                 }
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding()
             
-            // Day of week headers
-            HStack(spacing: 0) {
-                ForEach(Calendar.current.shortWeekdaySymbols, id: \.self) { day in
+            // Calendar grid
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
+                // Day headers
+                ForEach(viewModel.dayHeaders, id: \.self) { day in
                     Text(day)
                         .font(.caption)
                         .foregroundColor(.theme.subtext)
-                        .frame(maxWidth: .infinity)
                 }
-            }
-            .padding(.vertical, 8)
-            .background(Color.theme.surface)
-            
-            // Calendar grid
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 2) {
-                ForEach(viewModel.calendarDates, id: \.self) { date in
-                    CalendarDayView(
-                        date: date,
-                        isSelected: selectedDate == date,
-                        checkIn: viewModel.checkInsByDate[date]
-                    )
-                    .onTapGesture {
-                        if let checkIn = viewModel.checkInsByDate[date] {
+                
+                // Calendar days
+                ForEach(viewModel.daysInMonth, id: \.self) { date in
+                    if let checkIn = viewModel.checkIns[date] {
+                        EnhancedCalendarDayView(
+                            date: date,
+                            isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
+                            checkIn: checkIn
+                        )
+                        .onTapGesture {
                             selectedDate = date
                             selectedCheckIn = checkIn
-                            showDetailView = true
+                            showingDetailView = true
+                        }
+                    } else {
+                        EnhancedCalendarDayView(
+                            date: date,
+                            isSelected: Calendar.current.isDate(date, inSameDayAs: selectedDate),
+                            checkIn: nil
+                        )
+                        .onTapGesture {
+                            selectedDate = date
+                            showingImagePicker = true
                         }
                     }
                 }
             }
-            .padding(.horizontal, 4)
-            
-            // Legend and stats
-            HStack(spacing: 16) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.theme.accent)
-                        .frame(width: 12, height: 12)
-                    
-                    Text("Check-In")
-                        .font(.caption)
-                        .foregroundColor(.theme.subtext)
-                }
-                
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 12, height: 12)
-                    
-                    Text("No check-in")
-                        .font(.caption)
-                        .foregroundColor(.theme.subtext)
-                }
-                
-                Spacer()
-                
-                Text("\(viewModel.checkIns.count) total check-ins")
-                    .font(.caption)
-                    .foregroundColor(.theme.subtext)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 12)
-            
-            Spacer()
+            .padding()
         }
-    }
-    
-    private func monthYearString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        return formatter.string(from: date)
+        .background(Color.theme.background)
+        .sheet(isPresented: $showingImagePicker) {
+            CheckInSheet(
+                challengeId: challenge.id.uuidString,
+                date: selectedDate,
+                onDismiss: {
+                    showingImagePicker = false
+                    viewModel.loadCheckIns()
+                }
+            )
+        }
+        .sheet(isPresented: $showingDetailView) {
+            if let checkIn = selectedCheckIn {
+                CheckInBasicDetailView(checkIn: checkIn, challengeId: challenge.id.uuidString)
+            }
+        }
+        .onAppear {
+            viewModel.loadCheckIns()
+        }
     }
 }
 
-// MARK: - Timeline Card View
-
-struct TimelineCheckInCard: View {
-    let checkIn: Models_CheckInRecord
+// MARK: - View Model
+class EnhancedCheckInHistoryViewModel: ObservableObject {
+    @Published var checkIns: [Date: Models_CheckInRecord] = [:]
+    @Published var currentMonth: Date = Date()
+    private let challenge: Challenge
     
-    var body: some View {
-        VStack {
-            // Day indicator and circle
-            HStack(alignment: .top, spacing: 12) {
-                // Day circle
-                ZStack {
-                    Circle()
-                        .fill(Color.theme.accent)
-                        .frame(width: 40, height: 40)
-                    
-                    Text("\(checkIn.dayNumber)")
-                        .font(.headline)
-                        .foregroundColor(.white)
+    init(challenge: Challenge) {
+        self.challenge = challenge
+    }
+    
+    var currentMonthYear: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter.string(from: currentMonth)
+    }
+    
+    var dayHeaders: [String] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return (0...6).map { day in
+            let date = Calendar.current.date(byAdding: .day, value: day, to: Calendar.current.date(from: DateComponents(year: 2024, month: 1, day: 1))!)!
+            return formatter.string(from: date)
+        }
+    }
+    
+    var daysInMonth: [Date] {
+        let calendar = Calendar.current
+        let range = calendar.range(of: .day, in: .month, for: currentMonth)!
+        let firstDay = calendar.date(from: calendar.dateComponents([.year, .month], from: currentMonth))!
+        
+        return range.map { day in
+            calendar.date(byAdding: .day, value: day - 1, to: firstDay)!
+        }
+    }
+    
+    func previousMonth() {
+        currentMonth = Calendar.current.date(byAdding: .month, value: -1, to: currentMonth)!
+        loadCheckIns()
+    }
+    
+    func nextMonth() {
+        currentMonth = Calendar.current.date(byAdding: .month, value: 1, to: currentMonth)!
+        loadCheckIns()
+    }
+    
+    func loadCheckIns() {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        
+        let db = Firestore.firestore()
+        let checkInsRef = db
+            .collection("users").document(userId)
+            .collection("challenges").document(challenge.id.uuidString)
+            .collection("checkIns")
+        
+        checkInsRef.getDocuments { [weak self] snapshot, error in
+            guard let self = self,
+                  let documents = snapshot?.documents else { return }
+            
+            var newCheckIns: [Date: Models_CheckInRecord] = [:]
+            
+            for document in documents {
+                let data = document.data()
+                
+                // Get basic check-in data
+                guard let dayNumber = data["dayNumber"] as? Int else { continue }
+                
+                // Get timestamp or create a fallback date
+                let date: Date
+                if let timestamp = data["date"] as? Timestamp {
+                    date = timestamp.dateValue()
+                } else {
+                    date = Date()
                 }
                 
-                // Card content
-                VStack(alignment: .leading, spacing: 12) {
-                    // Header with day number and date
-                    HStack {
-                        Text("Day \(checkIn.dayNumber)")
-                            .font(.headline)
-                            .foregroundColor(.theme.accent)
-                        
-                        Spacer()
-                        
-                        Text(checkIn.date, style: .date)
-                            .font(.subheadline)
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    // Photo if available
-                    if checkIn.photoURL != nil {
-                        AsyncImage(url: checkIn.photoURL) { phase in
-                            switch phase {
-                            case .empty:
-                                Rectangle()
-                                    .fill(Color.theme.surface)
-                                    .overlay(ProgressView())
-                                    .frame(height: 160)
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(height: 160)
-                                    .clipped()
-                            case .failure:
-                                Rectangle()
-                                    .fill(Color.theme.surface)
-                                    .overlay(
-                                        Image(systemName: "photo.fill")
-                                            .foregroundColor(.theme.subtext.opacity(0.5))
-                                    )
-                                    .frame(height: 160)
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                        .cornerRadius(12)
-                    }
-                    
-                    // If there's a note, show a preview
-                    if let note = checkIn.note, !note.isEmpty {
-                        Text(note)
-                            .font(.subheadline)
-                            .foregroundColor(.theme.text)
-                            .lineLimit(2)
-                            .padding(.vertical, 4)
-                    }
-                    
-                    // Quote if available (preview)
-                    if let quote = checkIn.quote {
-                        HStack {
-                            Text("\"\(quote.text)\"")
-                                .font(.caption)
-                                .italic()
-                                .foregroundColor(.theme.subtext)
-                                .lineLimit(1)
-                            Spacer()
-                        }
-                    }
-                    
-                    // Footer with indicators
-                    HStack {
-                        if checkIn.photoURL != nil {
-                            Image(systemName: "photo")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                        
-                        if let note = checkIn.note, !note.isEmpty {
-                            Image(systemName: "text.quote")
-                                .font(.caption)
-                                .foregroundColor(.theme.subtext)
-                        }
-                        
-                        Spacer()
-                        
-                        Text("Tap to view")
-                            .font(.caption)
-                            .foregroundColor(.theme.accent)
-                    }
+                // Get optional fields
+                let note = data["note"] as? String
+                let quoteId = data["quoteId"] as? String
+                let promptShown = data["promptShown"] as? String
+                let photoURLString = data["photoURL"] as? String
+                let photoURL = photoURLString != nil ? URL(string: photoURLString!) : nil
+                
+                // Find quote if we have a quoteId
+                let quote: Quote?
+                if let id = quoteId {
+                    quote = Quote.all.first { $0.id == id } ?? Quote.samples.first
+                } else {
+                    quote = nil
                 }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 5, x: 0, y: 2)
+                
+                let checkIn = Models_CheckInRecord(
+                    id: document.documentID,
+                    dayNumber: dayNumber,
+                    date: date,
+                    note: note,
+                    quote: quote,
+                    promptShown: promptShown,
+                    photoURL: photoURL
                 )
+                
+                newCheckIns[date] = checkIn
             }
             
-            // Connector line
-            Rectangle()
-                .fill(Color.theme.accent.opacity(0.5))
-                .frame(width: 2)
-                .frame(height: 30)
-                .padding(.leading, 19)
-                .offset(y: -5)
+            DispatchQueue.main.async {
+                self.checkIns = newCheckIns
+            }
         }
     }
 }
 
 // MARK: - Calendar Day View
-
-struct CalendarDayView: View {
+struct EnhancedCalendarDayView: View {
     let date: Date
     let isSelected: Bool
     let checkIn: Models_CheckInRecord?
@@ -501,25 +228,313 @@ struct CalendarDayView: View {
                     .font(.subheadline)
                     .foregroundColor(checkIn != nil ? .theme.text : .theme.subtext)
                 
-                // Photo thumbnail or indicator if available
-                if checkIn?.photoURL != nil {
-                    ZStack {
-                        Circle()
-                            .fill(Color.theme.accent)
-                            .frame(width: 8, height: 8)
+                // Visual indicators for content
+                HStack(spacing: 4) {
+                    // Photo indicator
+                    if checkIn?.photoURL != nil {
+                        Image(systemName: "photo.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(.theme.accent)
                     }
-                } else if let note = checkIn?.note, !note.isEmpty {
-                    ZStack {
-                        Circle()
-                            .fill(Color.theme.subtext)
-                            .frame(width: 6, height: 6)
+                    
+                    // Journal indicator
+                    if let note = checkIn?.note, !note.isEmpty {
+                        Image(systemName: "text.book.closed")
+                            .font(.system(size: 8))
+                            .foregroundColor(.theme.accent)
                     }
                 }
             }
             .padding(.vertical, 8)
         }
         .aspectRatio(1, contentMode: .fill)
+        .contentShape(Rectangle()) // Make entire cell tappable
+        .opacity(isDateInCurrentMonth(date) ? 1.0 : 0.4) // Dim days not in current month
+    }
+    
+    // Helper to check if date is in the current month
+    private func isDateInCurrentMonth(_ date: Date) -> Bool {
+        let calendar = Calendar.current
+        let month = calendar.component(.month, from: date)
+        let currentMonth = calendar.component(.month, from: Date())
+        return month == currentMonth
     }
 }
 
-// Preview removed to avoid sample data usage in production code 
+// MARK: - Check In Sheet
+struct CheckInSheet: View {
+    let challengeId: String
+    let date: Date
+    let onDismiss: () -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var note: String = ""
+    @State private var selectedImage: UIImage?
+    @State private var isUploading = false
+    @State private var errorMessage = ""
+    @State private var showError = false
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Date header
+                    Text(date, style: .date)
+                        .font(.headline)
+                        .foregroundColor(.theme.subtext)
+                    
+                    // Photo picker
+                    if let image = selectedImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 200)
+                            .cornerRadius(12)
+                    } else {
+                        Button(action: {
+                            // Show image picker
+                        }) {
+                            VStack {
+                                Image(systemName: "photo")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.theme.accent)
+                                Text("Add Photo")
+                                    .font(.subheadline)
+                                    .foregroundColor(.theme.accent)
+                            }
+                            .frame(height: 200)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.theme.surface)
+                            .cornerRadius(12)
+                        }
+                    }
+                    
+                    // Note field
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Note")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                        
+                        TextEditor(text: $note)
+                            .frame(minHeight: 150)
+                            .padding(8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    
+                    // Save button
+                    Button(action: saveCheckIn) {
+                        if isUploading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .padding(.horizontal, 16)
+                        } else {
+                            Text("Save Check-In")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                        }
+                    }
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.accent)
+                    )
+                    .disabled(isUploading)
+                }
+                .padding()
+            }
+            .navigationTitle("New Check-In")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(leading: Button("Cancel") { dismiss() })
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
+            }
+        }
+    }
+    
+    private func saveCheckIn() {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            errorMessage = "Please sign in to save your check-in"
+            showError = true
+            return
+        }
+        
+        isUploading = true
+        
+        // First upload image if selected
+        if let image = selectedImage {
+            // Upload image and get URL
+            // Then save check-in with image URL
+        } else {
+            // Save check-in without image
+            saveCheckInToFirestore(photoURL: nil)
+        }
+    }
+    
+    private func saveCheckInToFirestore(photoURL: URL?) {
+        guard let userId = Auth.auth().currentUser?.uid else { return }
+        
+        let db = Firestore.firestore()
+        let checkInRef = db
+            .collection("users").document(userId)
+            .collection("challenges").document(challengeId)
+            .collection("checkIns").document("day\(Calendar.current.component(.day, from: date))")
+        
+        let checkInData: [String: Any] = [
+            "date": date,
+            "note": note,
+            "photoURL": photoURL?.absoluteString as Any,
+            "dayNumber": Calendar.current.component(.day, from: date)
+        ]
+        
+        checkInRef.setData(checkInData) { error in
+            isUploading = false
+            
+            if let error = error {
+                errorMessage = error.localizedDescription
+                showError = true
+            } else {
+                onDismiss()
+                dismiss()
+            }
+        }
+    }
+}
+
+// MARK: - Full Screen Image View
+struct FullScreenImageView: View {
+    let imageURL: URL
+    let day: Int
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack {
+                // Header
+                HStack {
+                    Button(action: { dismiss() }) {
+                        Image(systemName: "xmark")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                    
+                    Spacer()
+                    
+                    Text("Day \(day) Photo")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    // Share button
+                    Button(action: {
+                        // Add sharing functionality
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Circle().fill(Color.black.opacity(0.5)))
+                    }
+                }
+                .padding()
+                
+                // Image with zoom/pan capabilities
+                CachedAsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(scale)
+                            .offset(offset)
+                            .gesture(
+                                MagnificationGesture()
+                                    .onChanged { value in
+                                        let delta = value / lastScale
+                                        lastScale = value
+                                        scale = min(max(scale * delta, 1), 4)
+                                    }
+                                    .onEnded { _ in
+                                        lastScale = 1.0
+                                        if scale < 1.1 {
+                                            withAnimation {
+                                                scale = 1.0
+                                                offset = .zero
+                                            }
+                                        }
+                                    }
+                            )
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        if scale > 1 {
+                                            offset = CGSize(
+                                                width: lastOffset.width + value.translation.width,
+                                                height: lastOffset.height + value.translation.height
+                                            )
+                                        }
+                                    }
+                                    .onEnded { _ in
+                                        lastOffset = offset
+                                        if scale < 1.1 {
+                                            withAnimation {
+                                                offset = .zero
+                                            }
+                                        }
+                                    }
+                            )
+                            .onTapGesture(count: 2) {
+                                withAnimation {
+                                    if scale > 1 {
+                                        scale = 1.0
+                                        offset = .zero
+                                        lastOffset = .zero
+                                    } else {
+                                        scale = 2.0
+                                    }
+                                }
+                            }
+                    case .failure:
+                        VStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.largeTitle)
+                                .foregroundColor(.white)
+                            Text("Failed to load image")
+                                .foregroundColor(.white)
+                        }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+                // Footer with instructions
+                Text("Pinch to zoom • Double-tap to reset")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.bottom)
+            }
+        }
+    }
+}
+
+// MARK: - Preview removed to avoid sample data usage in production code 

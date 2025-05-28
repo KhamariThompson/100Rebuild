@@ -73,8 +73,8 @@ struct ProgressView: View {
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userStatsService: UserStatsService
+    @EnvironmentObject var badgeService: BadgeService
     
-    @State private var showAnalytics = false
     @State private var loadTask: Task<Void, Never>? = nil
     @State private var hasLoadedOnce = false
     @State private var scrollOffset: CGFloat = 0
@@ -155,21 +155,11 @@ struct ProgressView: View {
                             .font(.largeTitle)
                             .bold()
                             .foregroundStyle(progressGradient)
+                            .opacity(router.tabIsChanging ? 0 : 1) // Hide title during transitions
                         
                         Spacer()
                         
-                        // Analytics button
-                        Button {
-                            // Add haptic feedback for responsiveness
-                            let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
-                            feedbackGenerator.impactOccurred()
-                            
-                            showAnalytics = true
-                        } label: {
-                            Image(systemName: "chart.xyaxis.line")
-                                .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
-                                .foregroundColor(Color.theme.accent)
-                        }
+                        // Analytics button removed
                     }
                     .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                     .padding(.top, AppSpacing.m)
@@ -219,18 +209,11 @@ struct ProgressView: View {
             print("ProgressView - onDisappear")
             cancelCurrentTask()
         }
-        .fixedSheet(isPresented: $showAnalytics) {
-            if #available(iOS 16.0, *) {
-                ProgressAnalyticsView()
-            } else {
-                Text("Advanced analytics requires iOS 16 or later.")
-                    .padding()
-            }
-        }
         .sheet(item: $selectedBadge) { badge in
             BadgeDetailView(badge: badge)
         }
-        .modifier(NavigationDebounceModifier())
+        .badgeUnlockCelebration(badge: viewModel.newlyUnlockedBadge, isPresented: $viewModel.showingBadgeUnlock)
+        .modifier(NavigationDebugModifier())
         .onReceive(NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)) { _ in
             // Update data when we receive notifications about challenge store changes
             if !viewModel.isLoading {
@@ -365,29 +348,36 @@ struct ProgressView: View {
                 .fontWeight(.bold)
                 .foregroundColor(Color.theme.text)
             
-            if viewModel.earnedBadges.isEmpty {
-                Text("Complete challenges to earn badges!")
-                    .foregroundColor(Color.theme.subtext)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, AppSpacing.l)
-            } else {
-                // Horizontal scrolling badge cards
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: AppSpacing.m) {
-                        ForEach(viewModel.earnedBadges) { badge in
-                            BadgeCard(badge: badge)
-                                .frame(width: 120, height: 150)
-                                .onTapGesture {
-                                    // Placeholder for badge detail
-                                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                                    generator.impactOccurred()
-                                    selectedBadge = badge
-                                }
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, AppSpacing.s)
+            // Show "Next Badge to Unlock" teaser banner
+            if let nextBadge = badgeService.getNextBadgeToUnlock() {
+                nextBadgeTeaser(nextBadge)
+                    .padding(.bottom, AppSpacing.s)
+            }
+            
+            if badgeService.getUnlockedBadges().isEmpty {
+                // Empty state
+                VStack(spacing: AppSpacing.m) {
+                    Image(systemName: "trophy")
+                        .font(.system(size: 40))
+                        .foregroundColor(.theme.subtext.opacity(0.5))
+                    
+                    Text("Complete challenges to earn badges!")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(Color.theme.subtext)
+                        .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, AppSpacing.l)
+            } else {
+                // Use our new BadgeGridView component
+                BadgeGridView(
+                    badges: badgeService.badges,
+                    columns: 3,
+                    showLocked: true,
+                    onTap: { badge in
+                        selectedBadge = convertToProgressBadge(badge)
+                    }
+                )
             }
         }
         .padding()
@@ -395,6 +385,58 @@ struct ProgressView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+    
+    // Next badge teaser banner
+    private func nextBadgeTeaser(_ badge: Badge) -> some View {
+        HStack(spacing: 16) {
+            // Badge icon
+            ZStack {
+                Circle()
+                    .fill(badge.category.color.opacity(0.15))
+                    .frame(width: 56, height: 56)
+                
+                Image(systemName: badge.iconName)
+                    .font(.system(size: 24))
+                    .foregroundColor(badge.category.color)
+                
+                // Progress ring
+                Circle()
+                    .trim(from: 0, to: badge.progressPercentage)
+                    .stroke(
+                        badge.category.color.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                    .frame(width: 56, height: 56)
+            }
+            
+            // Badge details
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Next Badge to Unlock")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.theme.subtext)
+                
+                Text(badge.name)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.theme.text)
+                
+                Text("\(badge.currentProgress)/\(badge.requiredValue) progress")
+                    .font(.system(size: 14))
+                    .foregroundColor(.theme.subtext)
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(badge.category.color.opacity(0.2), lineWidth: 1)
+                )
         )
     }
     
@@ -437,82 +479,103 @@ struct ProgressView: View {
         )
     }
     
-    // 4. Consolidated Pro Preview Section
+    // 4. Consolidated Pro Preview
     private var consolidatedProPreviewSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            if !subscriptionService.isProUser {
-                ZStack {
-                    // Blurred background
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.theme.accent.opacity(0.7),
-                                    Color.theme.accent.opacity(0.3)
-                                ]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .blur(radius: 8)
-                        .opacity(0.5)
-                    
-                    VStack(spacing: AppSpacing.m) {
-                        // Lock icon and title
-                        HStack {
-                            Image(systemName: "lock.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(Color.theme.accent)
+        ProLockedView {
+            VStack(alignment: .leading, spacing: AppSpacing.m) {
+                Text("Advanced Analytics")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+                
+                // Enhanced pro analytics preview
+                VStack(spacing: AppSpacing.m) {
+                    // Projected completion with clear visual styling
+                    HStack(spacing: AppSpacing.l) {
+                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                            Text("Projected Completion")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.theme.subtext)
                             
-                            Text("Pro Feature")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(Color.theme.accent)
-                            
-                            Spacer()
+                            if let projectedDate = viewModel.projectedCompletionDate {
+                                Text(projectedDate, style: .date)
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.theme.text)
+                            } else {
+                                Text("Set a goal to see projection")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.theme.text)
+                            }
                         }
                         
-                        // Pro features description
-                        Text("Unlock trends, pace, and detailed insights with Pro")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(Color.theme.text)
-                            .multilineTextAlignment(.center)
-                            .padding(.vertical, AppSpacing.s)
+                        Spacer()
                         
-                        // Buttons
-                        VStack(spacing: AppSpacing.s) {
-                            Button {
-                                // Navigate to subscription page
-                            } label: {
-                                Text("Upgrade to Pro")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, AppSpacing.l)
-                                    .padding(.vertical, AppSpacing.m)
-                                    .background(Color.theme.accent)
-                                    .cornerRadius(12)
-                                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 5, x: 0, y: 3)
-                            }
+                        // Current pace indicator
+                        VStack(alignment: .trailing, spacing: AppSpacing.xxs) {
+                            Text("Current Pace")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.theme.subtext)
                             
-                            Button {
-                                // Dismiss or hide the pro preview
-                            } label: {
-                                Text("Maybe later")
-                                    .font(.subheadline)
-                                    .foregroundColor(Color.theme.subtext)
-                            }
+                            Text(viewModel.currentPace)
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.theme.text)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, AppSpacing.s)
+                    
+                    // Preview graph with enhanced visual style
+                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                        Text("Activity Trend")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.theme.subtext)
+                            .padding(.horizontal, AppSpacing.s)
+                        
+                        // Simulated chart with enhanced visual fidelity
+                        ZStack {
+                            // Background grid
+                            VStack(spacing: 0) {
+                                ForEach(0..<4) { _ in
+                                    Divider()
+                                        .background(Color.theme.subtext.opacity(0.2))
+                                    Spacer()
+                                }
+                            }
+                            
+                            // Chart bars
+                            HStack(alignment: .bottom, spacing: 8) {
+                                ForEach(0..<7) { index in
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [
+                                                    Color.theme.accent,
+                                                    Color.theme.accent.opacity(0.7)
+                                                ]),
+                                                startPoint: .top,
+                                                endPoint: .bottom
+                                            )
+                                        )
+                                        .frame(height: CGFloat([30, 60, 45, 70, 50, 80, 65][index % 7]))
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, AppSpacing.s)
+                            .padding(.bottom, AppSpacing.s)
+                            .padding(.top, AppSpacing.l)
+                        }
+                        .frame(height: 120)
+                    }
                 }
-            } else {
-                // Pro user content - empty spacer or alternative content
-                EmptyView()
+                .padding(AppSpacing.m)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                )
             }
+            .padding()
         }
-        .padding(.vertical, subscriptionService.isProUser ? 0 : AppSpacing.m)
-        .opacity(subscriptionService.isProUser ? 0 : 1)
-        .frame(height: subscriptionService.isProUser ? 0 : nil)
     }
     
     // 5. Daily Spark Section
@@ -753,6 +816,15 @@ struct ProgressView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+    
+    // Helper function to convert Badge to ProgressBadge
+    private func convertToProgressBadge(_ badge: Badge) -> ProgressBadge {
+        return ProgressBadge(
+            id: Int(badge.id.hashValue),  // Convert string ID to Int
+            title: badge.name,
+            iconName: badge.iconName
+        )
     }
 }
 

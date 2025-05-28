@@ -4,6 +4,7 @@ import FirebaseAuth
 import GoogleSignIn
 import AuthenticationServices
 import Firebase
+import CryptoKit
 
 // No need to import AuthAlert from Models since we're not using it directly in this file anymore
 
@@ -36,16 +37,34 @@ struct AuthView: View {
                 HStack {
                     // Close Button
                     Button(action: {
+                        // Navigate back to WelcomeView instead of just dismissing
                         dismiss()
+                        
+                        // Reset UserSession state to ensure Welcome screen is shown
+                        Task {
+                            await userSession.signOutWithoutThrowing()
+                            
+                            // Also post the navigation notification directly to ensure transition
+                            await MainActor.run {
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("ForceNavigateToWelcome"),
+                                    object: nil
+                                )
+                            }
+                        }
                     }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(Color.theme.text)
+                            .foregroundColor(.black)
                             .padding(12)
                             .background(
                                 Circle()
-                                    .fill(Color.theme.surface)
+                                    .fill(Color.white)
                                     .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.2), lineWidth: 1)
                             )
                     }
                     
@@ -222,7 +241,7 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign In")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignIn ? .white : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignIn ? .black : .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -248,7 +267,7 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign Up")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignUp ? .white : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignUp ? .black : .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -686,7 +705,7 @@ private extension AuthView {
             }
             .padding(.horizontal, 8)
             
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 // Apple Sign In
                 if showAppleSignIn {
                     SignInWithAppleButton(
@@ -695,7 +714,15 @@ private extension AuthView {
                             let nonce = viewModel.randomNonceString()
                             currentNonce = nonce
                             request.requestedScopes = [.email]
-                            request.nonce = viewModel.sha256(nonce)
+                            
+                            // Use direct implementation to avoid dependency on incorrect AuthService method
+                            let inputData = Data(nonce.utf8)
+                            let hashedData = SHA256.hash(data: inputData)
+                            let hashString = hashedData.compactMap {
+                                String(format: "%02x", $0)
+                            }.joined()
+                            
+                            request.nonce = hashString
                         },
                         onCompletion: { result in
                             Task {
@@ -712,7 +739,7 @@ private extension AuthView {
                     )
                 }
                 
-                // Google Sign In
+                // Google Sign In - styled to match Apple button
                 Button {
                     Task {
                         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -725,29 +752,19 @@ private extension AuthView {
                         await viewModel.signInWithGoogle()
                     }
                 } label: {
-                    HStack {
-                        Spacer()
-                        
-                        Text("Continue with Google")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.theme.text)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CalAIDesignTokens.buttonHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .fill(Color.theme.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
-                    )
-                    .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
+                    Text("Continue with Google")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: CalAIDesignTokens.buttonHeight)
+                        .background(Color.theme.surface)
+                        .cornerRadius(CalAIDesignTokens.buttonRadius)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                                .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
+                        )
                 }
-                .buttonStyle(AppScaleButtonStyle(scale: 0.98))
+                .buttonStyle(ScaleButtonStyle())
                 .disabled(!viewModel.networkConnected || viewModel.isLoading)
             }
         }
@@ -917,12 +934,17 @@ struct SignInWithAppleButton: UIViewRepresentable {
         
         let button = ASAuthorizationAppleIDButton(authorizationButtonType: type, authorizationButtonStyle: style)
         
-        // Set exact frame for better layout control
+        // Improved frame for better layout control
         button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width - 48, height: 50)
         
-        // Ensure the button adapts to layout changes but doesn't create invalid constraints
+        // Ensure content is properly centered
+        button.contentHorizontalAlignment = .center
+        button.contentVerticalAlignment = .center
         button.translatesAutoresizingMaskIntoConstraints = true
         button.clipsToBounds = true
+        
+        // Match button corner radius with SwiftUI buttons
+        button.cornerRadius = 8
         
         // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.buttonTapped))
@@ -976,7 +998,19 @@ struct SignInWithAppleButton: UIViewRepresentable {
         }
         
         func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-            return UIApplication.shared.windows.first { $0.isKeyWindow }!
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow } ?? UIWindow()
         }
+    }
+}
+
+// Simple scale button style for consistent appearance with Apple button
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 } 

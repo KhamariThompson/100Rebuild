@@ -573,7 +573,14 @@ class AuthViewModel: ObservableObject {
     }
     
     func sha256(_ input: String) -> String {
-        return authService.sha256(input)
+        // Directly implement the function here to ensure correctness
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)  // Fixed from %%02x to %02x
+        }.joined()
+        
+        return hashString
     }
 }
 

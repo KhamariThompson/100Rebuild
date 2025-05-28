@@ -271,8 +271,8 @@ class ChallengeStore: ObservableObject {
     
     /// Update metrics based on current challenges
     private func updateMetrics() {
-        // Count metrics
-        totalChallenges = challenges.count
+        // Count metrics - only count active challenges, not archived ones
+        totalChallenges = challenges.filter { !$0.isArchived }.count
         // activeChallenges is now calculated dynamically via getActiveChallenges()
         completedChallenges = challenges.filter { $0.isCompleted }.count
         
@@ -287,7 +287,7 @@ class ChallengeStore: ObservableObject {
         
         // Calculate overall completion percentage
         if totalChallenges > 0 {
-            let totalCompletedDays = challenges.reduce(0) { $0 + $1.daysCompleted }
+            let totalCompletedDays = challenges.filter { !$0.isArchived }.reduce(0) { $0 + $1.daysCompleted }
             let totalPossibleDays = totalChallenges * 100
             overallCompletionPercentage = min(1.0, Double(totalCompletedDays) / Double(totalPossibleDays))
         } else {

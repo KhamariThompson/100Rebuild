@@ -11,6 +11,7 @@ struct ProfileView: View {
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var badgeService: BadgeService
     @StateObject private var viewModel = ProfileViewModel()
     
     @State private var isShowingSettings = false
@@ -21,7 +22,10 @@ struct ProfileView: View {
     @State private var isShowingCameraPicker = false
     @State private var isShowingPhotoLibrary = false
     @State private var isShowingImageCropper = false
+    @State private var isShowingBadgeEditor = false
+    @State private var selectedBadge: Badge? = nil
     @State private var selectedImage: UIImage?
+    @State private var isImageReady = false
     @FocusState private var isUsernameFocused: Bool
     @State private var scrollOffset: CGFloat = 0
     
@@ -33,261 +37,275 @@ struct ProfileView: View {
     )
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                Color.theme.background
-                    .ignoresSafeArea()
-                
-                // Full screen loading view when initially loading
-                if viewModel.isInitialLoad {
-                    VStack {
-                        ProgressView()
-                            .scaleEffect(1.5)
-                            .padding()
+        ZStack {
+            // Background
+            Color.theme.background
+                .ignoresSafeArea()
+            
+            // Full screen loading view when initially loading
+            if viewModel.isInitialLoad {
+                VStack {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .padding()
+                    
+                    Text("Loading your profile...")
+                        .foregroundColor(.theme.subtext)
+                        .padding(.top, 8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
+            } else {
+                // Main profile scrolling content
+                ScrollView {
+                    // Scrollable content that slides under the sticky header
+                    VStack(spacing: AppSpacing.m) {
+                        // Title header with username
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                // Profile title with gradient
+                                Text("Profile")
+                                    .font(.largeTitle)
+                                    .bold()
+                                    .foregroundStyle(profileGradient)
+                            }
+                            
+                            Spacer()
+                            
+                            // Settings button
+                            Button(action: { isShowingSettings = true }) {
+                                Image(systemName: "gear")
+                                    .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                                    .foregroundColor(.theme.accent)
+                            }
+                            .buttonStyle(AppScaleButtonStyle())
+                        }
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.top, AppSpacing.m)
                         
-                        Text("Loading your profile...")
-                            .foregroundColor(.theme.subtext)
-                            .padding(.top, 8)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-                } else {
-                    // Main profile scrolling content
-                    ScrollView {
-                        // Scrollable content that slides under the sticky header
-                        VStack(spacing: AppSpacing.m) {
-                            // Title header with username
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    // Profile title with gradient
-                                    Text("Profile")
-                                        .font(.largeTitle)
-                                        .bold()
-                                        .foregroundStyle(profileGradient)
-                                    
-                                    // Username display
-                                    Text("@\(viewModel.username.isEmpty ? (userSession.username ?? "username") : viewModel.username)")
-                                        .font(AppTypography.title2())
-                                        .bold()
-                                        .foregroundColor(.theme.text)
-                                        .padding(.top, 4) // Reduced padding
-                                }
-                                
-                                Spacer()
-                                
-                                // Settings button
-                                Button(action: { isShowingSettings = true }) {
-                                    Image(systemName: "gear")
-                                        .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
-                                        .foregroundColor(.theme.accent)
-                                }
-                                .buttonStyle(AppScaleButtonStyle())
-                            }
+                        // Top hero section with profile image and username
+                        profileHeroSection
                             .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            .padding(.top, AppSpacing.m)
-                            
-                            // Top hero section with profile image and username
-                            profileHeroSection
-                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            
-                            // Stats scrolling section
-                            statsScrollSection
-                            
-                            // Divider for visual separation
-                            Divider()
-                                .padding(.vertical, AppSpacing.m)
-                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            
-                            // Horizontal action bar
-                            horizontalActionBar
-                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            
-                            // Divider for visual separation
-                            Divider()
-                                .padding(.vertical, AppSpacing.m)
-                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            
-                            // Last Active Challenge - Condensed
-                            if let lastActiveChallenge = viewModel.lastActiveChallenge {
-                                condensedChallengePreview(challenge: lastActiveChallenge)
-                                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            } else {
-                                noActiveChallenge
-                                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                            }
-                            
-                            // Add some bottom padding for better scrolling
-                            Color.clear.frame(height: 40)
-                        }
-                    }
-                    .safeAreaInset(edge: .top) {
-                        // Spacer to ensure content doesn't appear under the header
-                        Color.clear.frame(height: 0)
-                    }
-                    .overlay {
-                        if viewModel.isLoading && !viewModel.isInitialLoad {
-                            VStack {
-                                ProgressView()
-                                    .scaleEffect(1.5)
-                                    .padding()
-                            }
-                            .frame(width: 100, height: 100)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                    .fill(Color.theme.surface.opacity(0.8))
-                                    .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
-                            )
-                            .transition(.scale.combined(with: .opacity))
-                        }
-                    }
-                }
-            }
-            .navigationBarHidden(true) // Hide navigation bar since we have our own header
-            .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
-            .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
-            .alert(isPresented: Binding<Bool>(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Alert(
-                    title: Text("Error"),
-                    message: Text(viewModel.error ?? "Unknown error"),
-                    dismissButton: .default(Text("OK"))
-                )
-            }
-            .confirmationDialog("Choose Photo Source", isPresented: $isShowingPhotoOptions) {
-                Button("Camera") {
-                    isShowingCameraPicker = true
-                }
-                Button("Photo Library") {
-                    isShowingPhotoLibrary = true
-                }
-                Button("Cancel", role: .cancel) {}
-            }
-            .photosPicker(
-                isPresented: $isShowingPhotoLibrary,
-                selection: $viewModel.selectedPhoto,
-                matching: .images,
-                photoLibrary: .shared()
-            )
-            .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
-                if let newValue = newValue {
-                    // Pre-load the image data
-                    Task {
-                        do {
-                            let data = try await newValue.loadTransferable(type: Data.self)
-                            if let data = data, let image = UIImage(data: data) {
-                                // Immediately set the image and show cropper
-                                selectedImage = image
-                                isShowingImageCropper = true
-                            }
-                        } catch {
-                            print("Error loading image: \(error)")
-                        }
-                    }
-                }
-            }
-            .sheet(isPresented: $isShowingCameraPicker) {
-                ImagePicker(selectedImage: $selectedImage, isPresented: $isShowingCameraPicker, source: .camera)
-                    .onDisappear {
-                        if let image = selectedImage {
-                            // Immediately show cropper when camera image is selected
-                            isShowingImageCropper = true
-                        }
-                    }
-            }
-            .sheet(isPresented: $isShowingImageCropper) {
-                if let image = selectedImage {
-                    NavigationView {
-                        ImageCropperView(
-                            image: image,
-                            onCrop: { croppedImage in
-                                Task {
-                                    await MainActor.run {
-                                        viewModel.profileImage = croppedImage
-                                    }
-                                    await viewModel.processAndUploadImage(croppedImage)
-                                }
-                                isShowingImageCropper = false
-                                selectedImage = nil
+                        
+                        // Stats scrolling section
+                        statsScrollSection
+                        
+                        // Badge showcase section
+                        BadgeShowcaseView(
+                            badges: badgeService.showcasedBadges,
+                            onTap: { badge in
+                                selectedBadge = badge
                             },
-                            onCancel: {
-                                isShowingImageCropper = false
-                                selectedImage = nil
+                            onEditTap: {
+                                isShowingBadgeEditor = true
                             }
                         )
-                    }
-                    .navigationViewStyle(StackNavigationViewStyle())
-                    .ignoresSafeArea()
-                }
-            }
-            .sheet(isPresented: $isShowingSettings) {
-                NavigationView {
-                    SettingsView()
-                }
-            }
-            .sheet(isPresented: $isShowingAnalytics) {
-                NavigationView {
-                    Text("Profile Analytics")
-                        .font(.title)
-                        .padding()
-                }
-            }
-            .sheet(isPresented: $isShowingNewChallenge) {
-                NavigationView {
-                    Text("New Challenge")
-                        .font(.title)
-                        .padding()
-                }
-            }
-            .sheet(isPresented: $isShowingUsernamePrompt) {
-                NavigationView {
-                    UsernamePromptView(username: $viewModel.newUsername, onSave: {
-                        Task {
-                            await viewModel.saveUsername()
+                        
+                        // Divider for visual separation
+                        Divider()
+                            .padding(.vertical, AppSpacing.m)
+                            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        
+                        // Horizontal action bar
+                        horizontalActionBar
+                            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        
+                        // Divider for visual separation
+                        Divider()
+                            .padding(.vertical, AppSpacing.m)
+                            .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        
+                        // Current Challenge - Show only the most completed one
+                        if let challenge = viewModel.mostCompletedChallenge {
+                            condensedChallengePreview(challenge: challenge)
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        } else {
+                            noActiveChallenge
+                                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                         }
-                    })
-                }
-            }
-            .onAppear {
-                // Apply fixes for photo picker presentation
-                AppFixes.shared.applyAllFixes()
-                
-                // Load user profile data
-                viewModel.loadUserProfile()
-                
-                // Show username prompt if no username is set
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    if !viewModel.isInitialLoad && viewModel.username.isEmpty {
-                        isShowingUsernamePrompt = true
+                        
+                        // Add some bottom padding for better scrolling
+                        Color.clear.frame(height: 40)
                     }
                 }
-                
-                // Add observer for profile photo updates
-                NotificationCenter.default.addObserver(
-                    forName: Notification.Name("UserProfilePhotoUpdated"),
-                    object: nil,
-                    queue: .main
-                ) { [weak viewModel] notification in
-                    if let url = notification.object as? URL {
-                        Task {
-                            await viewModel?.loadImageFromURL(url)
+                .safeAreaInset(edge: .top) {
+                    // Spacer to ensure content doesn't appear under the header
+                    Color.clear.frame(height: 0)
+                }
+                .overlay {
+                    if viewModel.isLoading && !viewModel.isInitialLoad {
+                        VStack {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .padding()
                         }
+                        .frame(width: 100, height: 100)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                .fill(Color.theme.surface.opacity(0.8))
+                                .shadow(color: Color.theme.shadow, radius: 8, x: 0, y: 2)
+                        )
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
-            }
-            .onDisappear {
-                // Remove notification observers
-                NotificationCenter.default.removeObserver(self, name: Notification.Name("UserProfilePhotoUpdated"), object: nil)
             }
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .navigationBarHidden(true) // Hide navigation bar since we have our own header
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isInitialLoad)
+        .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
+        // Bio editing sheet
+        .sheet(isPresented: $viewModel.isEditingBio) {
+            bioEditSheet
+        }
+        // Error alert
+        .alert(isPresented: Binding<Bool>(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Alert(
+                title: Text("Error"),
+                message: Text(viewModel.error ?? "Unknown error"),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .confirmationDialog("Choose Photo Source", isPresented: $isShowingPhotoOptions) {
+            Button("Camera") {
+                // Present camera picker on the main thread with a slight delay to ensure proper presentation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isShowingCameraPicker = true
+                }
+            }
+            Button("Photo Library") {
+                // Present photo library picker on the main thread with a slight delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isShowingPhotoLibrary = true
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .photosPicker(
+            isPresented: $isShowingPhotoLibrary,
+            selection: $viewModel.selectedPhoto,
+            matching: .images,
+            photoLibrary: .shared()
+        )
+        .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
+            if let newValue = newValue {
+                Task {
+                    do {
+                        let data = try await newValue.loadTransferable(type: Data.self)
+                        if let data = data, let image = UIImage(data: data) {
+                            await MainActor.run {
+                                selectedImage = image
+                                isImageReady = true
+                                isShowingPhotoLibrary = false
+                                // Reset the selection immediately to allow future selections
+                                viewModel.selectedPhoto = nil
+                            }
+                        }
+                    } catch {
+                        print("Error loading image: \(error)")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingCameraPicker) {
+            ImagePicker(selectedImage: $selectedImage, isPresented: $isShowingCameraPicker, source: .camera)
+                .onDisappear {
+                    if let image = selectedImage {
+                        // Set isImageReady directly on the main thread
+                        DispatchQueue.main.async {
+                            isImageReady = true
+                        }
+                    }
+                }
+        }
+        .sheet(isPresented: $isImageReady, onDismiss: {
+            selectedImage = nil
+            isImageReady = false
+        }) {
+            NavigationView {
+                if let image = selectedImage {
+                    ImageCropperView(
+                        image: image,
+                        onCrop: { croppedImage in
+                            Task {
+                                await MainActor.run {
+                                    viewModel.profileImage = croppedImage
+                                }
+                                await viewModel.processAndUploadImage(croppedImage)
+                                isImageReady = false
+                                selectedImage = nil
+                            }
+                        },
+                        onCancel: {
+                            isImageReady = false
+                            selectedImage = nil
+                        }
+                    )
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView()
+        }
+        .sheet(isPresented: $isShowingAnalytics) {
+            Text("Profile Analytics")
+                .font(.title)
+                .padding()
+        }
+        .sheet(isPresented: $isShowingNewChallenge) {
+            Text("New Challenge")
+                .font(.title)
+                .padding()
+        }
+        .sheet(isPresented: $isShowingUsernamePrompt) {
+            UsernamePromptView(username: $viewModel.newUsername, onSave: {
+                Task {
+                    await viewModel.saveUsername()
+                }
+            })
+        }
+        .sheet(isPresented: $isShowingBadgeEditor) {
+            BadgeShowcaseEditorView()
+                .environmentObject(badgeService)
+        }
+        .sheet(item: $selectedBadge) { badge in
+            BadgeDetailView(badge: badge)
+        }
+        .onAppear {
+            // Load user profile data
+            viewModel.loadUserProfile()
+            
+            // Show username prompt if no username is set
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if !viewModel.isInitialLoad && viewModel.username.isEmpty {
+                    isShowingUsernamePrompt = true
+                }
+            }
+            
+            // Add observer for profile photo updates
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name("UserProfilePhotoUpdated"),
+                object: nil,
+                queue: .main
+            ) { [weak viewModel] notification in
+                if let url = notification.object as? URL {
+                    Task {
+                        await viewModel?.loadImageFromURL(url)
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            // Remove notification observers
+            NotificationCenter.default.removeObserver(self, name: Notification.Name("UserProfilePhotoUpdated"), object: nil)
+        }
     }
     
     // MARK: - UI Components
     
-    // Hero Section with avatar, username, and join date
+    // Hero Section with avatar, username, and bio
     private var profileHeroSection: some View {
         VStack(spacing: 12) {
             // Profile Image with tap gesture
@@ -305,10 +323,22 @@ struct ProfileView: View {
                 .foregroundColor(.theme.text)
                 .padding(.top, 4)
             
-            // Join date only - streak info removed
-            Text("Joined \(getMemberSinceDate())")
-                .font(AppTypography.footnote())
-                .foregroundColor(.theme.subtext)
+            // Joined date - displayed under username
+            Text("Joined \(formatJoinDate(viewModel.memberSinceDate))")
+                .font(.system(size: 12))
+                .foregroundColor(.theme.subtext.opacity(0.8))
+                .padding(.top, -2)
+            
+            // Bio text (editable on tap)
+            ZStack(alignment: .trailing) {
+                Text(viewModel.userBio)
+                    .font(AppTypography.subhead())
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 24)
+            }
+            .padding(.vertical, 4)
             
             // Edit profile button
             Button(action: { 
@@ -325,38 +355,221 @@ struct ProfileView: View {
                     )
             }
             .buttonStyle(PlainButtonStyle())
+            
+            // Milestone badge (if applicable)
+            if let milestone = viewModel.streakMilestone {
+                milestoneBadge(days: milestone)
+                    .padding(.top, 4)
+            }
+            
+            // Pro badge if user is subscribed
+            if subscriptionService.isProUser {
+                HStack {
+                    Image(systemName: "crown.fill")
+                        .foregroundColor(.yellow)
+                        .font(.system(size: 12))
+                    
+                    Text("PRO")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.yellow)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule()
+                        .fill(Color.yellow.opacity(0.15))
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.yellow.opacity(0.3), lineWidth: 1)
+                        )
+                )
+                .padding(.top, 4)
+            }
+        }
+    }
+    
+    // Milestone badge view
+    private func milestoneBadge(days: Int) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: days >= 100 ? "flame.fill" : "flame")
+                .foregroundColor(days >= 100 ? .orange : .theme.accent)
+                .font(.system(size: 14))
+            
+            Text("\(days)-Day Streak Achieved!")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(days >= 100 ? .orange : .theme.accent)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(days >= 100 ? Color.orange.opacity(0.15) : Color.theme.accent.opacity(0.1))
+                .overlay(
+                    Capsule()
+                        .strokeBorder(days >= 100 ? Color.orange.opacity(0.3) : Color.theme.accent.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+    
+    // Bio edit sheet - a better alternative with a text field
+    private var bioEditSheet: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Tell us about yourself")
+                    .font(AppTypography.title3())
+                    .padding(.top, 20)
+                
+                Text("Your bio helps people understand who you are")
+                    .font(AppTypography.subhead())
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 30)
+                
+                TextField("Bio", text: $viewModel.userBio)
+                    .padding()
+                    .background(Color.theme.surface)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.theme.border, lineWidth: 1)
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                
+                Text("Keep it brief - it will be displayed as max 2 lines")
+                    .font(AppTypography.caption1())
+                    .foregroundColor(.theme.subtext)
+                    .padding(.top, -5)
+                
+                Spacer()
+            }
+            .padding()
+            .background(Color.theme.background.edgesIgnoringSafeArea(.all))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        viewModel.isEditingBio = false
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            await viewModel.saveBio(viewModel.userBio)
+                        }
+                    }
+                }
+            }
         }
     }
     
     // Stats horizontal scroll area
     private var statsScrollSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppSpacing.s) {
-                // Member Since Stat
-                ProfileStatCard(
-                    icon: "calendar",
-                    value: viewModel.memberSinceDate?.formatAsMonthYear() ?? "N/A",
-                    label: "Member Since",
-                    iconColor: .blue
-                )
-                
-                // Active Challenges Stat
-                ProfileStatCard(
-                    icon: "flag.fill",
-                    value: "\(ChallengeStore.shared.getActiveChallenges().count)",
-                    label: "Active Challenges",
-                    iconColor: .green
-                )
-                
+        VStack(alignment: .leading, spacing: AppSpacing.s) {
+            // Section title
+            Text("Your Momentum")
+                .font(AppTypography.headline())
+                .foregroundColor(.theme.text)
+                .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+            
+            // Static row of three cards
+            HStack(spacing: AppSpacing.m) {
                 // Current Streak Stat
-                ProfileStatCard(
+                MomentumCard(
                     icon: "flame.fill",
                     value: "\(viewModel.currentStreak)",
                     label: "Current Streak",
-                    iconColor: .orange
+                    description: "days in a row"
                 )
+                .frame(maxWidth: .infinity)
+                
+                // Longest Streak Stat
+                MomentumCard(
+                    icon: "trophy.fill",
+                    value: "\(viewModel.longestStreak)",
+                    label: "Longest Streak",
+                    description: "days"
+                )
+                .frame(maxWidth: .infinity)
+                
+                // Completion Rate Stat
+                MomentumCard(
+                    icon: "chart.bar.fill",
+                    value: String(format: "%.0f%%", viewModel.completionRate),
+                    label: "Completion Rate",
+                    description: "overall success"
+                )
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+        }
+        .padding(.bottom, AppSpacing.s)
+    }
+    
+    // Stat card for momentum section
+    private struct MomentumCard: View {
+        let icon: String
+        let value: String
+        let label: String
+        let description: String
+        @Environment(\.colorScheme) private var colorScheme
+        
+        var body: some View {
+            VStack(alignment: .center, spacing: 6) {
+                // Icon in a circle
+                ZStack {
+                    Circle()
+                        .fill(getIconColor().opacity(0.15))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(getIconColor())
+                }
+                
+                // Value
+                Text(value)
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
+                
+                // Label
+                Text(label)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                
+                // Description
+                Text(description)
+                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .foregroundColor(.theme.subtext.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
+            )
+        }
+        
+        // Get appropriate icon color based on icon type
+        private func getIconColor() -> Color {
+            switch icon {
+            case "flame.fill":
+                return .orange
+            case "trophy.fill":
+                return .yellow
+            case "chart.bar.fill":
+                return .blue
+            default:
+                return .theme.accent
+            }
         }
     }
     
@@ -377,6 +590,7 @@ struct ProfileView: View {
                         object: nil
                     )
                 }
+                .frame(maxWidth: .infinity)
                 
                 // Create challenge button
                 ActionButton(title: "Create Challenge", icon: "plus", color: .green) {
@@ -387,11 +601,13 @@ struct ProfileView: View {
                         isShowingNewChallenge = true
                     }
                 }
+                .frame(maxWidth: .infinity)
                 
-                // Settings button
+                // Settings button (updated to match other action buttons)
                 ActionButton(title: "Settings", icon: "gear", color: .gray) {
                     isShowingSettings = true
                 }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -399,7 +615,7 @@ struct ProfileView: View {
     // Condensed Challenge Preview without circular progress
     private func condensedChallengePreview(challenge: Challenge) -> some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
-            Text("Current Challenge")
+            Text("Challenge In Progress")
                 .font(AppTypography.headline())
             
             Button(action: {
@@ -543,79 +759,62 @@ struct ProfileView: View {
     
     // Profile image view component
     private var profileImageView: some View {
-        Group {
-            if viewModel.isLoadingImage {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .frame(width: 100, height: 100)
-            } else if let profileImage = viewModel.profileImage {
-                Image(uiImage: profileImage)
-                    .resizable()
-                    .scaledToFill()
-                    .circularAvatarStyle(size: 100)
-                    .successCheckmark(isShowing: viewModel.showSuccessAnimation)
-            } else {
-                // Use ProfilePictureView if available in UserSession
-                if let photoURL = userSession.photoURL {
+        ZStack {
+            // Base consistent background
+            Circle()
+                .fill(Color.theme.surface)
+                .frame(width: 100, height: 100)
+            
+            // Different states layered with transitions
+            Group {
+                if viewModel.isLoadingImage {
+                    // Loading state
+                    ProgressView()
+                        .scaleEffect(1.0)
+                        .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
+                    
+                    // Show current image with reduced opacity while loading
+                    if let profileImage = viewModel.profileImage {
+                        Image(uiImage: profileImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 100, height: 100)
+                            .clipShape(Circle())
+                            .opacity(0.5)
+                    }
+                } else if let profileImage = viewModel.profileImage {
+                    // Locally loaded image (e.g. after camera capture or upload)
+                    Image(uiImage: profileImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 100, height: 100)
+                        .clipShape(Circle())
+                        .transition(.opacity)
+                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
+                } else if let photoURL = userSession.photoURL {
+                    // Remote image from URL
                     ProfilePictureView(url: photoURL, size: 100)
+                        .transition(.opacity)
                         .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else {
-                    // Use InitialAvatarView instead of default icon
+                    // Fallback to initials
                     InitialAvatarView(
                         name: viewModel.username.isEmpty ? (userSession.username ?? "User") : viewModel.username,
                         size: 100,
                         backgroundColor: Color.theme.accent
                     )
+                    .transition(.opacity)
                     .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isLoadingImage)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.profileImage != nil)
+            .animation(.easeInOut(duration: 0.3), value: userSession.photoURL != nil)
         }
+        .frame(width: 100, height: 100)
     }
     
     // MARK: - Helper Components
-    
-    // Stat badge for the horizontal scroll section
-    struct ProfileStatCard: View {
-        let icon: String
-        let value: String
-        let label: String
-        let iconColor: Color
-        
-        var body: some View {
-            VStack(alignment: .center, spacing: 4) {
-                // Icon in a circle
-                ZStack {
-                    Circle()
-                        .fill(iconColor.opacity(0.15))
-                        .frame(width: 44, height: 44)
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(iconColor)
-                }
-                .padding(.bottom, 4)
-                
-                // Value
-                Text(value)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                
-                // Label
-                Text(label)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundColor(.theme.subtext)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(minWidth: 100)
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
-            )
-        }
-    }
     
     // Action button for the horizontal action bar
     struct ActionButton: View {
@@ -641,6 +840,7 @@ struct ProfileView: View {
                     Capsule()
                         .stroke(color, lineWidth: 1.5)
                 )
+                .frame(minWidth: 120) // Set a minimum width for consistent sizing
             }
             .buttonStyle(AppScaleButtonStyle())
         }
@@ -721,12 +921,12 @@ struct ProfileView: View {
     // MARK: - Helper Methods
     
     // Format the member since date
-    private func getMemberSinceDate() -> String {
-        // First try to get date from ViewModel (Firestore data)
-        if let memberSinceDate = viewModel.memberSinceDate {
+    private func formatJoinDate(_ date: Date?) -> String {
+        // First try to use the date from ViewModel (Firestore data)
+        if let joinDate = date {
             let formatter = DateFormatter()
             formatter.dateFormat = "MMMM yyyy"
-            return formatter.string(from: memberSinceDate)
+            return formatter.string(from: joinDate)
         }
         
         // If not available in ViewModel, try to get directly from Firebase Auth
@@ -736,8 +936,8 @@ struct ProfileView: View {
             return formatter.string(from: creationDate)
         }
         
-        // If all else fails, show "Unavailable"
-        return "Unavailable"
+        // If all else fails, return empty string
+        return "Unknown"
     }
     
     // Relative time formatter for "time ago" strings
@@ -772,45 +972,23 @@ extension Date {
 
 // MARK: - Static Components
 
-// StatCard view for showing stats with icon
-struct ProfileStatCard: View {
-    let icon: String
-    let value: String
-    let label: String
-    let iconColor: Color
+// Helper struct to configure UIScrollView properties
+private struct ScrollViewConfigurator: UIViewRepresentable {
+    let decelerationRate: UIScrollView.DecelerationRate
     
-    var body: some View {
-        VStack(alignment: .center, spacing: 4) {
-            // Icon in a circle
-            ZStack {
-                Circle()
-                    .fill(iconColor.opacity(0.15))
-                    .frame(width: 44, height: 44)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(iconColor)
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            if let scrollView = uiView.superview?.superview?.superview as? UIScrollView {
+                scrollView.decelerationRate = decelerationRate
+                scrollView.showsHorizontalScrollIndicator = false
+                scrollView.bounces = true
+                scrollView.alwaysBounceHorizontal = true
             }
-            .padding(.bottom, 4)
-            
-            // Value
-            Text(value)
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-            
-            // Label
-            Text(label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
         }
-        .frame(minWidth: 100)
-        .padding(.vertical, 12)
-        .padding(.horizontal, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: 2)
-        )
     }
 } 

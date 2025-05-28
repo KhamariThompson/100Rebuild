@@ -83,48 +83,36 @@ struct MainTabView: View {
                 
                 // Floating action menu (replaces the + button with a menu)
                 if isMenuExpanded {
-                    VStack {
-                        Spacer()
-                        
-                        // Menu content
-                        FloatingActionMenu(content: {
-                            VStack(spacing: 12) {
-                                FloatingActionMenuItem(
-                                    icon: "flag.fill",
-                                    title: "New Challenge",
-                                    color: Color.blue
-                                ) {
-                                    isMenuExpanded = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        showNewChallengeSheet = true
+                    FloatingActionMenu(
+                        content: {
+                            VStack(spacing: 16) {
+                                Button(action: {
+                                    withAnimation {
+                                        isMenuExpanded = false
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            showNewChallengeSheet = true
+                                        }
                                     }
+                                }) {
+                                    Label("New Challenge", systemImage: "plus.circle.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.theme.accent)
                                 }
                                 
-                                FloatingActionMenuItem(
-                                    icon: "pencil",
-                                    title: "Custom Challenge",
-                                    color: Color.green
-                                ) {
-                                    isMenuExpanded = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        // Show custom challenge sheet
+                                Button(action: {
+                                    withAnimation {
+                                        isMenuExpanded = false
                                     }
-                                }
-                                
-                                FloatingActionMenuItem(
-                                    icon: "doc.text.fill",
-                                    title: "Challenge Template",
-                                    color: Color.purple
-                                ) {
-                                    isMenuExpanded = false
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                        // Show template selection
-                                    }
+                                }) {
+                                    Label("Cancel", systemImage: "xmark.circle.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.theme.subtext)
                                 }
                             }
-                        }, isExpanded: $isMenuExpanded)
-                    }
-                    .padding(.bottom, 20) // Adjusted for better alignment
+                            .padding()
+                        },
+                        isExpanded: $isMenuExpanded
+                    )
                 }
             }
         }
@@ -158,39 +146,6 @@ struct MainTabView: View {
                     }
                 }
         )
-    }
-}
-
-/// Router to manage tab state and transitions
-class NavigationRouter: ObservableObject {
-    @Published var selectedTab: Int = 0
-    @Published var tabIsChanging: Bool = false
-    
-    /// Change tab with animation
-    func changeTab(to tab: Int) {
-        guard selectedTab != tab else { return }
-        
-        // Prevent changing tabs if already in transition
-        if tabIsChanging {
-            return
-        }
-        
-        // Immediately set changing state
-        tabIsChanging = true
-        
-        // Use direct tab change with minimal animation
-        withAnimation(.easeOut(duration: 0.1)) {
-            self.selectedTab = tab
-        }
-        
-        // Reset changing state after a short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            self.tabIsChanging = false
-        }
-    }
-    
-    deinit {
-        print("✅ NavigationRouter released")
     }
 }
 

@@ -378,11 +378,16 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var journeyCards: [JourneyCard] = []
     @Published var recentPhotosNotes: [(photo: URL?, note: String, dayNumber: Int, date: Date)] = []
     
+    // New badge properties
+    @Published var newlyUnlockedBadge: Badge? = nil
+    @Published var showingBadgeUnlock: Bool = false
+    
     // Dependencies
     private let firestore = Firestore.firestore()
     @MainActor private var loadTask: Task<Void, Never>?
     @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
     @MainActor private var challengeStore: ChallengeStore { ChallengeStore.shared }
+    @MainActor private var badgeService: BadgeService { BadgeService.shared }
     
     // Add Combine cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -420,6 +425,19 @@ class ProgressDashboardViewModel: ObservableObject {
                     self.hasData = hasUserStats
                     print("ProgressDashboardViewModel updated from UserStatsService - hasData: \(hasUserStats)")
                 }
+            }
+            .store(in: &cancellables)
+        
+        // Listen for badge unlock notifications
+        NotificationCenter.default.publisher(for: BadgeService.badgeUnlockedNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                guard let self = self, let badge = notification.object as? Badge else { return }
+                print("ProgressDashboardViewModel received badge unlock notification for \(badge.name)")
+                
+                // Show badge unlock celebration
+                self.newlyUnlockedBadge = badge
+                self.showingBadgeUnlock = true
             }
             .store(in: &cancellables)
         
@@ -634,7 +652,7 @@ class ProgressDashboardViewModel: ObservableObject {
     // Helper function to format user-friendly error messages
     private func formatErrorMessage(_ error: Error) -> String {
         // Network connectivity issues
-        if let nsError = error as NSError? {
+        if let nsError = error as? NSError {
             // Check for common network errors
             if nsError.domain == NSURLErrorDomain {
                 switch nsError.code {

@@ -15,6 +15,8 @@ class ProfileViewModel: ObservableObject {
     @Published var username: String = ""
     @Published var isEditingUsername: Bool = false
     @Published var newUsername: String = ""
+    @Published var userBio: String = "Building my best habits 1 day at a time 💪"
+    @Published var isEditingBio: Bool = false
     
     // Photo selection and upload
     @Published var selectedPhoto: PhotosPickerItem?
@@ -43,13 +45,19 @@ class ProfileViewModel: ObservableObject {
     // User stats
     @Published var totalChallenges: Int = 0
     @Published var currentStreak: Int = 0
+    @Published var longestStreak: Int = 0
     @Published var completedChallenges: Int = 0
+    @Published var completionRate: Double = 0.0
+    @Published var streakMilestone: Int? = nil
     
     // New identity-focused properties
     @Published var memberSinceDate: Date?
     @Published var friendsCount: Int = 0
     @Published var lastActiveChallenge: Challenge?
     @Published var isSocialFeatureEnabled: Bool = false // For controlling social coming soon features
+    
+    // Challenge that is closest to completion
+    @Published var mostCompletedChallenge: Challenge?
     
     // Challenge store observer
     private var cancellables = Set<AnyCancellable>()
@@ -101,6 +109,21 @@ class ProfileViewModel: ObservableObject {
         
         // Update active challenge
         self.lastActiveChallenge = challengeStore.activeChallenge
+        
+        // Find the challenge closest to completion
+        let activeChallenges = challengeStore.getActiveChallenges()
+        self.mostCompletedChallenge = activeChallenges
+            .filter { !$0.isCompleted } // Only consider incomplete challenges
+            .sorted { $0.progressPercentage > $1.progressPercentage } // Sort by highest percentage first
+            .first // Take the most completed one
+        
+        // If there are no incomplete challenges but there are completed ones, show the most recently completed
+        if self.mostCompletedChallenge == nil && !activeChallenges.isEmpty {
+            self.mostCompletedChallenge = activeChallenges
+                .filter { $0.isCompleted }
+                .sorted { $0.lastCheckInDate ?? Date.distantPast > $1.lastCheckInDate ?? Date.distantPast }
+                .first
+        }
     }
     
     // MARK: - Public methods
@@ -127,6 +150,7 @@ class ProfileViewModel: ObservableObject {
                 
                 await MainActor.run {
                     self.username = profile.username ?? ""
+                    self.userBio = profile.bio ?? "Building my best habits 1 day at a time 💪"
                     
                     if let photoURLString = profile.photoURL?.absoluteString,
                        let photoURL = URL(string: photoURLString) {
@@ -152,6 +176,12 @@ class ProfileViewModel: ObservableObject {
             
             // Sync with challenge store for stats
             syncWithChallengeStore()
+            
+            // Calculate longest streak and completion rate
+            calculateAdvancedStats()
+            
+            // Check for streak milestones
+            checkForStreakMilestone()
             
             // Load user identity info
             await loadUserIdentityInfo()
@@ -216,30 +246,18 @@ class ProfileViewModel: ObservableObject {
     }
     
     /// Common processing and upload logic for all image sources
-    private func processAndUploadImage(_ image: UIImage) async {
+    func processAndUploadImage(_ image: UIImage) async {
         do {
-            // Process image using extensions
-            let resizedImage = image.resized(to: CGSize(width: 500, height: 500))
-            guard let processedImage = resizedImage.circleCropped() else {
-                print("Failed to crop image")
-                await MainActor.run {
-                    self.error = "Failed to process the image"
-                    self.isLoadingImage = false
-                }
-                return
+            // Update UI state immediately
+            await MainActor.run {
+                isLoadingImage = true
+                // Set image immediately to show the user
+                self.profileImage = image
             }
             
-            // Ensure we're getting valid data back for the processed image
-            guard let processedImageData = processedImage.compressedJPEG(quality: 0.7) else {
-                print("Failed to convert processed image to JPEG data")
-                await MainActor.run {
-                    self.error = "Failed to process the image"
-                    self.isLoadingImage = false
-                }
-                return
-            }
+            print("Starting profile image processing. Image size: \(image.size.width)x\(image.size.height)")
             
-            // Upload to Firebase Storage
+            // Ensure we have a user ID before proceeding
             guard let userId = userSession.currentUser?.uid else { 
                 print("No user ID available for upload")
                 await MainActor.run {
@@ -249,58 +267,97 @@ class ProfileViewModel: ObservableObject {
                 return
             }
             
-            print("Starting upload to Firebase Storage for user: \(userId)")
-            print("Image data size: \(processedImageData.count) bytes")
-            
-            // Show progress indicator immediately
-            await MainActor.run {
-                self.profileImage = processedImage // Set image immediately to show the user
+            // Automatically crop the image to a circle since the cropping UI was removed
+            guard let circularImage = image.circleCropped() else {
+                print("Failed to create circular cropped image")
+                await MainActor.run {
+                    self.error = "Failed to process the image"
+                    self.isLoadingImage = false
+                }
+                return
             }
+            
+            // Update the profile image to use the circular version
+            await MainActor.run {
+                self.profileImage = circularImage
+            }
+            
+            // Resize if needed for storage efficiency
+            let resizedImage = circularImage.size.width > 500 ? 
+                circularImage.resized(to: CGSize(width: 500, height: 500)) : 
+                circularImage
+            
+            print("Processed image to: \(resizedImage.size.width)x\(resizedImage.size.height)")
+            
+            // Ensure we're getting valid data back for the processed image
+            guard let processedImageData = resizedImage.compressedJPEG(quality: 0.9) else {
+                print("Failed to convert processed image to JPEG data")
+                await MainActor.run {
+                    self.error = "Failed to process the image"
+                    self.isLoadingImage = false
+                }
+                return
+            }
+            
+            print("Processed image data size: \(processedImageData.count) bytes")
+            print("Starting upload to Firebase Storage for user: \(userId)")
             
             // Upload the image to Firebase Storage
-            let url = try await firebaseService.uploadProfileImage(data: processedImageData, userId: userId)
-            print("Image uploaded successfully to: \(url.absoluteString)")
+            let storageRef = Storage.storage().reference().child("profile/\(userId)/profile.jpg")
+            let metadata = StorageMetadata()
+            metadata.contentType = "image/jpeg"
             
-            // Update Firestore with photoURL via UserSession
-            try await userSession.updateProfilePhoto(url)
-            print("UserSession photoURL updated")
+            // Upload the image
+            let _ = try await storageRef.putDataAsync(processedImageData, metadata: metadata)
+            print("Image uploaded successfully to Firebase Storage")
             
-            // Cache the image for immediate display
-            ImageCacheManager.shared.setImage(processedImage, forKey: url.absoluteString)
+            // Get the download URL
+            let downloadURL = try await storageRef.downloadURL()
+            print("Download URL obtained: \(downloadURL.absoluteString)")
             
-            // Update UI
+            // Update profile in Firebase Auth
+            let changeRequest = Auth.auth().currentUser?.createProfileChangeRequest()
+            changeRequest?.photoURL = downloadURL
+            try await changeRequest?.commitChanges()
+            print("Firebase Auth profile updated with new photo URL")
+            
+            // Update Firestore user document with the photo URL directly
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["photoURL": downloadURL.absoluteString])
+            print("Firestore user document updated with new photo URL")
+            
+            // Update local state
             await MainActor.run {
-                self.profileImage = processedImage
-                self.imageURL = url
-                self.isLoadingImage = false
+                self.imageURL = downloadURL
+                
+                // Create a separate Task for the async operation
+                Task {
+                    do {
+                        try await userSession.updateProfilePhoto(downloadURL)
+                        print("UserSession updated with new photo URL")
+                    } catch {
+                        print("Error updating user session photo: \(error)")
+                    }
+                }
+                
+                isLoadingImage = false
+                
+                // Show success indicator
                 self.showSuccessAnimation = true
                 
-                // Trigger haptic feedback
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.success)
-                
-                // Hide success animation after a delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    self.showSuccessAnimation = false
-                }
-            }
-        } catch let firebaseError as FirebaseError {
-            print("Firebase error uploading profile image: \(firebaseError)")
-            await MainActor.run {
-                switch firebaseError {
-                case .storageError(let error):
-                    self.error = "Storage error: \(error.localizedDescription)"
-                case .networkOffline:
-                    self.error = "Network is offline. Please check your connection."
-                default:
-                    self.error = "Error uploading image: \(firebaseError)"
-                }
-                self.isLoadingImage = false
+                // Post notification that the profile photo was updated
+                NotificationCenter.default.post(
+                    name: Notification.Name("UserProfilePhotoUpdated"),
+                    object: downloadURL
+                )
+                print("Profile photo update notification posted")
             }
         } catch {
-            print("Unexpected error uploading profile image: \(error)")
+            print("Error processing and uploading image: \(error.localizedDescription)")
             await MainActor.run {
-                self.error = "An unexpected error occurred: \(error.localizedDescription)"
+                self.error = "Failed to upload image: \(error.localizedDescription)"
                 self.isLoadingImage = false
             }
         }
@@ -472,5 +529,72 @@ class ProfileViewModel: ObservableObject {
     // Non-throwing signOut method
     func signOutWithoutThrowing() async {
         await userSession.signOutWithoutThrowing()
+    }
+    
+    // Calculate advanced stats like longest streak and completion rate
+    private func calculateAdvancedStats() {
+        // Get all challenges
+        let allChallenges = challengeStore.challenges
+        
+        // Calculate longest streak from all challenges
+        longestStreak = allChallenges.map { $0.streakCount }.max() ?? currentStreak
+        
+        // Calculate completion rate (completed days / total possible days)
+        let totalCompletedDays = allChallenges.reduce(0) { sum, challenge in
+            sum + challenge.daysCompleted
+        }
+        let totalPossibleDays = allChallenges.count * 100 // 100 days per challenge
+        
+        completionRate = totalPossibleDays > 0 ? Double(totalCompletedDays) / Double(totalPossibleDays) * 100.0 : 0.0
+    }
+    
+    // Check for streak milestones (7, 30, 100 days)
+    private func checkForStreakMilestone() {
+        let milestones = [7, 30, 100]
+        
+        // Find the highest milestone the user has reached
+        if currentStreak >= 7 {
+            if currentStreak >= 100 {
+                streakMilestone = 100
+            } else if currentStreak >= 30 {
+                streakMilestone = 30
+            } else {
+                streakMilestone = 7
+            }
+        } else {
+            streakMilestone = nil
+        }
+    }
+    
+    // Save user bio to Firestore
+    func saveBio(_ bio: String) async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
+        isLoading = true
+        
+        do {
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["bio": bio])
+            
+            await MainActor.run {
+                self.userBio = bio
+                self.isLoading = false
+                self.isEditingBio = false
+                self.showSuccessAnimation = true
+                
+                // Hide success animation after a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    self.showSuccessAnimation = false
+                }
+            }
+        } catch {
+            print("Error saving bio: \(error.localizedDescription)")
+            await MainActor.run {
+                self.error = "Failed to save bio"
+                self.isLoading = false
+            }
+        }
     }
 } 

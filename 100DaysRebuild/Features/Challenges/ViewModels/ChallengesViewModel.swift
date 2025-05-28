@@ -240,9 +240,13 @@ class ChallengesViewModel: ObservableObject {
     }
     
     private func updateLastCheckInDate() {
-        // Use the store's last check-in date
-        lastCheckInDate = challengeStore.lastCheckInDate
-        updateTimeSinceLastCheckIn()
+        // Add MainActor.run to ensure this runs on the main thread
+        Task { @MainActor in
+            // Safely unwrap lastCheckInDate with nil-coalescing
+            lastCheckInDate = challengeStore.lastCheckInDate
+            // Only call updateTimeSinceLastCheckIn after we have set the date
+            updateTimeSinceLastCheckIn()
+        }
     }
     
     func deleteChallenge(_ challenge: Challenge) async -> Result<Void, Error> {
@@ -321,8 +325,13 @@ class ChallengesViewModel: ObservableObject {
     // Helper to refresh the user stats
     private func refreshUserStats() async {
         do {
-            // Update the last check-in date locally
-            updateLastCheckInDate()
+            // Update the last check-in date locally - safely on the main thread
+            await MainActor.run {
+                // Only try to access lastCheckInDate if it's safe to do so
+                if let _ = challengeStore.lastCheckInDate {
+                    updateLastCheckInDate()
+                }
+            }
             
             // Update UserStatsService to ensure consistency across the app
             await UserStatsService.shared.refreshUserStats()
@@ -406,5 +415,28 @@ class ChallengesViewModel: ObservableObject {
     /// Check if the user has any active streaks
     var hasActiveStreaks: Bool {
         challenges.contains { $0.streakCount > 0 }
+    }
+    
+    // MARK: - Navigation Methods
+    
+    /// Initialize the check-in process for a challenge
+    func initializeCheckIn(for challenge: Challenge) {
+        // This method will be used to set up state and navigate to the check-in view
+        // For example, this might involve setting a selected challenge and showing a sheet
+        NotificationCenter.default.post(
+            name: NSNotification.Name("InitializeCheckIn"),
+            object: nil,
+            userInfo: ["challenge": challenge]
+        )
+    }
+    
+    /// Prepare to edit a challenge
+    func prepareToEditChallenge(_ challenge: Challenge) {
+        // This method will be used to set up state and navigate to the edit challenge view
+        NotificationCenter.default.post(
+            name: NSNotification.Name("PrepareToEditChallenge"),
+            object: nil,
+            userInfo: ["challenge": challenge]
+        )
     }
 } 

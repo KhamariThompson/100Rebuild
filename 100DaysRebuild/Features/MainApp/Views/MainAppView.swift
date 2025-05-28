@@ -18,12 +18,14 @@ struct MainAppView: View {
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
+    @EnvironmentObject var badgeService: BadgeService
     
     @Environment(\.colorScheme) private var colorScheme
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
     @State private var showAddAction = false
     @State private var safeAreaBottom: CGFloat = 0
+    @State private var isMenuExpanded = false
     
     // Use StateObject for view-owned ViewModels
     @StateObject private var viewModel = MainAppViewModel()
@@ -44,27 +46,33 @@ struct MainAppView: View {
         ZStack {
             // Main tab view
             ZStack {
+                // Consistent background
                 Color.theme.background.ignoresSafeArea()
                 
+                // Apply tab transition modifier to entire tab view
                 TabView(selection: $router.selectedTab) {
                     // Challenges Tab
                     ChallengesView()
                         .tag(0)
+                        .withTabTransition(router: router)
                     
                     // Progress Tab
                     ProgressView()
                         .tag(1)
+                        .withTabTransition(router: router)
                     
                     // Social Feed Tab
                     SocialView()
                         .tag(2)
+                        .withTabTransition(router: router)
                     
                     // Profile Tab
                     ProfileView()
                         .tag(3)
+                        .withTabTransition(router: router)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                .animation(.easeOut(duration: 0.2), value: router.selectedTab)
+                .animation(nil, value: router.selectedTab) // Disable TabView's built-in animation
                 .padding(.bottom, CalAIDesignTokens.tabBarHeight + 10)
                 
                 VStack {
@@ -73,17 +81,19 @@ struct MainAppView: View {
                 }
             }
             
-            // Overlays
-            if viewModel.showPaywall {
-                paywallOverlay
-            }
-            
-            if showNotificationSettings {
-                notificationPermissionOverlay
-            }
-            
-            if showAddAction {
-                addActionOverlay
+            // Overlays - only show when not changing tabs to prevent flickering
+            if !router.tabIsChanging {
+                if viewModel.showPaywall {
+                    paywallOverlay
+                }
+                
+                if showNotificationSettings {
+                    notificationPermissionOverlay
+                }
+                
+                if showAddAction {
+                    addActionOverlay
+                }
             }
         }
         .ignoresSafeArea(.keyboard)
@@ -94,7 +104,7 @@ struct MainAppView: View {
         .onAppear { [weak viewModel] in
             viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
-        .onChange(of: UIDevice.current.orientation) { [weak viewModel] _ in
+        .onChange(of: UIDevice.current.orientation) { [weak viewModel] oldValue, newValue in
             viewModel?.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
         }
     }
@@ -214,19 +224,21 @@ struct MainAppView: View {
             ZStack(alignment: .center) {
                 // Floating action button for creating new challenges
                 Button(action: {
+                    // Show action menu with animation
+                    hapticFeedback(.medium)
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         showAddAction = true
                     }
                 }) {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.black) // Changed from white to black for better visibility
                         .frame(width: 50, height: 50)
                         .background(
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.9)],
+                                        colors: [.white, Color.white.opacity(0.9)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -235,7 +247,7 @@ struct MainAppView: View {
                         .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
                         .overlay(
                             Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(Color.black.opacity(0.3), lineWidth: 1.5) // Added darker border for better visibility
                         )
                 }
                 .offset(y: -30) // Increased offset to make button more visible
@@ -471,14 +483,14 @@ struct NotificationSettingsView: View {
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
-                        .onChange(of: isDailyReminderEnabled) { newValue in
+                        .onChange(of: isDailyReminderEnabled) { oldValue, newValue in
                             updateNotificationSettings()
                         }
                         .tint(.theme.accent)
                     
                     if isDailyReminderEnabled {
                         DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
-                            .onChange(of: reminderTime) { newValue in
+                            .onChange(of: reminderTime) { oldValue, newValue in
                                 updateNotificationSettings()
                             }
                     }
@@ -496,7 +508,7 @@ struct NotificationSettingsView: View {
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
-                        .onChange(of: isStreakReminderEnabled) { newValue in
+                        .onChange(of: isStreakReminderEnabled) { oldValue, newValue in
                             updateNotificationSettings()
                         }
                         .tint(.theme.accent)

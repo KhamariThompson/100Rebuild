@@ -275,7 +275,7 @@ struct AppContentView: View {
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
     @StateObject private var navigationRouter = NavigationRouter()
-    @State private var isInitializing = true
+    @State private var isInitializing = true // Changed to true to show splash screen initially
     
     var body: some View {
         ZStack {
@@ -288,9 +288,9 @@ struct AppContentView: View {
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
-                        // Delay to show splash screen briefly
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            withAnimation(.easeInOut(duration: 0.4)) {
+                        // After a short delay, set isInitializing to false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
                                 isInitializing = false
                             }
                         }
@@ -300,11 +300,15 @@ struct AppContentView: View {
                     if userSession.isAuthenticated {
                         if userSession.hasCompletedOnboarding {
                             MainAppView()
+                                .environmentObject(navigationRouter)
+                                .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                         } else {
                             OnboardingView()
+                                .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                         }
                     } else {
                         AuthView()
+                            .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                     }
                 }
                 .environmentObject(navigationRouter)

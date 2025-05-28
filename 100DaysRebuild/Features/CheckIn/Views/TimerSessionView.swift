@@ -153,7 +153,7 @@ struct TimerSessionView: View {
             } label: {
                 Text("Check In & Complete")
                     .font(.headline)
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(
@@ -246,7 +246,7 @@ struct TimerSessionView: View {
                                          Color.theme.accent : Color.theme.surface)
                             )
                             .foregroundColor(viewModel.timerDuration == TimeInterval(minutes * 60) ? 
-                                            .white : .theme.text)
+                                            .black : .theme.text)
                     }
                 }
             }

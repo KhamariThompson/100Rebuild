@@ -97,6 +97,13 @@ struct Challenge: Identifiable, Codable, Equatable {
             } else if daysBetween > 1 {
                 // Streak broken, start new streak
                 updatedChallenge.streakCount = 1
+                
+                // Reset progress if the streak was broken (auto-restart)
+                if !isArchived && !isCompleted {
+                    // Keep at least one day completed (today's check-in)
+                    updatedChallenge.daysCompleted = 1
+                    print("Challenge restarted due to missed check-in: \(title)")
+                }
             } else {
                 // Same day check-in (shouldn't happen), keep streak
                 updatedChallenge.streakCount = streakCount
@@ -106,8 +113,10 @@ struct Challenge: Identifiable, Codable, Equatable {
             updatedChallenge.streakCount = 1
         }
         
-        // Increment days completed
-        updatedChallenge.daysCompleted += 1
+        // If we didn't restart the challenge, increment days completed
+        if updatedChallenge.daysCompleted == self.daysCompleted {
+            updatedChallenge.daysCompleted += 1
+        }
         
         // Mark as completed today
         updatedChallenge.isCompletedToday = true

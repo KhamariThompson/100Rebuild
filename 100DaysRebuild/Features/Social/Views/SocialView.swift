@@ -37,7 +37,7 @@ struct SocialView: View {
             
             // ScrollView with integrated title
             ScrollView {
-                VStack(spacing: AppSpacing.m) {
+                VStack(spacing: AppSpacing.l) {
                     // Title with gradient inside ScrollView
                     Text("Social")
                         .font(.largeTitle)
@@ -66,6 +66,7 @@ struct SocialView: View {
                             .transition(.opacity)
                     }
                 }
+                .padding(.bottom, 20) // Add bottom padding to prevent content from being cut off
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
             .animation(.easeInOut(duration: 0.3), value: viewModel.error)
@@ -74,7 +75,7 @@ struct SocialView: View {
         .background(Color.theme.background.ignoresSafeArea())
         .overlay {
             if viewModel.isLoading {
-                LoadingOverlay()
+                SocialLoadingOverlay()
             }
         }
         .alert(isPresented: Binding<Bool>(
@@ -289,7 +290,7 @@ struct SocialView: View {
                 .foregroundColor(.theme.text)
                 .padding(.horizontal, AppSpacing.xs)
             
-            // Horizontal scroll of feature cards
+            // Horizontal scroll of feature cards with improved layout
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: AppSpacing.m) {
                     ForEach(featureCards) { card in
@@ -301,8 +302,9 @@ struct SocialView: View {
                         .frame(width: 180, height: 200)
                     }
                 }
-                .padding(.horizontal, AppSpacing.xs)
-                .padding(.bottom, AppSpacing.s)
+                .padding(.horizontal, AppSpacing.m)
+                .padding(.bottom, AppSpacing.m)
+                .padding(.top, AppSpacing.xs)
             }
         }
     }
@@ -310,62 +312,69 @@ struct SocialView: View {
     // 4. Social Media Follow Section
     private var socialFollowSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Follow Us for Updates")
-                .font(AppTypography.title3())
-                .fontWeight(.bold)
-                .foregroundColor(.theme.text)
-                .padding(.horizontal, AppSpacing.xs)
+            // Header with icon
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.theme.accent)
+                
+                Text("Connect With Us")
+                    .font(AppTypography.title3())
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+            }
+            .padding(.horizontal, AppSpacing.m)
             
-            // Social media buttons in a safer, simpler layout
-            HStack(alignment: .top, spacing: AppSpacing.xl) {
-                // TikTok Button
-                fixedSocialButton(
-                    platform: "TikTok",
-                    username: "@100days.site",
-                    icon: "tiktok-icon",
-                    url: URL(string: "https://www.tiktok.com/@100days.site")!
-                )
+            // Social media cards with improved 3-card layout
+            VStack(spacing: 20) {
+                // Top row - 2 cards side by side
+                HStack(spacing: 20) {
+                    // TikTok Card
+                    socialMediaCard(
+                        platform: "TikTok",
+                        username: "@100days.site",
+                        systemIcon: "play.square.fill",
+                        url: URL(string: "https://www.tiktok.com/@100days.site") ?? URL(string: "https://100days.site")!,
+                        gradient: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)]
+                    )
+                    .frame(maxWidth: .infinity)
+                    
+                    // X Card (formerly Twitter)
+                    socialMediaCard(
+                        platform: "X",
+                        username: "@100DaysHQ",
+                        systemIcon: "bubble.left.and.bubble.right.fill",
+                        url: URL(string: "https://twitter.com/100DaysHQ") ?? URL(string: "https://100days.site")!,
+                        gradient: [Color(red: 0.05, green: 0.05, blue: 0.05), Color(red: 0.2, green: 0.2, blue: 0.2)]
+                    )
+                    .frame(maxWidth: .infinity)
+                }
                 
-                // X/Twitter Button
-                fixedSocialButton(
-                    platform: "X",
-                    username: "@100DaysHQ",
-                    icon: "x-icon",
-                    url: URL(string: "https://twitter.com/100DaysHQ")!
-                )
-                
-                // Instagram Button
-                fixedSocialButton(
+                // Bottom row - centered Instagram card
+                socialMediaCard(
                     platform: "Instagram",
                     username: "@100days.site",
-                    icon: "instagram-icon",
-                    url: URL(string: "https://instagram.com/100days.site")!
+                    systemIcon: "camera.circle.fill",
+                    url: URL(string: "https://instagram.com/100days.site") ?? URL(string: "https://100days.site")!,
+                    gradient: [Color.purple, Color.pink.opacity(0.8)]
                 )
+                .frame(maxWidth: .infinity)
+                .frame(height: 160) // Make the bottom card taller for better visual balance
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, AppSpacing.l)
-            
-            // Coming soon label
-            Text("Coming Soon")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.theme.subtext)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 16)
-                .background(
-                    Capsule()
-                        .fill(Color.theme.surface)
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.theme.border, lineWidth: 1)
-                        )
-                )
-                .padding(.top, AppSpacing.s)
+            .padding(.horizontal, AppSpacing.m)
+            .padding(.vertical, AppSpacing.m)
         }
-        .padding(.bottom, AppSpacing.l)
+        .padding(.vertical, AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal, AppSpacing.xs)
     }
     
-    // Simplified social button without animations to fix EXC_BAD_ACCESS issues
-    private func fixedSocialButton(platform: String, username: String, icon: String, url: URL) -> some View {
+    // Redesigned social media card with gradient background
+    private func socialMediaCard(platform: String, username: String, systemIcon: String, url: URL, gradient: [Color]) -> some View {
         Button {
             // Open URL
             UIApplication.shared.open(url)
@@ -374,56 +383,66 @@ struct SocialView: View {
             let generator = UIImpactFeedbackGenerator(style: .medium)
             generator.impactOccurred()
         } label: {
-            VStack(spacing: AppSpacing.s) {
-                // Enhanced Icon with better styling
-                ZStack {
-                    Circle()
-                        .fill(getSocialColor(for: platform))
-                        .frame(width: 60, height: 60)
-                        .shadow(color: getSocialColor(for: platform).opacity(0.3), radius: 8, x: 0, y: 3)
+            VStack(alignment: .leading, spacing: 14) {
+                // Platform icon
+                HStack(spacing: 8) {
+                    Image(systemName: systemIcon)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
                     
-                    // App icon
-                    Image(icon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 32, height: 32)
+                    Spacer()
+                    
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .padding(6)
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Circle())
                         .foregroundColor(.white)
                 }
                 
+                Spacer()
+                
                 // Platform name and username
-                VStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(platform)
-                        .font(AppTypography.subhead())
-                        .fontWeight(.semibold)
-                        .foregroundColor(.theme.text)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
                     
                     Text(username)
-                        .font(AppTypography.footnote())
-                        .foregroundColor(.theme.subtext)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
                 }
             }
-            .padding(AppSpacing.m)
+            .frame(height: 130)
+            .padding(18)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 5, x: 0, y: 3)
+                LinearGradient(
+                    gradient: Gradient(colors: gradient),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(16)
+            .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .overlay(
+                // Add subtle pulsating effect on hover
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    .scaleEffect(1.02)
+                    .opacity(0.0)
+                    .animation(
+                        Animation.easeInOut(duration: 1.5)
+                            .repeatForever(autoreverses: true),
+                        value: UUID()
+                    )
             )
         }
         .buttonStyle(AppScaleButtonStyle())
-    }
-    
-    // Helper to get background color for different platforms
-    private func getSocialColor(for platform: String) -> Color {
-        switch platform {
-        case "TikTok":
-            return Color.black
-        case "X":
-            return Color(.systemBlue)
-        case "Instagram":
-            return Color.purple
-        default:
-            return Color.theme.accent
-        }
     }
     
     // MARK: - Helper Properties
@@ -624,7 +643,7 @@ struct FeatureCard: Identifiable {
     let iconName: String
 }
 
-// Feature Teaser Card
+// Feature Teaser Card with improved layout
 struct FeatureTeaseCard: View {
     let title: String
     let description: String
@@ -638,8 +657,6 @@ struct FeatureTeaseCard: View {
                 Circle()
                     .fill(Color.theme.accent.opacity(0.15))
                     .frame(width: 60, height: 60)
-                    .blur(radius: animateGlow ? 8 : 5)
-                    .opacity(animateGlow ? 0.8 : 0.5)
                 
                 Image(systemName: iconName)
                     .font(.system(size: 28))
@@ -647,21 +664,23 @@ struct FeatureTeaseCard: View {
                 
                 // Lock overlay
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(6)
                     .background(
                         Circle()
                             .fill(Color.theme.accent)
                     )
-                    .offset(x: 20, y: 20)
+                    .offset(x: 18, y: 18)
             }
-            .padding(.top, AppSpacing.s)
+            .padding(.top, AppSpacing.m)
+            .padding(.leading, AppSpacing.s)
             
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(title)
                     .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
+                    .padding(.top, AppSpacing.s)
                 
                 Text(description)
                     .font(AppTypography.caption1())
@@ -669,22 +688,19 @@ struct FeatureTeaseCard: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, AppSpacing.s)
+            .padding(.horizontal, AppSpacing.s)
+            .padding(.bottom, AppSpacing.m)
             
             Spacer()
         }
-        .padding(AppSpacing.m)
+        .frame(height: 190)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
-        )
         .onAppear {
-            withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 animateGlow = true
             }
         }
@@ -692,7 +708,7 @@ struct FeatureTeaseCard: View {
 }
 
 /// Loading overlay view
-struct LoadingOverlay: View {
+struct SocialLoadingOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.3)

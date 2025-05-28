@@ -169,20 +169,26 @@ class UserProgressViewModelImpl: ObservableObject {
                     }
                 } catch {
                     print("Error loading challenges: \(error.localizedDescription)")
-                    if !self.isNetworkConnected {
-                        self.errorMessage = "You're offline. Connect to the internet to load your progress."
-                    } else {
-                        self.errorMessage = "Failed to load challenges: \(error.localizedDescription)"
+                    
+                    await MainActor.run {
+                        if !self.isNetworkConnected {
+                            self.errorMessage = "You're offline. Connect to the internet to load your progress."
+                        } else {
+                            self.errorMessage = "Failed to load challenges: \(error.localizedDescription)"
+                        }
+                        self.isLoading = false
                     }
-                    self.isLoading = false
+                    
                     timeoutTask.cancel()
                     return
                 }
                 
                 if challenges.isEmpty {
                     // No data available
-                    self.hasData = false
-                    self.isLoading = false
+                    await MainActor.run {
+                        self.hasData = false
+                        self.isLoading = false
+                    }
                     timeoutTask.cancel()
                     return
                 }
@@ -260,29 +266,33 @@ class UserProgressViewModelImpl: ObservableObject {
                 let journeyCards = await self.generateJourneyCards(challenges: challenges, userId: userId)
                 
                 // Update UI
-                self.totalChallenges = totalChallengesCount
-                self.currentStreak = currentStreakCount
-                self.longestStreak = longestStreakCount
-                self.completionPercentage = overallCompletionRate
-                self.dateIntensityMap = intensityMap
-                self.earnedBadges = earnedBadges
-                self.journeyCards = journeyCards
+                await MainActor.run {
+                    self.totalChallenges = totalChallengesCount
+                    self.currentStreak = currentStreakCount
+                    self.longestStreak = longestStreakCount
+                    self.completionPercentage = overallCompletionRate
+                    self.dateIntensityMap = intensityMap
+                    self.earnedBadges = earnedBadges
+                    self.journeyCards = journeyCards
+                    
+                    self.hasData = true
+                    self.isLoading = false
+                    self.errorMessage = nil
+                }
                 
-                // Add a potentially throwing function call to make the catch block reachable
-                try Task.checkCancellation()
-                
-                self.hasData = true
-                self.isLoading = false
-                self.errorMessage = nil
                 timeoutTask.cancel()
             } catch {
                 if !Task.isCancelled {
                     print("Error in progress data loading: \(error.localizedDescription)")
-                    // Keep existing data if we had it
-                    if !self.hasData {
-                        self.errorMessage = "Failed to load progress data: \(error.localizedDescription)"
+                    
+                    await MainActor.run {
+                        // Keep existing data if we had it
+                        if !self.hasData {
+                            self.errorMessage = "Failed to load progress data: \(error.localizedDescription)"
+                        }
+                        self.isLoading = false
                     }
-                    self.isLoading = false
+                    
                     timeoutTask.cancel()
                 }
             }
@@ -397,8 +407,13 @@ class UserProgressViewModelImpl: ObservableObject {
                         
                         // Only add entries with notes or photos
                         if !note.isEmpty || photoUrl != nil {
-                            let url = photoUrl != nil ? URL(string: photoUrl!) : nil
-                            recentPhotosAndNotes.append((photo: url, note: note, dayNumber: dayNumber, date: date))
+                            let safeUrl: URL?
+                            if let urlString = photoUrl, !urlString.isEmpty {
+                                safeUrl = URL(string: urlString)
+                            } else {
+                                safeUrl = nil
+                            }
+                            recentPhotosAndNotes.append((photo: safeUrl, note: note, dayNumber: dayNumber, date: date))
                         }
                     }
                 }

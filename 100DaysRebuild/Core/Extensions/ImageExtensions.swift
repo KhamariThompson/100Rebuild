@@ -67,23 +67,28 @@ extension UIImage {
         let shortestSide = min(size.width, size.height)
         let squareSize = CGSize(width: shortestSide, height: shortestSide)
         
-        // Crop to square first
-        let squareRect = CGRect(
-            x: (size.width - shortestSide) / 2,
-            y: (size.height - shortestSide) / 2,
-            width: shortestSide,
-            height: shortestSide
-        )
-        
-        guard let cgImage = self.cgImage?.cropping(to: squareRect) else { return nil }
-        let squareImage = UIImage(cgImage: cgImage)
-        
-        // Now create circular image
+        // Create a new image context with a square size
         let renderer = UIGraphicsImageRenderer(size: squareSize)
+        
         return renderer.image { context in
-            context.cgContext.addEllipse(in: CGRect(origin: .zero, size: squareSize))
-            context.cgContext.clip()
-            squareImage.draw(in: CGRect(origin: .zero, size: squareSize))
+            // Create circular clipping path
+            let circlePath = UIBezierPath(ovalIn: CGRect(origin: .zero, size: squareSize))
+            circlePath.addClip()
+            
+            // Calculate centered drawing rect
+            let drawRect: CGRect
+            if size.width > size.height {
+                // Image is wider than tall - center horizontally
+                let xOffset = (size.width - size.height) / 2
+                drawRect = CGRect(x: -xOffset, y: 0, width: size.width, height: size.height)
+            } else {
+                // Image is taller than wide - center vertically
+                let yOffset = (size.height - size.width) / 2
+                drawRect = CGRect(x: 0, y: -yOffset, width: size.width, height: size.height)
+            }
+            
+            // Draw the image centered within the circle
+            self.draw(in: drawRect)
         }
     }
     
@@ -115,13 +120,29 @@ struct ImagePicker: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                parent.selectedImage = image
+                // First capture the image locally
+                let selectedImage = image
+                
+                // Dismiss the picker first to prevent visual glitches
+                DispatchQueue.main.async {
+                    self.parent.isPresented = false
+                    
+                    // Set the selected image after dismissal is initiated
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        self.parent.selectedImage = selectedImage
+                    }
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.parent.isPresented = false
+                }
             }
-            parent.isPresented = false
         }
         
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.isPresented = false
+            DispatchQueue.main.async {
+                self.parent.isPresented = false
+            }
         }
     }
     
@@ -136,6 +157,13 @@ struct ImagePicker: UIViewControllerRepresentable {
         switch source {
         case .camera:
             picker.sourceType = .camera
+            // Add camera usage permissions check
+            if !UIImagePickerController.isSourceTypeAvailable(.camera) {
+                print("Camera not available")
+                DispatchQueue.main.async {
+                    self.isPresented = false
+                }
+            }
         case .photoLibrary:
             picker.sourceType = .photoLibrary
         }
@@ -143,7 +171,9 @@ struct ImagePicker: UIViewControllerRepresentable {
         return picker
     }
     
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        // This method intentionally left empty
+    }
 }
 
 // MARK: - Profile Picture View
@@ -152,33 +182,52 @@ struct ProfilePictureView: View {
     let size: CGFloat
     @State private var imageLoadingError = false
     @State private var cachedImage: UIImage?
+    @State private var isLoading = true
     
     var body: some View {
-        Group {
+        ZStack {
+            // Base circle placeholder - always present for consistency
+            Circle()
+                .fill(Color.theme.surface)
+                .frame(width: size, height: size)
+            
             if let cachedImage = cachedImage {
+                // Show cached image with transition
                 Image(uiImage: cachedImage)
                     .resizable()
                     .scaledToFill()
                     .circularAvatarStyle(size: size)
+                    .transition(.opacity)
+            } else if isLoading {
+                // Loading indicator
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
+                    .scaleEffect(1.0)
+                    .frame(width: size, height: size)
+            } else if imageLoadingError {
+                // Error fallback
+                Image(systemName: "person.circle.fill")
+                    .font(.system(size: size * 0.8))
+                    .foregroundColor(.theme.accent)
+                    .frame(width: size, height: size)
             } else {
+                // This should only be shown briefly if at all
                 CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .empty:
-                        ZStack {
-                            Circle()
-                                .fill(Color.theme.surface)
-                                .frame(width: size, height: size)
-                            
-                            ProgressView()
-                                .frame(width: size, height: size)
-                        }
+                        // Empty placeholder handled by parent ZStack
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFill()
                             .circularAvatarStyle(size: size)
                             .onAppear {
-                                imageLoadingError = false
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    imageLoadingError = false
+                                    isLoading = false
+                                }
                                 // Cache the loaded image
                                 if let uiImage = image.asUIImage() {
                                     self.cachedImage = uiImage
@@ -186,20 +235,27 @@ struct ProfilePictureView: View {
                                 }
                             }
                     case .failure:
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: size))
-                            .foregroundColor(.theme.accent)
+                        // Failure handled by parent ZStack
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .onAppear {
-                                imageLoadingError = true
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    imageLoadingError = true
+                                    isLoading = false
+                                }
                                 print("Failed to load profile image: \(url?.absoluteString ?? "nil")")
                             }
                     @unknown default:
-                        Image(systemName: "person.circle.fill")
-                            .font(.system(size: size))
-                            .foregroundColor(.theme.accent)
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .onAppear {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    imageLoadingError = true
+                                    isLoading = false
+                                }
+                            }
                     }
                 }
-                .transition(.opacity.combined(with: .scale))
             }
         }
         .onAppear {
@@ -207,6 +263,9 @@ struct ProfilePictureView: View {
             if let urlString = url?.absoluteString,
                let cached = ImageCacheManager.shared.image(forKey: urlString) {
                 self.cachedImage = cached
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isLoading = false
+                }
             }
         }
     }
@@ -236,11 +295,12 @@ struct CachedAsyncImage<Content: View>: View {
     private let scale: CGFloat
     private let transaction: Transaction
     private let content: (AsyncImagePhase) -> Content
+    @State private var isCachedContentReady = false
     
     init(
         url: URL?,
         scale: CGFloat = 1.0,
-        transaction: Transaction = Transaction(),
+        transaction: Transaction = Transaction(animation: .easeInOut(duration: 0.25)),
         @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
     ) {
         self.url = url
@@ -250,39 +310,52 @@ struct CachedAsyncImage<Content: View>: View {
     }
     
     var body: some View {
-        if let url = url {
-            if let cachedImage = ImageCacheManager.shared.image(forKey: url.absoluteString) {
-                content(.success(Image(uiImage: cachedImage)))
-            } else {
-                AsyncImage(
-                    url: url,
-                    scale: scale,
-                    transaction: transaction
-                ) { phase in
-                    // First check for success to trigger caching
-                    if case .success(let image) = phase {
-                        cacheImageInBackground(url: url, image: image)
+        Group {
+            if let url = url {
+                if isCachedContentReady, let cachedImage = ImageCacheManager.shared.image(forKey: url.absoluteString) {
+                    // Show cached image with transition
+                    content(.success(Image(uiImage: cachedImage)))
+                        .transition(.opacity)
+                } else {
+                    // Load remote image with consistent transition
+                    AsyncImage(url: url, scale: scale, transaction: transaction) { phase in
+                        // Return the content with transition
+                        content(phase)
+                            .transition(.opacity)
+                            .onAppear {
+                                // First check for success to trigger caching
+                                if case .success(let image) = phase {
+                                    // Instead of directly passing the Image, use UIImage via UIImageView
+                                    // in a background task
+                                    Task { @MainActor in
+                                        if let uiImage = image.asUIImage() {
+                                            ImageCacheManager.shared.setImage(uiImage, forKey: url.absoluteString)
+                                            // Delay flagging cached content as ready to avoid visual flicker
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                                withAnimation(.easeInOut(duration: 0.25)) {
+                                                    isCachedContentReady = true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                     }
-                    
-                    // Then return the content
-                    return content(phase)
                 }
+            } else {
+                // Handle nil URL gracefully
+                content(.empty)
             }
-        } else {
-            content(.empty)
         }
-    }
-    
-    private func cacheImageInBackground(url: URL, image: Image) {
-        Task { @MainActor in
-            do {
-                // Convert SwiftUI Image to UIImage for caching
-                if let uiImage = image.asUIImage() {
-                    ImageCacheManager.shared.setImage(uiImage, forKey: url.absoluteString)
-                    print("Successfully cached image for URL: \(url.absoluteString)")
+        .onAppear {
+            // Check if image is already in cache
+            if let url = url, ImageCacheManager.shared.image(forKey: url.absoluteString) != nil {
+                // Delay slightly to ensure smooth transition
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isCachedContentReady = true
+                    }
                 }
-            } catch {
-                print("Failed to cache image: \(error)")
             }
         }
     }
@@ -296,57 +369,29 @@ extension AsyncImage {
     }
 }
 
-// MARK: - AsyncImage with URLCache
-extension AsyncImage where Content: View {
-    init(
-        url: URL?,
-        urlCache: URLCache? = nil,
-        @ViewBuilder content: @escaping (AsyncImagePhase) -> Content
-    ) {
-        let config = URLSessionConfiguration.default
-        if let urlCache = urlCache {
-            config.urlCache = urlCache
-        }
-        
-        if let url = url {
-            var urlRequest = URLRequest(url: url)
-            // Cache for up to one day
-            urlRequest.cachePolicy = .returnCacheDataElseLoad
-        }
-        
-        self.init(url: url, transaction: Transaction(animation: .easeInOut)) { phase in
-            content(phase)
-        }
-    }
-}
-
 // MARK: - View Extensions for Fallback Images
 extension Image {
     /// Creates a properly fallbacked app icon view regardless of whether AppIconRounded exists
-    static func appIconWithFallback(size: CGFloat = 80) -> AnyView {
-        // Try each option in sequence with guaranteed fallbacks
+    @ViewBuilder
+    static func appIconWithFallback(size: CGFloat = 80) -> some View {
         if UIImage(named: "AppIcon") != nil {
             // Use AppIcon if available (this should always be available)
-            return AnyView(
-                Image("AppIcon")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: size, height: size)
-                    .cornerRadius(size * 0.2)
-                    .shadow(color: Color.theme.shadow.opacity(0.2), radius: 10, x: 0, y: 5)
-            )
+            Image("AppIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .cornerRadius(size * 0.2)
+                .shadow(color: Color.theme.shadow.opacity(0.2), radius: 10, x: 0, y: 5)
         } else {
             // Ultimate fallback using SF Symbol
-            return AnyView(
-                Image(systemName: "app.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: size, height: size)
-                    .foregroundColor(.theme.accent)
-                    .background(Color.theme.surface)
-                    .cornerRadius(size * 0.2)
-                    .shadow(color: Color.theme.shadow.opacity(0.2), radius: 10, x: 0, y: 5)
-            )
+            Image(systemName: "app.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size, height: size)
+                .foregroundColor(.theme.accent)
+                .background(Color.theme.surface)
+                .cornerRadius(size * 0.2)
+                .shadow(color: Color.theme.shadow.opacity(0.2), radius: 10, x: 0, y: 5)
         }
     }
 }
@@ -378,16 +423,15 @@ struct ImageLoadingErrorModifier: ViewModifier {
         }
     }
     
+    @ViewBuilder
     var fallbackImage: some View {
         if imageName == "AppIconRounded" || imageName == "AppIcon" {
-            return AnyView(Image.appIconWithFallback())
+            Image.appIconWithFallback()
         } else {
-            return AnyView(
-                Image(systemName: "photo")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .foregroundColor(.gray)
-            )
+            Image(systemName: "photo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .foregroundColor(.gray)
         }
     }
 }

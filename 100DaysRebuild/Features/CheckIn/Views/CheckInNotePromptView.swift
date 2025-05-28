@@ -214,12 +214,12 @@ struct CheckInNotePromptView: View {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 18))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.black)
                                         .padding(.trailing, 6)
                                     
                                     Text("Save")
                                         .font(.system(size: 18, weight: .semibold))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.black)
                                 }
                                 .padding(.vertical, 16)
                                 .frame(maxWidth: .infinity)
