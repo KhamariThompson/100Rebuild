@@ -12,6 +12,7 @@ struct CheckInNotePromptView: View {
     @State private var showImagePicker = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showAnimation = false
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         ZStack {
@@ -214,12 +215,12 @@ struct CheckInNotePromptView: View {
                                 HStack {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 18))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                                         .padding(.trailing, 6)
                                     
                                     Text("Save")
                                         .font(.system(size: 18, weight: .semibold))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                                 }
                                 .padding(.vertical, 16)
                                 .frame(maxWidth: .infinity)

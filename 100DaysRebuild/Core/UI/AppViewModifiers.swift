@@ -304,17 +304,43 @@ extension View {
 // MARK: - Navigation Debug Modifier
 /// A modifier that helps debug navigation issues by printing path changes
 struct NavigationDebugModifier: ViewModifier {
+    @State private var signOutObserver: NSObjectProtocol? = nil
+    
     func body(content: Content) -> some View {
         content
             .onAppear {
                 #if DEBUG
                 print("View appeared: \(String(describing: self))")
                 #endif
+                
+                // Register for sign-out notifications
+                signOutObserver = NotificationCenter.default.addObserver(
+                    forName: NSNotification.Name("PreparingForSignOut"),
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    // Immediate clean-up when sign-out is detected
+                    #if DEBUG
+                    print("View \(String(describing: self)) received sign-out notification")
+                    #endif
+                    
+                    // Clean up any resources that might cause issues during sign-out
+                    DispatchQueue.main.async {
+                        // Fix any layout constraint issues
+                        UIApplication.fixConstraintConflict()
+                    }
+                }
             }
             .onDisappear {
                 #if DEBUG
                 print("View disappeared: \(String(describing: self))")
                 #endif
+                
+                // Remove sign-out observer
+                if let observer = signOutObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    signOutObserver = nil
+                }
             }
     }
 } 

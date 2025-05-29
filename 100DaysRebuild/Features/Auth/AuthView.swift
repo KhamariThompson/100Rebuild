@@ -55,16 +55,16 @@ struct AuthView: View {
                     }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(.black)
+                            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .padding(12)
                             .background(
                                 Circle()
-                                    .fill(Color.white)
+                                    .fill(colorScheme == .dark ? Color.theme.surface : Color.white)
                                     .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
                             )
                             .overlay(
                                 Circle()
-                                    .stroke(Color.black.opacity(0.2), lineWidth: 1)
+                                    .stroke(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.2), lineWidth: 1)
                             )
                     }
                     
@@ -241,7 +241,9 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign In")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignIn ? .black : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignIn ? 
+                        Color.adaptiveForeground(for: colorScheme) : 
+                        .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -764,7 +766,7 @@ private extension AuthView {
                                 .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
                         )
                 }
-                .buttonStyle(ScaleButtonStyle())
+                .buttonStyle(AuthScaleButtonStyle())
                 .disabled(!viewModel.networkConnected || viewModel.isLoading)
             }
         }
@@ -1007,7 +1009,7 @@ struct SignInWithAppleButton: UIViewRepresentable {
 }
 
 // Simple scale button style for consistent appearance with Apple button
-struct ScaleButtonStyle: ButtonStyle {
+struct AuthScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)

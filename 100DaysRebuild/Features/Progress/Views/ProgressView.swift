@@ -196,6 +196,7 @@ struct ProgressView: View {
                     hasLoadedOnce = true
                 }
             }
+            setupSignOutListener()
         }
         .onChange(of: userStatsService.userStats) { _, _ in
             if hasLoadedOnce {
@@ -208,12 +209,31 @@ struct ProgressView: View {
         .onDisappear {
             print("ProgressView - onDisappear")
             cancelCurrentTask()
+            removeSignOutListener()
         }
         .sheet(item: $selectedBadge) { badge in
             BadgeDetailView(badge: badge)
         }
         .badgeUnlockCelebration(badge: viewModel.newlyUnlockedBadge, isPresented: $viewModel.showingBadgeUnlock)
         .modifier(NavigationDebugModifier())
+        .sheet(isPresented: $viewModel.showProUpgradeSheet) {
+            ProUpgradeSheetView(
+                title: "Filter Badges by Category",
+                description: "Upgrade to Pro to unlock advanced badge filtering and insights",
+                features: [
+                    "Filter badges by any category",
+                    "Track badge progress over time",
+                    "Receive personalized badge recommendations"
+                ],
+                onUpgrade: {
+                    // Handle upgrade action
+                    viewModel.showProUpgradeSheet = false
+                },
+                onDismiss: {
+                    viewModel.showProUpgradeSheet = false
+                }
+            )
+        }
         .onReceive(NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)) { _ in
             // Update data when we receive notifications about challenge store changes
             if !viewModel.isLoading {
@@ -343,10 +363,61 @@ struct ProgressView: View {
     // 2. Milestone & Badges Section
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Milestones & Badges")
-                .font(.title3)
-                .fontWeight(.bold)
-                .foregroundColor(Color.theme.text)
+            // Improved section header with filter option
+            HStack {
+                Text("Milestones & Badges")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(Color.theme.text)
+                
+                Spacer()
+                
+                // Category filter menu (Pro feature teaser)
+                Menu {
+                    ForEach(BadgeCategory.allCases, id: \.self) { category in
+                        Button(action: {
+                            // This would be implemented as a Pro feature
+                            if !subscriptionService.isProUser {
+                                viewModel.showProUpgradeSheet = true
+                            }
+                        }) {
+                            Label(category.rawValue, systemImage: category.icon)
+                        }
+                    }
+                    
+                    Divider()
+                    
+                    Button(action: {
+                        // This would be implemented as a Pro feature
+                        if !subscriptionService.isProUser {
+                            viewModel.showProUpgradeSheet = true
+                        }
+                    }) {
+                        Label("Show All", systemImage: "list.bullet")
+                    }
+                } label: {
+                    Image(systemName: "line.3.horizontal.decrease.circle")
+                        .foregroundColor(.theme.accent)
+                        .font(.system(size: 20))
+                }
+                .disabled(!subscriptionService.isProUser)
+            }
+            
+            // Milestone badges section - specifically highlighting streak achievements
+            if let nextMilestoneBadge = getMilestoneProgressBadge() {
+                HStack {
+                    Text("Milestone Progress")
+                        .font(.caption)
+                        .foregroundColor(.theme.subtext)
+                        .padding(.leading, 2)
+                    
+                    Spacer()
+                }
+                .padding(.top, 4)
+                
+                milestoneProgressView(badge: nextMilestoneBadge)
+                    .padding(.bottom, AppSpacing.s)
+            }
             
             // Show "Next Badge to Unlock" teaser banner
             if let nextBadge = badgeService.getNextBadgeToUnlock() {
@@ -369,7 +440,30 @@ struct ProgressView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, AppSpacing.l)
             } else {
-                // Use our new BadgeGridView component
+                // Use our BadgeGridView component with filter for newest badges
+                if let recentlyUnlockedBadges = getRecentlyUnlockedBadges(), !recentlyUnlockedBadges.isEmpty {
+                    HStack {
+                        Text("Recently Unlocked")
+                            .font(.caption)
+                            .foregroundColor(.theme.subtext)
+                            .padding(.leading, 2)
+                        
+                        Spacer()
+                    }
+                    .padding(.top, 4)
+                    
+                    BadgeGridView(
+                        badges: recentlyUnlockedBadges,
+                        columns: 3,
+                        showLocked: false,
+                        onTap: { badge in
+                            selectedBadge = convertToProgressBadge(badge)
+                        }
+                    )
+                    .padding(.bottom, 8)
+                }
+                
+                // Display all badges
                 BadgeGridView(
                     badges: badgeService.badges,
                     columns: 3,
@@ -385,6 +479,89 @@ struct ProgressView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+    
+    // New helper function to get the next milestone badge to unlock
+    private func getMilestoneProgressBadge() -> Badge? {
+        let milestoneBadges = badgeService.badges.filter { $0.category == .milestone || $0.category == .consistency }
+        
+        // Find the first milestone badge that's not unlocked yet
+        return milestoneBadges
+            .filter { !$0.isUnlocked }
+            .sorted { $0.requiredValue < $1.requiredValue }
+            .first
+    }
+    
+    // New helper function to get recently unlocked badges (within the last 7 days)
+    private func getRecentlyUnlockedBadges() -> [Badge]? {
+        let calendar = Calendar.current
+        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        
+        let recentBadges = badgeService.badges.filter { badge in
+            if let unlockDate = badge.unlockedAt?.dateValue() {
+                return unlockDate > oneWeekAgo
+            }
+            return false
+        }
+        
+        return recentBadges.isEmpty ? nil : recentBadges
+    }
+    
+    // New component to display milestone progress
+    private func milestoneProgressView(badge: Badge) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+                // Badge icon
+                ZStack {
+                    Circle()
+                        .fill(badge.category.color.opacity(0.15))
+                        .frame(width: 50, height: 50)
+                    
+                    Image(systemName: badge.iconName)
+                        .font(.system(size: 22))
+                        .foregroundColor(badge.category.color)
+                }
+                
+                // Badge details
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(badge.name)
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.theme.text)
+                    
+                    Text("\(badge.currentProgress) of \(badge.requiredValue) days")
+                        .font(.system(size: 14))
+                        .foregroundColor(.theme.subtext)
+                }
+                
+                Spacer()
+                
+                // Progress percentage
+                Text("\(Int(badge.progressPercentage * 100))%")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(badge.category.color)
+            }
+            
+            // Progress bar
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(height: 8)
+                    
+                    // Filled portion
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(badge.category.color)
+                        .frame(width: max(4, geo.size.width * badge.progressPercentage), height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background)
         )
     }
     
@@ -711,11 +888,30 @@ struct ProgressView: View {
     
     // Helper method to cancel any running task
     private func cancelCurrentTask() {
-        if let task = loadTask {
-            task.cancel()
-            loadTask = nil
-            print("ProgressView - Cancelled existing task")
+        loadTask?.cancel()
+        loadTask = nil
+        isRefreshing = false
+    }
+
+    // Add a notification listener for sign-out preparation
+    private func setupSignOutListener() {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("PreparingForSignOut"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("ProgressView - Received sign-out notification, cleaning up")
+            self.cancelCurrentTask()
         }
+    }
+
+    // Remove the observer when the view disappears
+    private func removeSignOutListener() {
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSNotification.Name("PreparingForSignOut"),
+            object: nil
+        )
     }
     
     // Loading view with progress indicator
@@ -821,7 +1017,7 @@ struct ProgressView: View {
     // Helper function to convert Badge to ProgressBadge
     private func convertToProgressBadge(_ badge: Badge) -> ProgressBadge {
         return ProgressBadge(
-            id: Int(badge.id.hashValue),  // Convert string ID to Int
+            id: Int(badge.id.hashValue),
             title: badge.name,
             iconName: badge.iconName
         )

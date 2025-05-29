@@ -21,6 +21,7 @@ class ChallengesViewModel: ObservableObject {
     @Published var errorMessage = ""
     @Published var isShowingNewChallenge = false
     @Published var challengeTitle = ""
+    @Published var showUpgradePrompt = false
     @Published var isOffline = false
     
     // New properties for greeting and last check-in
@@ -85,6 +86,14 @@ class ChallengesViewModel: ObservableObject {
             name: NSNotification.Name("UserProfileUpdated"),
             object: nil
         )
+        
+        // Observe sign-out preparation
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handlePreSignOut),
+            name: NSNotification.Name("PreparingForSignOut"),
+            object: nil
+        )
     }
     
     deinit {
@@ -97,6 +106,34 @@ class ChallengesViewModel: ObservableObject {
         // Reload user profile to update name
         Task {
             await loadUserProfile()
+        }
+    }
+    
+    @objc private func handlePreSignOut() {
+        // Cancel any ongoing tasks
+        Task { @MainActor in
+            // Reset all state
+            challenges = []
+            isLoading = false
+            isInitialLoad = true
+            error = nil
+            showError = false
+            errorMessage = ""
+            isShowingNewChallenge = false
+            challengeTitle = ""
+            showUpgradePrompt = false
+            isOffline = false
+            userName = ""
+            userFirstName = ""
+            lastCheckInDate = nil
+            timeSinceLastCheckIn = 0
+            currentTimeOfDay = .morning
+            
+            // Cancel timer
+            timerCancellable?.cancel()
+            
+            // Clear subscriptions
+            subscriptions.removeAll()
         }
     }
     

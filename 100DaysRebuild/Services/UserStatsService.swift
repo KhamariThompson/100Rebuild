@@ -88,6 +88,22 @@ class UserStatsService: ObservableObject {
     func refreshUserStats() async {
         await fetchUserStats()
     }
+    
+    /// Reset all state to initial values
+    @MainActor
+    func reset() {
+        // Reset all published properties
+        userStats = UserStats()
+        isLoading = false
+        error = nil
+        activeChallenge = nil
+        
+        // Cancel any pending tasks
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
+        
+        print("UserStatsService - Reset complete")
+    }
 }
 
 /// Model representing a user's aggregate statistics

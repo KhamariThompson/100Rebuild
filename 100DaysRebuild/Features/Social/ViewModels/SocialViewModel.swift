@@ -51,8 +51,9 @@ class SocialViewModel: ObservableObject {
         )
         
         // Load initial data
-        Task {
-            await refreshData()
+        Task { [weak self] in
+            guard let self = self else { return }
+            await self.refreshData()
         }
     }
     
@@ -69,9 +70,10 @@ class SocialViewModel: ObservableObject {
         print("✅ Released: SocialViewModel")
         NotificationCenter.default.removeObserver(self)
         // Cancel any async tasks
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
             await MainActor.run {
-                isLoading = false
+                self.isLoading = false
             }
         }
     }
@@ -185,7 +187,8 @@ class SocialViewModel: ObservableObject {
             usernameJustClaimed = true
             
             // Hide toast after delay
-            Task {
+            Task { [weak self] in
+                guard let self = self else { return }
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
                 self.showSuccessToast = false
                 
@@ -241,29 +244,31 @@ class SocialViewModel: ObservableObject {
         isCheckingUsername = true
         validationMessage = "Checking availability..."
         
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
+            
             do {
-                let isAvailable = try await isUsernameAvailable(username)
+                let isAvailable = try await self.isUsernameAvailable(username)
                 
                 if isAvailable {
-                    validationMessage = "Username available!"
-                    usernameStatus = .unclaimed
+                    self.validationMessage = "Username available!"
+                    self.usernameStatus = .unclaimed
                 } else {
                     // Check if it's the user's own username
-                    if case .claimed(let currentUsername) = usernameStatus, 
+                    if case .claimed(let currentUsername) = self.usernameStatus, 
                        currentUsername.lowercased() == username.lowercased() {
-                        validationMessage = "This is already your username"
+                        self.validationMessage = "This is already your username"
                     } else {
-                        validationMessage = "Username already taken"
-                        usernameStatus = .invalid
+                        self.validationMessage = "Username already taken"
+                        self.usernameStatus = .invalid
                     }
                 }
             } catch {
-                validationMessage = "Error checking username"
-                usernameStatus = .error(error.localizedDescription)
+                self.validationMessage = "Error checking username"
+                self.usernameStatus = .error(error.localizedDescription)
             }
             
-            isCheckingUsername = false
+            self.isCheckingUsername = false
         }
     }
     

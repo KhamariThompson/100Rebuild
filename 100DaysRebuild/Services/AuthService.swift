@@ -6,6 +6,7 @@ import AuthenticationServices
 import UIKit
 import CryptoKit
 import SwiftUI
+import RevenueCat
 
 /// Centralized authentication service to handle all authentication methods
 @MainActor
@@ -152,54 +153,16 @@ class AuthService {
             
             print("AuthService: Starting Google sign-in flow")
             
-            // IMPROVED: Create a custom UIViewController with proper styling to present the auth flow
-            let authContainerVC = UIViewController()
-            authContainerVC.view.backgroundColor = UIColor(Color.theme.background)
-            authContainerVC.modalPresentationStyle = .fullScreen
-            authContainerVC.modalTransitionStyle = .crossDissolve
-            
-            // Add a loading indicator to show while the auth screen is loading
-            let loadingIndicator = UIActivityIndicatorView(style: .large)
-            loadingIndicator.color = UIColor(Color.theme.accent)
-            loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
-            loadingIndicator.startAnimating()
-            
-            let loadingLabel = UILabel()
-            loadingLabel.text = "Preparing sign-in..."
-            loadingLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-            loadingLabel.textColor = UIColor(Color.theme.text)
-            loadingLabel.translatesAutoresizingMaskIntoConstraints = false
-            
-            authContainerVC.view.addSubview(loadingIndicator)
-            authContainerVC.view.addSubview(loadingLabel)
-            
-            NSLayoutConstraint.activate([
-                loadingIndicator.centerXAnchor.constraint(equalTo: authContainerVC.view.centerXAnchor),
-                loadingIndicator.centerYAnchor.constraint(equalTo: authContainerVC.view.centerYAnchor, constant: -20),
-                loadingLabel.topAnchor.constraint(equalTo: loadingIndicator.bottomAnchor, constant: 16),
-                loadingLabel.centerXAnchor.constraint(equalTo: authContainerVC.view.centerXAnchor)
-            ])
-            
-            // Present our styled container first
-            await MainActor.run {
-                viewController.present(authContainerVC, animated: true)
-            }
+            // Skip creating a container view controller and use the provided one directly
+            // This avoids nested presentation issues
             
             // Configure the proper authentication session
             UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
             
-            // Use async/await with a small delay to ensure proper dismissal of any current views
-            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 second
-            
-            // Now perform the Google sign-in within our container
-            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: authContainerVC)
+            // Now perform the Google sign-in directly with the provided view controller
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
             
             guard let idToken = result.user.idToken?.tokenString else {
-                // Dismiss the auth container on error
-                await MainActor.run {
-                    authContainerVC.dismiss(animated: true)
-                }
-                
                 let error = NSError(domain: "AuthService", code: 2, 
                                   userInfo: [NSLocalizedDescriptionKey: "Missing ID token from Google sign-in"])
                 print("AuthService: \(error.localizedDescription)")
@@ -215,22 +178,10 @@ class AuthService {
             print("AuthService: Authenticating with Firebase using Google credential")
             try await Auth.auth().signIn(with: credential)
             
-            // Dismiss the auth container on success
-            await MainActor.run {
-                authContainerVC.dismiss(animated: true)
-            }
-            
             print("AuthService: Firebase authentication with Google successful")
             await userSession.handleAuthSuccess(provider: "google.com")
             return true
         } catch {
-            // Dismiss the auth container view if it's presented
-            if let rootVC = viewController.presentedViewController {
-                await MainActor.run {
-                    rootVC.dismiss(animated: true)
-                }
-            }
-            
             print("AuthService: Google sign in failed - \(error.localizedDescription)")
             // If error is user cancellation, provide a more specific error message
             if (error as NSError).code == GIDSignInError.canceled.rawValue {
@@ -353,8 +304,22 @@ class AuthService {
         }
         
         do {
-            print("AuthService: Signing out")
+            print("AuthService: Starting sign out process")
+            
+            // 1. Sign out from RevenueCat first
+            do {
+                try await Purchases.shared.logOut()
+                print("AuthService: Successfully signed out from RevenueCat")
+            } catch {
+                print("AuthService: RevenueCat sign out error - \(error.localizedDescription)")
+                // Continue with Firebase sign out even if RevenueCat fails
+            }
+            
+            // 2. Sign out from Firebase
             try Auth.auth().signOut()
+            print("AuthService: Successfully signed out from Firebase")
+            
+            // 3. Notify UserSession of success
             await userSession.handleSignOutSuccess()
             return true
         } catch {

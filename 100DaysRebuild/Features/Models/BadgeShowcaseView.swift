@@ -212,22 +212,110 @@ struct BadgeShowcaseEditorView: View {
     
     @State private var selectedBadges: [Badge] = []
     @State private var isLoading = false
+    @State private var showOnlyUnlocked = true
+    @State private var selectedCategory: BadgeCategory? = nil
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 16) {
-                // Selected badges preview
-                selectedBadgesPreview
+            ZStack {
+                Color.theme.background.ignoresSafeArea()
                 
-                Divider()
-                
-                // All badges section
-                ScrollView {
-                    badgeSelectionContent
+                VStack(spacing: 16) {
+                    // Selected badges preview with improved styling
+                    VStack(spacing: 12) {
+                        Text("Your Showcase")
+                            .font(.headline)
+                            .foregroundColor(.theme.text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                        
+                        selectedBadgesPreview
+                    }
+                    .padding(.top)
+                    
+                    // Filter controls
+                    HStack {
+                        // Category filter
+                        Menu {
+                            Button(action: {
+                                withAnimation {
+                                    selectedCategory = nil
+                                }
+                            }) {
+                                Label("All Categories", systemImage: "tag")
+                                    .foregroundColor(.theme.accent)
+                            }
+                            
+                            Divider()
+                            
+                            ForEach(BadgeCategory.allCases, id: \.self) { category in
+                                Button(action: {
+                                    withAnimation {
+                                        selectedCategory = category
+                                    }
+                                }) {
+                                    Label(category.rawValue, systemImage: category.icon)
+                                        .foregroundColor(category.color)
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                if let category = selectedCategory {
+                                    Label(category.rawValue, systemImage: category.icon)
+                                        .foregroundColor(category.color)
+                                } else {
+                                    Text("All Categories")
+                                        .foregroundColor(.theme.text)
+                                }
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.theme.subtext)
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                Capsule()
+                                    .fill(Color.theme.surface)
+                                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 2, x: 0, y: 1)
+                            )
+                        }
+                        
+                        Spacer()
+                        
+                        // Toggle to show only unlocked badges
+                        Toggle("Unlocked Only", isOn: $showOnlyUnlocked)
+                            .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
+                            .font(.footnote)
+                            .labelsHidden()
+                        
+                        Text("Unlocked Only")
+                            .font(.footnote)
+                            .foregroundColor(.theme.subtext)
+                    }
+                    .padding(.horizontal)
+                    
+                    Divider()
+                        .padding(.horizontal)
+                    
+                    // Scrollable badge selection grid with improved interaction
+                    ScrollView {
+                        Text("Select up to 3 badges to showcase on your profile")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 8)
+                            .padding(.bottom, 16)
+                        
+                        badgeSelectionContent
+                            .padding(.horizontal)
+                    }
+                    
+                    // Save button with improved feedback
+                    saveButtonOverlay
                 }
             }
-            .padding(.top)
-            .navigationTitle("Edit Showcase")
+            .navigationTitle("Edit Badge Showcase")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -242,11 +330,9 @@ struct BadgeShowcaseEditorView: View {
                         saveShowcasedBadges()
                     }
                     .foregroundColor(.theme.accent)
-                    .disabled(isLoading)
+                    .opacity(selectedBadges.isEmpty ? 0.5 : 1.0)
+                    .disabled(selectedBadges.isEmpty || isLoading)
                 }
-            }
-            .overlay(alignment: .bottom) {
-                saveButtonOverlay
             }
             .onAppear {
                 // Initialize with currently showcased badges
@@ -255,174 +341,50 @@ struct BadgeShowcaseEditorView: View {
         }
     }
     
-    // Badge selection content - extracted to avoid complex expressions
+    // Badge selection content with visual indication of selection state
     private var badgeSelectionContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Select up to 3 badges to showcase")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-                .padding(.horizontal)
-            
-            badgeCategoriesContent
-            
-            emptyStateIfNeeded
-        }
-        .padding(.bottom, 100)
-    }
-    
-    // Badge categories - extracted to simplify
-    private var badgeCategoriesContent: some View {
-        ForEach(BadgeCategory.allCases, id: \.self) { category in
-            let categoryBadges = badgeService.badges.filter { 
-                $0.category == category && $0.isUnlocked 
-            }
-            
-            if !categoryBadges.isEmpty {
-                badgeCategorySection(category: category, badges: categoryBadges)
-                
-                Divider()
-                    .padding(.vertical, 8)
-            }
-        }
-    }
-    
-    // Individual category section - further broken down
-    private func badgeCategorySection(category: BadgeCategory, badges: [Badge]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Category header
-            HStack {
-                Image(systemName: category.icon)
-                    .foregroundColor(category.color)
-                
-                Text(category.rawValue)
-                    .font(.headline)
-                    .foregroundColor(.theme.text)
-            }
-            .padding(.horizontal)
-            
-            // Badges in this category - completely redesigned
-            BadgeSelectionGrid(
-                badges: badges,
-                selectedBadges: $selectedBadges,
-                maxSelection: 3
-            )
-        }
-    }
-    
-    // Empty state - extracted to simplify
-    private var emptyStateIfNeeded: some View {
-        Group {
-            if badgeService.badges.filter({ $0.isUnlocked }).isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "trophy.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.theme.subtext.opacity(0.7))
-                    
-                    Text("No badges unlocked yet")
-                        .font(.headline)
-                        .foregroundColor(.theme.text)
-                    
-                    Text("Complete challenges to earn badges")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
-                .frame(maxWidth: .infinity)
-            }
-        }
-    }
-    
-    // Save button overlay - extracted to simplify
-    private var saveButtonOverlay: some View {
-        VStack {
-            Button(action: saveShowcasedBadges) {
-                HStack {
-                    if isLoading {
-                        ProgressView()
-                            .tint(.white)
-                            .padding(.trailing, 8)
-                    } else {
-                        Image(systemName: "checkmark")
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 3), spacing: 20) {
+            ForEach(filteredBadges) { badge in
+                BadgeSelectionItem(
+                    badge: badge,
+                    isSelected: selectedBadges.contains(badge),
+                    onTap: {
+                        toggleBadgeSelection(badge)
                     }
-                    Text("Save Showcase")
-                }
-                .font(.headline)
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.theme.accent)
-                .cornerRadius(10)
-                .padding(.horizontal)
-                .shadow(
-                    color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                    radius: 5, 
-                    x: 0, 
-                    y: 2
                 )
             }
-            .disabled(isLoading)
-            .padding(.bottom)
         }
-        .background(
-            Rectangle()
-                .fill(Color.theme.background.opacity(0.95))
-                .edgesIgnoringSafeArea(.bottom)
-                .frame(height: 100)
-                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 5, x: 0, y: -3)
-        )
+        .padding(.bottom, 100) // Add space for the bottom overlay
     }
     
-    // Preview of selected badges
+    // Selected badges preview
     private var selectedBadgesPreview: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Your Showcase")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            HStack(spacing: 16) {
-                selectedBadgesContent
-            }
-            .padding()
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.theme.surface)
-                    .shadow(
-                        color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                        radius: 4, 
-                        x: 0, 
-                        y: 2
-                    )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.theme.border.opacity(colorScheme == .dark ? 0.3 : 0.2), lineWidth: 1)
-            )
-        }
-        .padding(.horizontal)
-    }
-    
-    // Selected badges content - extracted to simplify
-    private var selectedBadgesContent: some View {
-        Group {
+        HStack(spacing: 20) {
             // Show selected badges
             ForEach(selectedBadges) { badge in
-                BadgeShowcaseItem(badge: badge) {
-                    // Remove from selection when tapped
-                    removeSelectedBadge(badge)
+                BadgeShowcasePreviewItem(badge: badge) {
+                    toggleBadgeSelection(badge)
                 }
             }
             
-            // Empty slots
+            // Add empty slots if needed
             if selectedBadges.count < 3 {
                 ForEach(0..<(3 - selectedBadges.count), id: \.self) { _ in
                     emptyBadgeSlot
                 }
             }
         }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+        )
+        .padding(.horizontal)
     }
     
-    // Empty slot in selection - extracted to simplify
+    // Empty badge slot
     private var emptyBadgeSlot: some View {
         ZStack {
             Circle()
@@ -430,114 +392,167 @@ struct BadgeShowcaseEditorView: View {
                 .frame(width: 70, height: 70)
             
             Circle()
-                .strokeBorder(Color.theme.border.opacity(colorScheme == .dark ? 0.5 : 0.3), lineWidth: 1)
+                .strokeBorder(Color.theme.border.opacity(0.3), lineWidth: 1)
                 .frame(width: 70, height: 70)
             
-            Text("Select")
-                .font(.system(size: 12))
-                .foregroundColor(.theme.subtext)
+            Image(systemName: "plus")
+                .font(.system(size: 20))
+                .foregroundColor(.theme.subtext.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
     }
     
-    // Helper method to remove a badge from selection
-    private func removeSelectedBadge(_ badge: Badge) {
-        if let index = selectedBadges.firstIndex(where: { $0.id == badge.id }) {
-            selectedBadges.remove(at: index)
+    // Save button overlay
+    private var saveButtonOverlay: some View {
+        VStack {
+            Button(action: {
+                saveShowcasedBadges()
+            }) {
+                HStack {
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.8)
+                            .padding(.trailing, 8)
+                    }
+                    
+                    Text("Save Selection")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(selectedBadges.isEmpty ? Color.gray : Color.theme.accent)
+                )
+                .shadow(color: (selectedBadges.isEmpty ? Color.gray : Color.theme.accent).opacity(0.3), radius: 5, x: 0, y: 2)
+            }
+            .disabled(selectedBadges.isEmpty || isLoading)
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+        }
+        .background(
+            Rectangle()
+                .fill(Color.theme.background.opacity(0.9))
+                .edgesIgnoringSafeArea(.bottom)
+                .frame(height: 90)
+                .background(.ultraThinMaterial)
+        )
+    }
+    
+    // Helper method to toggle badge selection
+    private func toggleBadgeSelection(_ badge: Badge) {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+        
+        if selectedBadges.contains(badge) {
+            selectedBadges.removeAll { $0.id == badge.id }
+        } else {
+            // Only allow up to 3 badges
+            if selectedBadges.count < 3 {
+                selectedBadges.append(badge)
+            } else {
+                // Replace the first badge if already at limit
+                selectedBadges.removeFirst()
+                selectedBadges.append(badge)
+            }
         }
     }
     
-    // Save selected badges
+    // Save selected badges to user's profile
     private func saveShowcasedBadges() {
         isLoading = true
         
-        // First, unset all current showcased badges
-        let currentShowcased = badgeService.showcasedBadges
-        
         Task {
-            // Unset all current showcased badges
-            for badge in currentShowcased {
+            // First clear all showcased badges
+            for badge in badgeService.showcasedBadges {
                 await badgeService.setShowcasedBadge(badgeId: badge.id, isShowcased: false)
             }
             
-            // Set new showcased badges
+            // Then set the new selection
             for badge in selectedBadges {
                 await badgeService.setShowcasedBadge(badgeId: badge.id, isShowcased: true)
             }
             
             await MainActor.run {
                 isLoading = false
-                withAnimation {
-                    dismiss()
-                }
+                dismiss()
             }
         }
     }
+    
+    // Filter badges based on current settings
+    private var filteredBadges: [Badge] {
+        var badges = badgeService.badges
+        
+        // Filter by unlock status if required
+        if showOnlyUnlocked {
+            badges = badges.filter { $0.isUnlocked }
+        }
+        
+        // Filter by category if selected
+        if let category = selectedCategory {
+            badges = badges.filter { $0.category == category }
+        }
+        
+        return badges
+    }
 }
 
-// MARK: - Badge Selection Grid Components
-
-/// Badge selection grid with checkmark indicators - completely reimplemented
-struct BadgeSelectionGrid: View {
-    let badges: [Badge]
-    @Binding var selectedBadges: [Badge]
-    let maxSelection: Int
+// Badge showcase preview item
+struct BadgeShowcasePreviewItem: View {
+    let badge: Badge
+    let onRemove: () -> Void
     
-    // Create fixed grid layout
-    private let columns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
-        // Simplified implementation to avoid compiler issues
-        LazyVGrid(columns: columns, spacing: 16) {
-            // Use ForEach with direct ID to simplify
-            ForEach(badges) { badge in
-                // Create simple badge selection item
-                simpleBadgeSelectionItem(badge)
+        ZStack(alignment: .topTrailing) {
+            // Badge icon
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(badge.category.color.opacity(0.15))
+                        .frame(width: 70, height: 70)
+                    
+                    Circle()
+                        .strokeBorder(badge.category.color.opacity(0.3), lineWidth: 1.5)
+                        .frame(width: 70, height: 70)
+                    
+                    Image(systemName: badge.iconName)
+                        .font(.system(size: 30))
+                        .foregroundColor(badge.category.color)
+                }
+                
+                Text(badge.name)
+                    .font(.caption)
+                    .foregroundColor(.theme.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(width: 80)
             }
+            
+            // Remove button
+            Button(action: onRemove) {
+                ZStack {
+                    Circle()
+                        .fill(Color.theme.error)
+                        .frame(width: 22, height: 22)
+                    
+                    Image(systemName: "minus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+            .offset(x: 6, y: -6)
         }
-        .padding(.horizontal)
-    }
-    
-    // Helper method to create a badge selection item
-    private func simpleBadgeSelectionItem(_ badge: Badge) -> some View {
-        let isSelected = selectedBadges.contains { $0.id == badge.id }
-        
-        return BadgeSelectionItemSimplified(
-            badge: badge,
-            isSelected: isSelected,
-            onTap: {
-                toggleBadgeSelection(badge)
-            }
-        )
-    }
-    
-    // Toggle badge selection
-    private func toggleBadgeSelection(_ badge: Badge) {
-        if let index = selectedBadges.firstIndex(where: { $0.id == badge.id }) {
-            // Deselect
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedBadges.remove(at: index)
-            }
-        } else if selectedBadges.count < maxSelection {
-            // Select if under max limit
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedBadges.append(badge)
-            }
-        } else {
-            // Provide haptic feedback if max limit reached
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
-        }
+        .frame(maxWidth: .infinity)
     }
 }
 
-// Simplified badge selection item to avoid compiler complexity
-struct BadgeSelectionItemSimplified: View {
+// Badge selection item with clear selection state
+struct BadgeSelectionItem: View {
     let badge: Badge
     let isSelected: Bool
     let onTap: () -> Void
@@ -546,50 +561,104 @@ struct BadgeSelectionItemSimplified: View {
     
     var body: some View {
         Button(action: onTap) {
-            // Much simpler implementation
-            VStack(spacing: 4) {
-                // Badge icon
+            VStack(spacing: 8) {
+                // Badge icon with selection indicator
                 ZStack {
+                    // Background circle
                     Circle()
-                        .fill(backgroundColorForBadge)
-                        .frame(width: 56, height: 56)
+                        .fill(backgroundColor)
+                        .frame(width: 70, height: 70)
                     
+                    // Selection ring
+                    if isSelected {
+                        Circle()
+                            .strokeBorder(badge.category.color, lineWidth: 3)
+                            .frame(width: 70, height: 70)
+                    } else {
+                        Circle()
+                            .strokeBorder(borderColor, lineWidth: 1)
+                            .frame(width: 70, height: 70)
+                    }
+                    
+                    // Icon
                     Image(systemName: badge.iconName)
-                        .font(.system(size: 24))
-                        .foregroundColor(iconColorForBadge)
+                        .font(.system(size: 30))
+                        .foregroundColor(iconColor)
+                    
+                    // Selected checkmark indicator
+                    if isSelected {
+                        ZStack {
+                            Circle()
+                                .fill(badge.category.color)
+                                .frame(width: 24, height: 24)
+                            
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .shadow(color: badge.category.color.opacity(0.3), radius: 2, x: 0, y: 1)
+                        .offset(x: 24, y: -24)
+                    }
+                    
+                    // Locked overlay
+                    if !badge.isUnlocked {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(Color.gray.opacity(0.7))
+                            .background(
+                                Circle()
+                                    .fill(Color.theme.surface)
+                                    .frame(width: 20, height: 20)
+                            )
+                            .offset(x: 24, y: 24)
+                    }
                 }
+                .shadow(color: isSelected ? badge.category.color.opacity(0.3) : Color.clear, radius: 4, x: 0, y: 2)
                 
                 // Badge name
                 Text(badge.name)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.theme.text)
-                    .lineLimit(1)
-                
-                // Selection indicator
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.theme.accent)
-                        .font(.system(size: 16))
-                }
+                    .font(.caption)
+                    .foregroundColor(isSelected ? badge.category.color : .theme.text)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Color.theme.accent.opacity(0.1) : Color.clear)
-            )
+            .padding(.vertical, 8)
+            .frame(height: 120)
+            .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+        .scaleEffect(isSelected ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
     }
     
-    // Simplified color calculations
-    private var backgroundColorForBadge: Color {
-        let opacity = colorScheme == .dark ? 0.25 : 0.15
-        return badge.category.color.opacity(opacity)
+    // Dynamic colors based on selection state and color scheme
+    private var backgroundColor: Color {
+        if isSelected {
+            return badge.category.color.opacity(colorScheme == .dark ? 0.3 : 0.15)
+        } else if !badge.isUnlocked {
+            return Color.gray.opacity(0.1)
+        } else {
+            return badge.category.color.opacity(0.1)
+        }
     }
     
-    private var iconColorForBadge: Color {
-        let opacity = colorScheme == .dark ? 0.9 : 1.0
-        return badge.category.color.opacity(opacity)
+    private var borderColor: Color {
+        if !badge.isUnlocked {
+            return Color.gray.opacity(0.3)
+        } else {
+            return badge.category.color.opacity(0.3)
+        }
+    }
+    
+    private var iconColor: Color {
+        if isSelected {
+            return badge.category.color
+        } else if !badge.isUnlocked {
+            return Color.gray.opacity(0.5)
+        } else {
+            return badge.category.color.opacity(0.8)
+        }
     }
 }
 

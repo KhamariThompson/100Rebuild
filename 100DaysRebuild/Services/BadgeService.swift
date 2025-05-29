@@ -340,6 +340,27 @@ class BadgeService: ObservableObject {
             .first
     }
     
+    /// Reset all state to initial values
+    @MainActor
+    func reset() {
+        // Reset all published properties
+        badges = []
+        isLoading = false
+        error = nil
+        lastRefreshTime = nil
+        showcasedBadges = []
+        
+        // Cancel any pending tasks
+        loadTask?.cancel()
+        loadTask = nil
+        
+        // Cancel any subscriptions
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
+        
+        print("BadgeService - Reset complete")
+    }
+    
     // MARK: - Badge Evaluation Methods
     
     /// Evaluate badges after a check-in

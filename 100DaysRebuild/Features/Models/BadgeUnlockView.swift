@@ -179,7 +179,7 @@ struct BadgeUnlockView: View {
 
 /// View extension to show badge unlock celebration
 extension View {
-    func badgeUnlockCelebration(badge: Badge?, isPresented: Binding<Bool>) -> some View {
+    func badgeDetailCelebration(badge: Badge?, isPresented: Binding<Bool>) -> some View {
         ZStack {
             self
             

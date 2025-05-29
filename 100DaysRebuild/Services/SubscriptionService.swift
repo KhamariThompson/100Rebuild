@@ -842,6 +842,32 @@ class SubscriptionService: NSObject, ObservableObject {
             }
         }
     }
+    
+    /// Reset all state to initial values
+    @MainActor
+    func reset() {
+        // Reset all published properties
+        isProUser = false
+        availableProducts = []
+        renewalDate = nil
+        showPaywall = false
+        errorLoadingOfferings = false
+        offeringsLoaded = false
+        fallbackPricing = "$4.99"
+        isSandboxUser = false
+        offerings = nil
+        customerInfo = nil
+        isLoading = false
+        error = nil
+        
+        // Reset internal state
+        cachedOfferings = nil
+        isLoadingOfferings = false
+        didAttemptOfferingsLoad = false
+        offeringsRetryCount = 0
+        
+        print("SubscriptionService - Reset complete")
+    }
 }
 
 extension SubscriptionService: PurchasesDelegate {

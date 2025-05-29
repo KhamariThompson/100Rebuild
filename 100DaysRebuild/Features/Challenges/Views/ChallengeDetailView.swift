@@ -7,6 +7,7 @@ struct ChallengeDetailView: View {
     @State private var showEditSheet = false
     @State private var showHistoryView = false
     @State private var showTimerSession = false
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         ScrollView {
@@ -56,7 +57,7 @@ struct ChallengeDetailView: View {
                                 Text(challenge.isCompletedToday ? "Completed Today" : "Start Timer Session")
                                     .font(.headline)
                             }
-                            .foregroundColor(.black)
+                            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(
@@ -79,7 +80,7 @@ struct ChallengeDetailView: View {
                                 Text("Check In for Today")
                                     .font(.headline)
                             }
-                            .foregroundColor(.black)
+                            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(

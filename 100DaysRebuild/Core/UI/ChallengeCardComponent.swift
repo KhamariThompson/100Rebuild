@@ -13,6 +13,7 @@ public struct ChallengeCardComponent: View {
     @State private var scale: CGFloat = 1.0
     @State private var isPressed = false
     @State private var confettiCounter = 0
+    @Environment(\.colorScheme) private var colorScheme
     
     // Display state
     @State private var isPerformingCheckIn = false
@@ -221,7 +222,7 @@ public struct ChallengeCardComponent: View {
                     HStack {
                         Text("Mark Complete ✅")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(.black)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)

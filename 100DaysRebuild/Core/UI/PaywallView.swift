@@ -476,7 +476,7 @@ struct PaywallView: View {
                 Text(price)
                     .font(AppTypography.title3())
                     .fontWeight(.bold)
-                    .foregroundColor(.black)
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
             }
             .zIndex(1)
             
@@ -489,7 +489,7 @@ struct PaywallView: View {
                 
                 Text("per month")
                     .font(AppTypography.headline())
-                    .foregroundColor(.black)
+                    .foregroundColor(colorScheme == .dark ? .white : .black)
                     .padding(.leading, 30)
             }
             .padding(.leading, -15)
@@ -732,7 +732,7 @@ struct PaywallView: View {
                     
                     Text("- \(price)/month")
                         .font(.system(size: 16))
-                        .foregroundColor(.black)
+                        .foregroundColor(colorScheme == .dark ? .white : .black)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)

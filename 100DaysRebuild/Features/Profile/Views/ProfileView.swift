@@ -100,6 +100,7 @@ struct ProfileView: View {
                                 isShowingBadgeEditor = true
                             }
                         )
+                        .padding(.top, 8)
                         
                         // Divider for visual separation
                         Divider()

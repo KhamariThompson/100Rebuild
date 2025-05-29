@@ -267,10 +267,10 @@ struct SettingsView: View {
     // Extract drag gesture to a separate method
     private func applyDragGesture(_ content: some View) -> some View {
         if !isDraggable {
-            return content
+            return AnyView(content)
         }
         
-        return content.gesture(
+        return AnyView(content.gesture(
             DragGesture(minimumDistance: 50) // Increase minimum distance significantly to avoid conflicts with taps
                 .onChanged { gesture in
                     // Only capture vertical drags that are clearly downward
@@ -289,7 +289,7 @@ struct SettingsView: View {
                         }
                     }
                 }
-        )
+        ))
     }
     
     // MARK: - Header Views
@@ -1225,60 +1225,33 @@ struct SettingsView: View {
     // MARK: - Action Handlers
     
     private func handleSignOut() async {
-        print("DEBUG: Sign out button clicked")
-        
         // Set loading state
         await MainActor.run {
             isPerformingAction = true
-            errorMessage = ""  // Set to empty string instead of nil
+            errorMessage = ""
         }
         
-        // Define a cancellation source to properly handle task cancellation
-        let cancellationTask = Task {
-            // First dismiss this view to prevent updating UI after sign out
-            await MainActor.run {
-                // Post navigation notification first to prepare app for transition
-                print("DEBUG: Posting ForceNavigateToWelcome notification")
-                NotificationCenter.default.post(
-                    name: NSNotification.Name("ForceNavigateToWelcome"),
-                    object: nil
-                )
-                
-                // Important: Immediately dismiss this view to prevent any UI updates after sign out
-                print("DEBUG: Dismissing Settings view before sign out")
-                self.dismiss()
-            }
-            
-            // Short delay to allow dismissal to complete
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            
-            // Now proceed with sign out - after the view is dismissed
+        // Dismiss the view first to avoid view hierarchy issues
+        await MainActor.run {
+            dismiss()
+        }
+        
+        // Add a small delay to ensure view dismissal completes
+        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+        
+        // Create a task to handle the sign-out process
+        let signOutTask = Task {
+            // Perform sign-out
             await userSession.signOutWithoutThrowing()
             
-            print("DEBUG: Sign out completed after view dismissal")
-            
-            // No need to update UI state after this as the view is already dismissed
-        }
-        
-        // Create a timeout task that will cancel the operation if it takes too long
-        let timeoutTask = Task {
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            if !cancellationTask.isCancelled {
-                print("DEBUG: Sign out operation timed out")
-                cancellationTask.cancel()
-                
-                // Since we may have failed to dismiss, try again to dismiss the view
-                await MainActor.run {
-                    self.dismiss()
-                }
-                
-                // Force sign out after timeout
-                await userSession.signOutWithoutThrowing()
+            // Reset loading state in case this view is still in memory
+            await MainActor.run {
+                isPerformingAction = false
             }
         }
         
-        // Allow the tasks to run independently
-        // We don't need to wait for them to complete since we're dismissing the view
+        // Wait for the sign-out process to complete
+        await signOutTask.value
     }
     
     private func handleDeleteAccount() async {

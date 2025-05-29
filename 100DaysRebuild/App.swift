@@ -809,10 +809,34 @@ struct AppContentView: View {
                 queue: .main
             ) { _ in
                 withAnimation(Animation.easeInOut(duration: 0.3)) {
+                    // First set the flag to trigger view transition
                     forceWelcomeView = true
-                    // Reset after a short delay to prevent issues with future sign-ins
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        forceWelcomeView = false
+                    
+                    // Reset all view models and services in a specific order
+                    Task { @MainActor in
+                        // First reset UI-related services
+                        navigationRouter.reset()
+                        
+                        // Reset view models
+                        progressDashboardViewModel.reset()
+                        
+                        // Wait a bit to ensure view changes have time to propagate
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                        
+                        // Reset remaining services
+                        userStatsService.reset()
+                        badgeService.reset()
+                        subscriptionService.reset()
+                        notificationService.reset()
+                        
+                        // Reset after a short delay to prepare for future sign-ins
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                            // Only reset the flag if we're still in the welcome state
+                            // This prevents showing main app during transition
+                            if !userSession.isAuthenticated {
+                                forceWelcomeView = false
+                            }
+                        }
                     }
                 }
             }

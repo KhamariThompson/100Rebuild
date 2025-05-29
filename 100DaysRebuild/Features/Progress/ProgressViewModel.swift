@@ -364,8 +364,11 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isInitialLoad = true
     @Published var hasData = false
-    @Published var errorMessage: String?
-    @Published var isNetworkConnected = true
+    @Published var errorMessage: String? = nil
+    @Published var networkConnected = true
+    @Published var showingBadgeUnlock = false
+    @Published var newlyUnlockedBadge: Badge? = nil
+    @Published var showProUpgradeSheet = false
     
     // State variables
     @Published var activityData: [Date] = []
@@ -377,10 +380,6 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var dateIntensityMap: [Date: Int] = [:]
     @Published var journeyCards: [JourneyCard] = []
     @Published var recentPhotosNotes: [(photo: URL?, note: String, dayNumber: Int, date: Date)] = []
-    
-    // New badge properties
-    @Published var newlyUnlockedBadge: Badge? = nil
-    @Published var showingBadgeUnlock: Bool = false
     
     // Dependencies
     private let firestore = Firestore.firestore()
@@ -405,6 +404,45 @@ class ProgressDashboardViewModel: ObservableObject {
         
         // Also listen for network status changes
         setupNetworkMonitoring()
+    }
+    
+    /// Reset all state to initial values
+    @MainActor
+    func reset() {
+        // Cancel any running tasks
+        loadTask?.cancel()
+        loadTask = nil
+        
+        // Reset all published properties
+        isLoading = false
+        isInitialLoad = true
+        hasData = false
+        errorMessage = nil
+        networkConnected = true
+        showingBadgeUnlock = false
+        newlyUnlockedBadge = nil
+        showProUpgradeSheet = false
+        
+        // Clear all data arrays
+        activityData = []
+        challengeProgressData = []
+        dailyCheckInsData = []
+        projectedCompletionDate = nil
+        currentPace = "0 days/week"
+        earnedBadges = []
+        dateIntensityMap = [:]
+        journeyCards = []
+        recentPhotosNotes = []
+        
+        // Reset badge properties
+        newlyUnlockedBadge = nil
+        showingBadgeUnlock = false
+        
+        // Cancel any pending timer
+        refreshDebounceTimer?.invalidate()
+        refreshDebounceTimer = nil
+        
+        print("ProgressDashboardViewModel - Reset complete")
     }
     
     // Set up subscription to UserStatsService
@@ -510,7 +548,7 @@ class ProgressDashboardViewModel: ObservableObject {
                 if let userInfo = notification.userInfo,
                    let isConnected = userInfo["isConnected"] as? Bool {
                     // Update our local network status
-                    self.isNetworkConnected = isConnected
+                    self.networkConnected = isConnected
                 }
             }
             .store(in: &cancellables)
@@ -968,5 +1006,41 @@ class ProgressDashboardViewModel: ObservableObject {
             loadTask?.cancel()
             loadTask = nil
         }
+    }
+
+    // Add this method to properly prepare for sign-out
+    @MainActor
+    func prepareForSignOut() {
+        print("ProgressDashboardViewModel - Preparing for sign-out")
+        
+        // Cancel any active tasks first
+        cancelTasks()
+        
+        // Cancel any pending timer
+        refreshDebounceTimer?.invalidate()
+        refreshDebounceTimer = nil
+        
+        // Clear all data to prevent stale data from appearing during sign-out
+        activityData = []
+        challengeProgressData = []
+        dailyCheckInsData = []
+        projectedCompletionDate = nil
+        currentPace = "0 days/week"
+        earnedBadges = []
+        dateIntensityMap = [:]
+        journeyCards = []
+        recentPhotosNotes = []
+        
+        // Reset loading state
+        isLoading = false
+        isInitialLoad = true
+        hasData = false
+        
+        // Reset badge properties
+        newlyUnlockedBadge = nil
+        showingBadgeUnlock = false
+        showProUpgradeSheet = false
+        
+        print("ProgressDashboardViewModel - Sign-out preparation complete")
     }
 } 

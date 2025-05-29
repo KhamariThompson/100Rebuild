@@ -12,6 +12,15 @@ class NavigationRouter: ObservableObject {
     private var lastTabChangeTime: Date = Date()
     private let minimumTabChangeInterval: TimeInterval = 0.3
     
+    /// Reset the navigation state to its initial values
+    func reset() {
+        selectedTab = 0
+        tabIsChanging = false
+        isShowingNewChallengeSheet = false
+        changeTabDebouncer?.cancel()
+        lastTabChangeTime = Date()
+    }
+    
     /// Change tab with controlled animation and debouncing
     func changeTab(to tab: Int) {
         guard selectedTab != tab else { return }

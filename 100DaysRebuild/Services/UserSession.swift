@@ -478,109 +478,47 @@ class UserSession: ObservableObject {
     func signOutWithoutThrowing() async {
         print("DEBUG: UserSession: Starting sign out process")
         
-        // Create a variable to track whether we've successfully signed out
-        var didSignOut = false
-        
-        // Reset state first to avoid race conditions with navigation
+        // 1. Notify all components to prepare for sign-out and clean up any pending operations
         await MainActor.run {
-            // Reset state before attempting Firebase sign out
-            // This ensures UI transitions happen immediately
-            authState = .signedOut
-            currentUser = nil
-            isAuthenticated = false
-            errorMessage = nil
-            
-            // Immediately post notification to trigger navigation
             NotificationCenter.default.post(
-                name: NSNotification.Name("ForceNavigateToWelcome"),
+                name: NSNotification.Name("PreparingForSignOut"),
                 object: nil
             )
         }
         
-        // Create a task for Firebase sign out
-        // Using a separate task allows us to continue even if sign out fails
-        let signOutTask = Task {
-            do {
-                // Add a small delay to ensure UI updates before Firebase operations
-                try await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
-                
-                // Remove existing auth state listener first
-                if let listener = stateListener {
-                    auth.removeStateDidChangeListener(listener)
-                    stateListener = nil
-                    print("DEBUG: UserSession: Removed auth state listener")
-                }
-                
-                // Try to sign out using Firebase Auth
-                try auth.signOut()
-                print("DEBUG: UserSession: Successfully signed out from Firebase Auth")
-                
-                // Now reset remaining state properties
-                await MainActor.run {
-                    username = nil
-                    photoURL = nil
-                    hasCompletedOnboarding = false
-                    lastSignInTime = nil
-                }
-                
-                // Force post a notification about auth state change
-                NotificationCenter.default.post(
-                    name: NSNotification.Name("AuthStateChanged"),
-                    object: nil
-                )
-                
-                // Set up a new auth state listener
-                setupAuthStateListener()
-                
-                // Mark as successfully signed out
-                didSignOut = true
-                
-                print("DEBUG: UserSession: Successfully completed sign out process")
-            } catch let error {
-                print("DEBUG: UserSession: Error during sign out - \(error.localizedDescription)")
-                
-                // Even if Firebase sign out fails, ensure state is reset
-                await forceResetState()
-                
-                // Mark as signed out despite error (we've reset state)
-                didSignOut = true
-            }
-        }
-        
-        // Create a timeout task
-        let timeoutTask = Task {
-            try await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            if !didSignOut {
-                print("DEBUG: UserSession: Sign out timed out, forcing state reset")
-                signOutTask.cancel()
-                await forceResetState()
-            }
-        }
-        
-        // Wait for either sign out to complete or timeout
-        // If timeout, forceResetState will be called
-        do {
-            try await signOutTask.value
-            timeoutTask.cancel()
-        } catch {
-            // Task was cancelled or failed
-            if !didSignOut {
-                await forceResetState()
-            }
-            timeoutTask.cancel()
-        }
-    }
-    
-    // Helper method to force state reset in case of sign out failure
-    private func forceResetState() async {
+        // 2. Specifically prepare ProgressDashboardViewModel for sign-out
         await MainActor.run {
-            // Remove listener if it exists
-            if let listener = stateListener {
-                auth.removeStateDidChangeListener(listener)
-                stateListener = nil
-            }
-            
-            // Reset all state properties
+            ProgressDashboardViewModel.shared.prepareForSignOut()
+        }
+        
+        // 3. Add a small delay to allow views to complete their cleanup
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        
+        // 4. Remove auth state listener
+        if let listener = stateListener {
+            auth.removeStateDidChangeListener(listener)
+            stateListener = nil
+            print("DEBUG: UserSession: Removed auth state listener")
+        }
+        
+        // 5. Sign out from RevenueCat first
+        do {
+            try await Purchases.shared.logOut()
+            print("DEBUG: UserSession: Successfully signed out from RevenueCat")
+        } catch {
+            print("DEBUG: UserSession: RevenueCat sign out error - \(error.localizedDescription)")
+        }
+        
+        // 6. Perform Firebase sign-out
+        do {
+            try auth.signOut()
+            print("DEBUG: UserSession: Successfully signed out from Firebase Auth")
+        } catch {
+            print("DEBUG: UserSession: Firebase sign out error - \(error.localizedDescription)")
+        }
+        
+        // 7. Reset all state
+        await MainActor.run {
             authState = .signedOut
             currentUser = nil
             isAuthenticated = false
@@ -589,24 +527,20 @@ class UserSession: ObservableObject {
             hasCompletedOnboarding = false
             errorMessage = nil
             lastSignInTime = nil
-            
-            // Post navigation notification to ensure UI updates
+        }
+        
+        // 8. Set up new auth state listener
+        setupAuthStateListener()
+        
+        // 9. Finally, trigger navigation
+        await MainActor.run {
             NotificationCenter.default.post(
                 name: NSNotification.Name("ForceNavigateToWelcome"),
                 object: nil
             )
-            
-            // Force post auth state change notification
-            NotificationCenter.default.post(
-                name: NSNotification.Name("AuthStateChanged"),
-                object: nil
-            )
         }
         
-        // Set up a new auth state listener
-        setupAuthStateListener()
-        
-        print("DEBUG: UserSession: Forced state reset completed")
+        print("DEBUG: UserSession: Sign out process completed")
     }
     
     func updateUsername(_ newUsername: String) async throws {

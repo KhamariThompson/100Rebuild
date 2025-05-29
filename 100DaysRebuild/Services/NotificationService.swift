@@ -272,6 +272,26 @@ class NotificationService: NSObject, ObservableObject {
         isStreakReminderEnabled = UserDefaults.standard.bool(forKey: "isStreakReminderEnabled")
     }
     
+    /// Reset all state to initial values
+    @MainActor
+    func reset() {
+        // Reset all published properties
+        reminderTime = Calendar.current.date(from: DateComponents(hour: 20, minute: 0)) ?? Date()
+        isDailyReminderEnabled = false
+        isStreakReminderEnabled = false
+        isAuthorized = false
+        pendingAuthorization = false
+        
+        // Cancel all pending notifications
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        
+        // Reset UserDefaults
+        UserDefaults.standard.set(false, forKey: "isDailyReminderEnabled")
+        UserDefaults.standard.set(false, forKey: "isStreakReminderEnabled")
+        
+        print("NotificationService - Reset complete")
+    }
+    
     deinit {
         print("✅ Singleton released: \(Self.self)")
     }

@@ -26,6 +26,7 @@ struct ChallengesView: View {
     @State private var showOfflineToast = false
     @State private var showErrorAlert = false
     @State private var scrollOffset: CGFloat = 0
+    @State private var showUpgradePrompt = false
     
     // Gradient for challenges header styling
     private let challengesGradient = LinearGradient(
@@ -86,20 +87,82 @@ struct ChallengesView: View {
         }
         .sheet(isPresented: $isShowingCheckInSheet) {
             if let challenge = challengeToCheckIn {
-                // Using SimpleCheckInSheet instead of EnhancedCheckInSheet
-                SimpleCheckInSheet(
-                    challenge: challenge, 
-                    dayNumber: challenge.daysCompleted + 1,
-                    onCheckIn: { note, image in
-                        performCheckIn(challenge: challenge, note: note, image: image)
-                        isShowingCheckInSheet = false
-                    },
-                    onDismiss: {
-                        isShowingCheckInSheet = false
+                NavigationView {
+                    VStack(spacing: AppSpacing.l) {
+                        // Header
+                        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                            Text("Day \(challenge.daysCompleted + 1) of 100")
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundColor(.theme.accent)
+                            
+                            Text(challenge.title)
+                                .font(.system(size: 24, weight: .bold, design: .rounded))
+                                .foregroundColor(.theme.text)
+                            
+                            HStack(spacing: AppSpacing.s) {
+                                HStack(spacing: 4) {
+                                    Text("🔥")
+                                        .font(.system(size: 16))
+                                    Text("\(challenge.streakCount) day streak")
+                                        .font(.subheadline)
+                                        .foregroundColor(.theme.subtext)
+                                }
+                                
+                                Spacer()
+                                
+                                Text("\(Int(challenge.progressPercentage * 100))% complete")
+                                    .font(.subheadline)
+                                    .foregroundColor(.theme.accent)
+                            }
+                        }
+                        .padding(.horizontal, AppSpacing.m)
+                        
+                        // Journal
+                        VStack(alignment: .leading, spacing: AppSpacing.s) {
+                            Text("How was your day?")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            TextEditor(text: $viewModel.challengeTitle)
+                                .frame(minHeight: 100)
+                                .padding(8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                                )
+                        }
+                        .padding(.horizontal, AppSpacing.m)
+                        
+                        // Check-in button
+                        Button {
+                            performCheckIn(challenge: challenge, note: viewModel.challengeTitle, image: nil)
+                            isShowingCheckInSheet = false
+                        } label: {
+                            Text("Complete Check-In")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, AppSpacing.m)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                )
+                        }
+                        .buttonStyle(AppScaleButtonStyle())
+                        .padding(.horizontal, AppSpacing.m)
+                        
+                        Spacer()
                     }
-                )
-                .presentationDetents([.large, .medium])
-                .presentationDragIndicator(.visible)
+                    .padding(.top, AppSpacing.m)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .navigationBarItems(leading: Button("Cancel") {
+                        isShowingCheckInSheet = false
+                    })
+                }
             }
         }
         .alert(isPresented: $viewModel.showError) {
@@ -281,7 +344,22 @@ struct ChallengesView: View {
                 .padding(.bottom, AppSpacing.m)
                 
                 // Add challenge button at bottom for easy access
-                Button(action: { viewModel.isShowingNewChallenge = true }) {
+                Button(action: { 
+                    if viewModel.challenges.count >= 2 && !subscriptionService.isProUser {
+                        // Show subtle upgrade prompt
+                        withAnimation {
+                            viewModel.showUpgradePrompt = true
+                        }
+                        // Hide the prompt after 3 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                viewModel.showUpgradePrompt = false
+                            }
+                        }
+                    } else {
+                        viewModel.isShowingNewChallenge = true
+                    }
+                }) {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                             .foregroundColor(.theme.accent)
@@ -298,8 +376,27 @@ struct ChallengesView: View {
                     )
                 }
                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                .opacity(viewModel.challenges.count >= 3 && !subscriptionService.isProUser ? 0.5 : 1.0)
-                .disabled(viewModel.challenges.count >= 3 && !subscriptionService.isProUser)
+                .opacity(viewModel.challenges.count >= 2 && !subscriptionService.isProUser ? 0.5 : 1.0)
+                .disabled(viewModel.challenges.count >= 2 && !subscriptionService.isProUser)
+                
+                // Upgrade prompt
+                if viewModel.showUpgradePrompt {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.yellow)
+                        Text("Upgrade to Pro for unlimited challenges")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.text)
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                            .fill(Color.theme.surface)
+                            .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                    )
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
     }
