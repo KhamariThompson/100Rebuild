@@ -40,7 +40,7 @@ class SubscriptionService: NSObject, ObservableObject {
     }
     
     // Product identifiers
-    private let monthlyProductID = "com.KhamariThompson.100Days.monthly"
+    private let monthlyProductID = "com.KhamariThompson.100Days.monthlyv2"
     
     @Published private(set) var offerings: Offerings?
     @Published private(set) var customerInfo: CustomerInfo?
@@ -48,7 +48,7 @@ class SubscriptionService: NSObject, ObservableObject {
     @Published private(set) var error: Error?
     
     private var products: [Product] = []
-    private let productIds = ["com.KhamariThompson.100Days.monthly"]
+    private let productIds = ["com.KhamariThompson.100Days.monthlyv2"]
     
     private override init() {
         // Call super.init() first before using self

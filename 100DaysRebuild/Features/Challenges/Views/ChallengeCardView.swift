@@ -147,11 +147,11 @@ struct ChallengeCardView: View {
                     HStack {
                         Text("Check In")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                         
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 14))
-                            .foregroundColor(.black.opacity(0.8))
+                            .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)

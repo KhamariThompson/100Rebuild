@@ -13,7 +13,7 @@ struct TermsAndPrivacyView: View {
     @State private var isLoading = true
     
     // URLs for terms and privacy content
-    private let termsURL = URL(string: "https://100days.site/terms")!
+    private let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     private let privacyURL = URL(string: "https://100days.site/privacy")!
     
     var body: some View {
@@ -33,7 +33,7 @@ struct TermsAndPrivacyView: View {
                     
                     Spacer()
                     
-                    Text(mode == .terms ? "Terms of Service" : "Privacy Policy")
+                    Text(mode == .terms ? "Terms of Use" : "Privacy Policy")
                         .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundColor(.theme.text)
                     

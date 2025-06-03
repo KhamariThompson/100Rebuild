@@ -876,7 +876,7 @@ struct EditChallengeSheet: View {
                                 Text("Save Changes")
                                     .font(.headline)
                             }
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                             .background(

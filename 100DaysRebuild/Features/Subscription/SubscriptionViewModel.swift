@@ -4,7 +4,7 @@ import StoreKit
 import SwiftUI
 
 enum SubscriptionPlan: String {
-    case monthly = "com.KhamariThompson.100Days.monthly"
+    case monthly = "com.KhamariThompson.100Days.monthlyv2"
 }
 
 @MainActor

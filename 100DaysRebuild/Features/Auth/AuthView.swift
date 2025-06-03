@@ -882,7 +882,7 @@ private extension AuthView {
                 .foregroundColor(.theme.subtext)
             
             HStack(spacing: 4) {
-                Link("Terms of Service", destination: URL(string: "https://100days.site/terms")!)
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.accent)
                 

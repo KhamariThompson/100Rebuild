@@ -388,11 +388,9 @@ struct WelcomeView: View {
                     .font(.system(size: 13))
                     .foregroundColor(.theme.subtext)
                 
-                Button(action: { showTerms = true }) {
-                    Text("Terms")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.theme.accent)
-                }
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.theme.accent)
                 
                 Text("and")
                     .font(.system(size: 13))

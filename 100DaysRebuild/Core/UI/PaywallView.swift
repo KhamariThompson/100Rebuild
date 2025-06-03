@@ -31,7 +31,7 @@ struct PaywallView: View {
     @State private var animateGradient = false
     
     // RevenueCat integration
-    private let monthlySKU = "100days_premium_monthly"
+    private let monthlySKU = "100days_premium_monthlyv2"
     
     var body: some View {
         ZStack {
@@ -39,7 +39,7 @@ struct PaywallView: View {
             LinearGradient(
                 gradient: Gradient(colors: [
                     Color.theme.background,
-                    Color.theme.accent.opacity(0.08),
+                    Color.theme.accent.opacity(0.1),
                     Color.theme.background
                 ]),
                 startPoint: animateGradient ? .topLeading : .bottomTrailing,
@@ -60,25 +60,25 @@ struct PaywallView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(colorScheme == .dark ? .white : Color.theme.subtext)
-                            .padding(16)
+                            .font(.system(size: 28))
+                            .foregroundColor(Color.theme.subtext)
+                            .padding(14)
                             .background(
                                 Circle()
-                                    .fill(Color.theme.surface.opacity(0.7))
+                                    .fill(Color.theme.surface.opacity(0.8))
                                     .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                             )
-                            .contentShape(Circle()) // Increase tap area
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(PlainButtonStyle()) // Use plain style for more reliable tapping
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.top, 10)
+                    .padding(.trailing, 10)
                     .accessibility(label: Text("Close"))
                 }
                 
                 Spacer()
             }
-            .zIndex(99) // Ensure button is above other content
+            .zIndex(99)
             
             ScrollView {
                 VStack(spacing: AppSpacing.l) {
@@ -108,7 +108,7 @@ struct PaywallView: View {
         }
         .navigationTitle("Upgrade to Pro")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true) // Hide the back button to use our custom dismiss button
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Close") {
@@ -466,66 +466,80 @@ struct PaywallView: View {
     
     // Attractive price tag banner
     private var priceTagBanner: some View {
-        HStack(spacing: 0) {
-            // Left price tag shape
-            ZStack {
-                Circle()
-                    .fill(Color.theme.accent)
-                    .frame(width: 60, height: 60)
+        VStack(spacing: 12) {
+            Text("Upgrade to PRO for")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Color.theme.text)
                 
-                Text(price)
-                    .font(AppTypography.title3())
-                    .fontWeight(.bold)
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
-            }
-            .zIndex(1)
-            
-            // Right price tag description
-            ZStack {
-                Rectangle()
-                    .fill(Color.theme.accent)
-                    .frame(height: 48)
-                    .cornerRadius(8, corners: [.topRight, .bottomRight])
+            HStack(spacing: 0) {
+                // Left price tag shape
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: 65, height: 65)
+                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 4, x: 0, y: 2)
+                    
+                    Text(price)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .zIndex(1)
                 
-                Text("per month")
-                    .font(AppTypography.headline())
-                    .foregroundColor(colorScheme == .dark ? .white : .black)
-                    .padding(.leading, 30)
+                // Right price tag description
+                ZStack {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.theme.accent.opacity(0.8), Color.theme.accent.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 50)
+                        .cornerRadius(8, corners: [.topRight, .bottomRight])
+                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 4, x: 2, y: 2)
+                    
+                    Text("per month")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.leading, 30)
+                }
+                .padding(.leading, -15)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.leading, -15)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, AppSpacing.l)
-        .padding(.bottom, AppSpacing.s)
+        .padding(.horizontal, AppSpacing.m)
+        .padding(.vertical, AppSpacing.s)
     }
     
     // Header with app icon and title
     private var paywallHeader: some View {
         VStack(spacing: AppSpacing.m) {
-            // Icon with glow effect
-            ZStack {
-                // Background glow effect
-                Circle()
-                    .fill(Color.theme.accent.opacity(0.2))
-                    .frame(width: 110, height: 110)
-                    .blur(radius: 15)
-                
-                // App icon - replacing with actual app icon image
-                Image("AppIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 90, height: 90)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
-                    .scaleEffect(isAnimating ? 1.0 : 0.8)
-                    .opacity(isAnimating ? 1.0 : 0.0)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isAnimating)
-            }
+            // Pro image with enhanced styling
+            Image("PaywallImages")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 90, height: 90)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                )
+                .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
+                .scaleEffect(isAnimating ? 1.0 : 0.8)
+                .opacity(isAnimating ? 1.0 : 0.0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isAnimating)
             
             // Title with gradient
-            Text("Unlock Pro")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+            Text("Unlock 100Days Pro")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(LinearGradient(
                     colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)],
                     startPoint: .leading,
@@ -537,7 +551,7 @@ struct PaywallView: View {
             
             // Subtitle
             Text("Elevate your journey with premium features")
-                .font(AppTypography.headline())
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -545,15 +559,16 @@ struct PaywallView: View {
                 .offset(y: isAnimating ? 0 : 10)
                 .animation(.easeOut(duration: 0.4).delay(0.2), value: isAnimating)
         }
-        .padding(.vertical, AppSpacing.l)
+        .padding(.top, AppSpacing.xl)
+        .padding(.bottom, AppSpacing.m)
     }
     
     private var featuresSection: some View {
-        VStack(spacing: AppSpacing.xl) {
+        VStack(spacing: AppSpacing.l) {
             // Enhanced features section with stronger glow effects
-            VStack(alignment: .leading, spacing: AppSpacing.l) {
+            VStack(alignment: .leading, spacing: AppSpacing.m) {
                 Text("Pro Features")
-                    .font(AppTypography.title2().bold())
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(Color.theme.text)
                     .padding(.horizontal, AppSpacing.m)
                 
@@ -565,7 +580,7 @@ struct PaywallView: View {
                         iconName: feature.iconName,
                         category: feature.category
                     )
-                    .padding(.bottom, AppSpacing.s)
+                    .padding(.bottom, AppSpacing.xxs)
                 }
             }
             .padding(AppSpacing.s)
@@ -602,7 +617,7 @@ struct PaywallView: View {
                 category: "🤝 Level Up Together"
             ),
             ProFeatureItem(
-                title: "Extended Friends Network", 
+                title: "Extended Network", 
                 description: "Connect with more than 5 friends to expand your support system.", 
                 iconName: "person.badge.plus",
                 category: "🤝 Level Up Together"
@@ -632,10 +647,10 @@ struct PaywallView: View {
         @Environment(\.colorScheme) private var colorScheme
         
         var body: some View {
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 // Category label
                 Text(category)
-                    .font(AppTypography.caption1().bold())
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(Color.theme.accent)
                     .padding(.leading, 60)
                     .padding(.bottom, 2)
@@ -646,56 +661,58 @@ struct PaywallView: View {
                         // Outer glow
                         Circle()
                             .fill(Color.theme.accent.opacity(0.3))
-                            .frame(width: 52, height: 52)
-                            .blur(radius: isHovered ? 10 : 7)
+                            .frame(width: 48, height: 48)
+                            .blur(radius: isHovered ? 8 : 6)
                         
                         // Inner circle
                         Circle()
-                            .fill(Color.theme.surface)
-                            .frame(width: 44, height: 44)
-                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 8, x: 0, y: 0)
+                            .fill(colorScheme == .dark ? 
+                                Color.theme.surface.opacity(0.9) : 
+                                Color.theme.surface)
+                            .frame(width: 40, height: 40)
                         
                         // Icon
                         Image(systemName: iconName)
-                            .font(.system(size: AppSpacing.iconSizeMedium))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(Color.theme.accent)
-                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 1, x: 0, y: 0)
                     }
-                    .scaleEffect(isHovered ? 1.07 : 1.0)
+                    .scaleEffect(isHovered ? 1.05 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
                     
                     // Feature text
-                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(title)
-                            .font(AppTypography.headline().bold())
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color.theme.text)
                         
                         Text(description)
-                            .font(AppTypography.subhead())
+                            .font(.system(size: 14, weight: .regular))
                             .foregroundColor(Color.theme.subtext)
                             .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
-            .padding(AppSpacing.cardPadding)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(colorScheme == .dark ? 
                           Color.theme.surface.opacity(0.7) : 
                           Color.theme.surface)
                     .shadow(color: Color.theme.shadow.opacity(isHovered ? 0.2 : 0.1), 
-                            radius: isHovered ? 10 : 6, 
+                            radius: isHovered ? 8 : 5, 
                             x: 0, 
-                            y: isHovered ? 5 : 3)
+                            y: isHovered ? 4 : 2)
                     .overlay(
-                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                            .stroke(Color.theme.accent.opacity(isHovered ? 0.2 : 0), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.theme.accent.opacity(isHovered ? 0.2 : 0.05), lineWidth: 1)
                     )
             )
             .onAppear {
-                // Cycle through highlighting features
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
+                // Create a random delay for hover animation to stagger effects
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.5...2.5)) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                         isHovered = true
                     }
@@ -721,7 +738,7 @@ struct PaywallView: View {
     
     private var actionButtons: some View {
         VStack(spacing: AppSpacing.m) {
-            // Subscribe button
+            // Subscribe button with improved styling
             Button {
                 purchaseSubscription()
             } label: {
@@ -730,9 +747,9 @@ struct PaywallView: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
                     
-                    Text("- \(price)/month")
+                    Text("• \(price)/month")
                         .font(.system(size: 16))
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                        .foregroundColor(.white)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
@@ -742,29 +759,34 @@ struct PaywallView: View {
                         startPoint: .leading,
                         endPoint: .trailing
                     )
+                    .cornerRadius(14)
                 )
-                .cornerRadius(14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
                 .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(AppScaleButtonStyle())
             .opacity(isAnimating ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.4).delay(0.8), value: isAnimating)
             
-            // Restore button
+            // Restore button with improved styling
             Button {
                 restorePurchases()
             } label: {
                 Text("Restore Purchases")
-                    .font(AppTypography.subhead().bold())
-                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : Color.theme.accent)
-                    .padding(.vertical, 12)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Color.theme.accent)
+                    .padding(.vertical, 14)
                     .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(colorScheme == .dark ? Color.theme.accent.opacity(0.3) : Color.theme.surface)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.surface)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(colorScheme == .dark ? Color.white.opacity(0.2) : Color.theme.border, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
                             )
                     )
             }
@@ -774,21 +796,45 @@ struct PaywallView: View {
             
             // Terms and conditions
             Text("Subscription auto-renews until cancelled")
-                .font(AppTypography.caption1())
-                .foregroundColor(Color.theme.subtext.opacity(0.8))
+                .font(AppTypography.caption1().bold())
+                .foregroundColor(Color.theme.text.opacity(0.9))
                 .multilineTextAlignment(.center)
-                .padding(.top, AppSpacing.xs)
+                .padding(.top, AppSpacing.s)
                 .opacity(isAnimating ? 1.0 : 0.0)
                 .animation(.easeOut(duration: 0.4).delay(1.0), value: isAnimating)
                 
-            Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. Manage or cancel your subscription in Settings.")
-                .font(AppTypography.caption2())
-                .foregroundColor(Color.theme.subtext.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.top, AppSpacing.xxs)
-                .padding(.horizontal, AppSpacing.s)
-                .opacity(isAnimating ? 1.0 : 0.0)
-                .animation(.easeOut(duration: 0.4).delay(1.1), value: isAnimating)
+            // Legal text in a card for better visibility
+            VStack {
+                Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. Manage or cancel your subscription in Settings.")
+                    .font(AppTypography.caption2())
+                    .foregroundColor(Color.theme.text.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(AppSpacing.s)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(0.05), radius: 3, x: 0, y: 1)
+            )
+            .padding(.horizontal, AppSpacing.xs)
+            .opacity(isAnimating ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.4).delay(1.1), value: isAnimating)
+                
+            // Terms and Privacy links
+            HStack(spacing: 20) {
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                    .font(AppTypography.caption1().bold())
+                    .foregroundColor(Color.theme.accent)
+                
+                Link("Privacy Policy", destination: URL(string: "https://100days.site/privacy")!)
+                    .font(AppTypography.caption1().bold())
+                    .foregroundColor(Color.theme.accent)
+            }
+            .padding(.top, AppSpacing.s)
+            .padding(.bottom, AppSpacing.m)
+            .opacity(isAnimating ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.4).delay(1.2), value: isAnimating)
         }
     }
     
@@ -801,15 +847,16 @@ struct PaywallView: View {
                 ProgressView()
                     .scaleEffect(1.5)
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .padding(.bottom, 8)
                 
                 Text("Processing...")
-                    .font(AppTypography.headline())
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
             }
             .padding(AppSpacing.xl)
             .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                    .fill(Color.theme.surface.opacity(0.9))
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.black.opacity(0.7))
                     .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
             )
         }

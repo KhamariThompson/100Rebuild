@@ -1100,8 +1100,8 @@ struct SettingsView: View {
                     
                     Divider()
                     
-                    Link(destination: URL(string: "https://100days.site/terms") ?? URL(string: "https://100days.site")!) {
-                        SettingsRow(icon: "doc.text.fill", title: "Terms of Service", color: .theme.text, showChevron: true)
+                    Link(destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/") ?? URL(string: "https://www.apple.com")!) {
+                        SettingsRow(icon: "doc.text.fill", title: "Terms of Use", color: .theme.text, showChevron: true)
                     }
                 }
                 .padding(.vertical, 0)
