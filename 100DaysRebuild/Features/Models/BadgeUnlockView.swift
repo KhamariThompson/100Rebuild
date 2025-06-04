@@ -50,7 +50,8 @@ struct BadgeUnlockView: View {
                         Image(systemName: badge.iconName)
                             .font(.system(size: 80))
                             .foregroundColor(badge.category.color)
-                            .symbolEffect(.bounce.byLayer, options: .speed(0.5), value: showBadge)
+                            .scaleEffect(showBadge ? 1.2 : 1.0)
+                            .animation(Animation.easeInOut(duration: 0.5).repeatCount(3, autoreverses: true), value: showBadge)
                     }
                 }
                 .opacity(showBadge ? 1 : 0)

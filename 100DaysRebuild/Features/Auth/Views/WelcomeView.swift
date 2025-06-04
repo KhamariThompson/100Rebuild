@@ -59,6 +59,7 @@ struct WelcomeView: View {
                         .padding(.bottom, 40)
                 }
                 .padding(.horizontal)
+                .padding(.bottom, 180)
             }
             
             // Bottom action bar that stays fixed
@@ -334,7 +335,7 @@ struct WelcomeView: View {
             } label: {
                 Text("Get Started Free")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)
                     .background(

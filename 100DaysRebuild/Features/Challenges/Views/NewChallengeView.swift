@@ -20,6 +20,11 @@ struct NewChallengeView: View {
     @State private var showTimedInfo: Bool = false
     @State private var animateElements: Bool = false
     @FocusState private var isTitleFocused: Bool
+    @FocusState private var isDescriptionFocused: Bool
+    
+    // Constants for text limits
+    private let titleCharLimit = 50
+    private let descriptionCharLimit = 200
     
     // Environment
     @EnvironmentObject private var subscriptionService: SubscriptionService
@@ -95,9 +100,20 @@ struct NewChallengeView: View {
                     VStack(spacing: AppSpacing.xl) {
                         // Challenge title input
                         VStack(alignment: .leading, spacing: AppSpacing.s) {
-                            Text("What do you want to do for 100 days?")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                                .foregroundColor(.theme.text)
+                            HStack {
+                                Text("What do you want to do for 100 days?")
+                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .foregroundColor(.theme.text)
+                                
+                                Spacer()
+                                
+                                // Character counter
+                                Text("\(challengeTitle.count)/\(titleCharLimit)")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(challengeTitle.count > Int(Double(titleCharLimit) * 0.8) 
+                                        ? (challengeTitle.count >= titleCharLimit ? .red : .orange) 
+                                        : .theme.subtext)
+                            }
                             
                             ZStack(alignment: .leading) {
                                 if challengeTitle.isEmpty {
@@ -106,13 +122,30 @@ struct NewChallengeView: View {
                                         .padding(.leading, AppSpacing.m)
                                 }
                                 
-                                TextField("", text: $challengeTitle)
-                                    .font(.system(size: 18))
-                                    .padding(AppSpacing.m)
-                                    .background(Color.theme.surface)
-                                    .cornerRadius(AppSpacing.cardCornerRadius)
-                                    .focused($isTitleFocused)
-                                    .submitLabel(.next)
+                                TextField("", text: Binding(
+                                    get: { challengeTitle },
+                                    set: { challengeTitle = String($0.prefix(titleCharLimit)) }
+                                ))
+                                .font(.system(size: 18))
+                                .padding(AppSpacing.m)
+                                .frame(minHeight: 44)
+                                .background(Color.theme.surface)
+                                .cornerRadius(AppSpacing.cardCornerRadius)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                        .stroke(Color.theme.subtext.opacity(0.2), lineWidth: 1)
+                                )
+                                .focused($isTitleFocused)
+                                .submitLabel(.done)
+                                .toolbar {
+                                    ToolbarItemGroup(placement: .keyboard) {
+                                        Spacer()
+                                        Button("Done") {
+                                            isTitleFocused = false
+                                            isDescriptionFocused = false
+                                        }
+                                    }
+                                }
                             }
                         }
                         .padding(.top, AppSpacing.m)
@@ -128,6 +161,7 @@ struct NewChallengeView: View {
                                     .foregroundColor(.theme.subtext)
                                 
                                 Button(action: {
+                                    hideKeyboard()
                                     withAnimation {
                                         showIconPicker.toggle()
                                     }
@@ -151,6 +185,7 @@ struct NewChallengeView: View {
                                     .foregroundColor(.theme.subtext)
                                 
                                 Button(action: {
+                                    hideKeyboard()
                                     withAnimation {
                                         showCategoryPicker.toggle()
                                     }
@@ -185,9 +220,20 @@ struct NewChallengeView: View {
                         VStack(spacing: AppSpacing.m) {
                             // Description (optional)
                             VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                                Text("Description (optional)")
-                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                    .foregroundColor(.theme.text)
+                                HStack {
+                                    Text("Description (optional)")
+                                        .font(.footnote)
+                                        .foregroundColor(.theme.subtext)
+                                    
+                                    Spacer()
+                                    
+                                    // Character counter
+                                    Text("\(challengeDescription.count)/\(descriptionCharLimit)")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(challengeDescription.count > Int(Double(descriptionCharLimit) * 0.8) 
+                                            ? (challengeDescription.count >= descriptionCharLimit ? .red : .orange) 
+                                            : .theme.subtext)
+                                }
                                 
                                 ZStack(alignment: .topLeading) {
                                     if challengeDescription.isEmpty {
@@ -198,12 +244,20 @@ struct NewChallengeView: View {
                                             .padding(.leading, AppSpacing.m)
                                     }
                                     
-                                    TextEditor(text: $challengeDescription)
-                                        .font(.system(size: 15))
-                                        .frame(minHeight: 80)
-                                        .padding(AppSpacing.xs)
-                                        .background(Color.theme.surface)
-                                        .cornerRadius(AppSpacing.cardCornerRadius)
+                                    TextEditor(text: Binding(
+                                        get: { challengeDescription },
+                                        set: { challengeDescription = String($0.prefix(descriptionCharLimit)) }
+                                    ))
+                                    .font(.system(size: 15))
+                                    .frame(minHeight: 80)
+                                    .padding(AppSpacing.xs)
+                                    .background(Color.theme.surface)
+                                    .cornerRadius(AppSpacing.cardCornerRadius)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                            .stroke(Color.theme.subtext.opacity(0.2), lineWidth: 1)
+                                    )
+                                    .focused($isDescriptionFocused)
                                 }
                                 .frame(height: 100)
                             }
@@ -236,6 +290,7 @@ struct NewChallengeView: View {
                                         }
                                     }
                                     .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
+                                    .padding(.vertical, 6)
                                     
                                     if isTimed {
                                         Divider()
@@ -261,6 +316,10 @@ struct NewChallengeView: View {
                                 }
                             }
                             
+                            Divider()
+                                .padding(.horizontal)
+                                .opacity(0.6)
+                            
                             // Visibility option
                             configCard(title: "Challenge Privacy") {
                                 Toggle(isOn: $isPublic) {
@@ -282,6 +341,7 @@ struct NewChallengeView: View {
                                     }
                                 }
                                 .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
+                                .padding(.vertical, 6)
                             }
                         }
                         .offset(y: animateElements ? 0 : 20)
@@ -299,6 +359,7 @@ struct NewChallengeView: View {
                                     ForEach(Array(challengeSuggestions.enumerated()), id: \.offset) { index, suggestion in
                                         Button(action: {
                                             challengeTitle = suggestion
+                                            hideKeyboard()
                                         }) {
                                             HStack {
                                                 Image(systemName: iconForSuggestion(index))
@@ -315,6 +376,7 @@ struct NewChallengeView: View {
                                                     .fill(Color.theme.surface)
                                                     .shadow(color: Color.theme.shadow.opacity(0.05), radius: 2, x: 0, y: 1)
                                             )
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
                                         }
                                     }
                                 }
@@ -337,6 +399,11 @@ struct NewChallengeView: View {
                     }
                     .padding(.bottom, 100)
                 }
+                .simultaneousGesture(
+                    TapGesture().onEnded { _ in
+                        hideKeyboard()
+                    }
+                )
                 
                 // Bottom action button
                 VStack {
@@ -371,6 +438,15 @@ struct NewChallengeView: View {
                             .foregroundColor(.theme.accent)
                     }
                 }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isTitleFocused || isDescriptionFocused {
+                        Button(action: { hideKeyboard() }) {
+                            Text("Done")
+                                .foregroundColor(.theme.accent)
+                        }
+                    }
+                }
             }
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -386,6 +462,12 @@ struct NewChallengeView: View {
         }
     }
     
+    // Helper function to hide keyboard
+    private func hideKeyboard() {
+        isTitleFocused = false
+        isDescriptionFocused = false
+    }
+    
     // Create button that stays at the bottom
     private var createButton: some View {
         Button(action: {
@@ -393,7 +475,7 @@ struct NewChallengeView: View {
         }) {
             Text("Start 100-Day Challenge")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
+                .foregroundColor(themeManager.currentTheme == .dark ? .black : .white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
                 .background(
@@ -578,6 +660,18 @@ struct NewChallengeView: View {
                 Text("Pro Feature")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.accent)
+                
+                Button(action: {
+                    // Show a tooltip or alert with Pro benefits
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // You could add an alert here, but we'll just trigger haptic feedback
+                }) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.footnote)
+                        .foregroundColor(.theme.subtext)
+                }
                 
                 Spacer()
             }

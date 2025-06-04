@@ -41,7 +41,7 @@ class AdManager: ObservableObject {
 }
 
 /// View that shows ads for non-Pro users
-struct AdBannerView: View {
+struct DummyAdBannerView: View {
     @EnvironmentObject var subscriptionService: SubscriptionService
     @StateObject private var adManager = AdManager.shared
     

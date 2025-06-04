@@ -36,6 +36,20 @@ class BadgeService: ObservableObject {
             }
             .store(in: &cancellables)
         
+        // Add observer for auth state changes to reload badges on login
+        NotificationCenter.default
+            .publisher(for: NSNotification.Name("AuthStateChanged"))
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    if Auth.auth().currentUser != nil {
+                        // User is logged in, reload badges
+                        print("BadgeService - Auth state changed, reloading badges")
+                        await self?.loadBadges()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+        
         // Load badges when app starts
         Task {
             await loadBadges()

@@ -381,6 +381,20 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var journeyCards: [JourneyCard] = []
     @Published var recentPhotosNotes: [(photo: URL?, note: String, dayNumber: Int, date: Date)] = []
     
+    // New advanced analytics properties for Pro users
+    @Published var weeklyCheckInRate: Double = 0.0  // 0.0 to 1.0
+    @Published var monthlyCheckInRate: Double = 0.0 // 0.0 to 1.0
+    @Published var totalCheckInRate: Double = 0.0   // 0.0 to 1.0 (100 days)
+    @Published var activeDaysThisYear: Int = 0
+    @Published var averageCheckInTime: String? = nil
+    @Published var bestStreakMonth: BestMonth? = nil
+    
+    // Structure to represent best streak month data
+    struct BestMonth {
+        let month: String
+        let consistency: Int
+    }
+    
     // Dependencies
     private let firestore = Firestore.firestore()
     @MainActor private var loadTask: Task<Void, Never>?
@@ -404,6 +418,9 @@ class ProgressDashboardViewModel: ObservableObject {
         
         // Also listen for network status changes
         setupNetworkMonitoring()
+        
+        // Listen for auth state changes
+        setupAuthStateListener()
     }
     
     /// Reset all state to initial values
@@ -720,6 +737,9 @@ class ProgressDashboardViewModel: ObservableObject {
         
         // Generate check-in data for the consistency calendar directly from challenges
         let checkInData = generateCheckInMapFromChallenges()
+        
+        // Calculate advanced analytics for Pro users
+        await calculateAdvancedAnalytics()
         
         // Only update specific fields on main actor
         await MainActor.run {
@@ -1042,5 +1062,155 @@ class ProgressDashboardViewModel: ObservableObject {
         showProUpgradeSheet = false
         
         print("ProgressDashboardViewModel - Sign-out preparation complete")
+    }
+    
+    // MARK: - Advanced Analytics Methods
+    
+    // Calculate check-in rates and other Pro analytics
+    private func calculateAdvancedAnalytics() async {
+        guard !dateIntensityMap.isEmpty else { return }
+        
+        let calendar = Calendar.current
+        let today = Date()
+        
+        // Get dates for different time periods
+        let oneWeekAgo = calendar.date(byAdding: .day, value: -7, to: today)!
+        let oneMonthAgo = calendar.date(byAdding: .day, value: -30, to: today)!
+        let startOfYear = calendar.date(from: calendar.dateComponents([.year], from: today))!
+        
+        // Calculate check-in rates
+        var weekDaysCount = 0
+        var weekCheckIns = 0
+        
+        var monthDaysCount = 0
+        var monthCheckIns = 0
+        
+        var yearDaysCount = 0
+        var yearCheckIns = 0
+        
+        // Dictionary to track check-ins by month
+        var monthlyCheckins: [Int: Int] = [:]
+        var monthlyPossibleDays: [Int: Int] = [:]
+        
+        // Track check-in times for average calculation
+        var checkInTimes: [Int] = [] // Store hours of day (0-23)
+        
+        // Process each date in the intensity map
+        for (date, intensity) in dateIntensityMap {
+            let month = calendar.component(.month, from: date)
+            
+            // Only count dates up to today
+            if date <= today {
+                // Track monthly data for best month calculation
+                if !monthlyCheckins.keys.contains(month) {
+                    monthlyCheckins[month] = 0
+                    monthlyPossibleDays[month] = 0
+                }
+                
+                if intensity > 0 {
+                    monthlyCheckins[month]! += 1
+                    
+                    // Extract the hour component for average check-in time
+                    let hour = calendar.component(.hour, from: date)
+                    checkInTimes.append(hour)
+                }
+                
+                monthlyPossibleDays[month]! += 1
+                
+                // Weekly calculation
+                if date >= oneWeekAgo {
+                    weekDaysCount += 1
+                    if intensity > 0 {
+                        weekCheckIns += 1
+                    }
+                }
+                
+                // Monthly calculation
+                if date >= oneMonthAgo {
+                    monthDaysCount += 1
+                    if intensity > 0 {
+                        monthCheckIns += 1
+                    }
+                }
+                
+                // Yearly calculation
+                if date >= startOfYear {
+                    yearDaysCount += 1
+                    if intensity > 0 {
+                        yearCheckIns += 1
+                    }
+                }
+            }
+        }
+        
+        // Calculate rates
+        let weeklyRate = weekDaysCount > 0 ? Double(weekCheckIns) / Double(weekDaysCount) : 0.0
+        let monthlyRate = monthDaysCount > 0 ? Double(monthCheckIns) / Double(monthDaysCount) : 0.0
+        
+        // Find best month
+        var bestMonthNumber = 1
+        var bestConsistency = 0.0
+        
+        for (month, checkIns) in monthlyCheckins {
+            if let possibleDays = monthlyPossibleDays[month], possibleDays > 0 {
+                let consistency = Double(checkIns) / Double(possibleDays)
+                if consistency > bestConsistency && possibleDays >= 7 { // At least a week of data
+                    bestConsistency = consistency
+                    bestMonthNumber = month
+                }
+            }
+        }
+        
+        // Calculate average check-in time
+        var averageTimeString: String? = nil
+        if !checkInTimes.isEmpty {
+            let totalHours = checkInTimes.reduce(0, +)
+            let avgHour = totalHours / checkInTimes.count
+            
+            // Format the time string
+            let formatter = DateFormatter()
+            formatter.dateFormat = "h:mm a"
+            let dateWithHour = calendar.date(bySettingHour: avgHour, minute: 0, second: 0, of: Date())!
+            averageTimeString = formatter.string(from: dateWithHour)
+        }
+        
+        // Format month name
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MMMM"
+        let monthDate = calendar.date(from: DateComponents(year: 2023, month: bestMonthNumber, day: 1))!
+        let monthName = dateFormatter.string(from: monthDate)
+        
+        // Update published properties on main thread
+        await MainActor.run {
+            self.weeklyCheckInRate = weeklyRate
+            self.monthlyCheckInRate = monthlyRate
+            self.activeDaysThisYear = yearCheckIns
+            self.averageCheckInTime = averageTimeString
+            
+            if bestConsistency > 0 {
+                self.bestStreakMonth = BestMonth(
+                    month: monthName,
+                    consistency: Int(bestConsistency * 100)
+                )
+            }
+        }
+    }
+    
+    // Add a method to setup auth state listener
+    private func setupAuthStateListener() {
+        NotificationCenter.default
+            .publisher(for: NSNotification.Name("AuthStateChanged"))
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    if Auth.auth().currentUser != nil {
+                        // User is logged in, reload data
+                        print("ProgressDashboardViewModel - Auth state changed, reloading data")
+                        if self?.isInitialLoad == true || self?.hasData == false {
+                            await self?.loadData(forceRefresh: true)
+                        }
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 } 

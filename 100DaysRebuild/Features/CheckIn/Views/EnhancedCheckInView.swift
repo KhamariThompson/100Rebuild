@@ -367,7 +367,7 @@ struct EnhancedCheckInView: View {
                     .foregroundColor(.theme.text)
                     .frame(minHeight: 100)
                     .background(Color.clear)
-                    .onChange(of: journalText) { oldValue, newValue in
+                    .onChange(of: journalText) { newValue in
                         // Limit text to 500 characters
                         if newValue.count > 500 {
                             journalText = String(newValue.prefix(500))
@@ -449,7 +449,7 @@ struct EnhancedCheckInView: View {
                     }
                 }
             }
-            .onChange(of: photoItem) { oldValue, newValue in
+            .onChange(of: photoItem) { newValue in
                 if let newValue = newValue {
                     loadTransferable(from: newValue)
                 }

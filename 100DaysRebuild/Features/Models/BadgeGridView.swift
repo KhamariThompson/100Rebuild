@@ -171,7 +171,8 @@ struct BadgeDetailView: View {
                 Image(systemName: badge.iconName)
                     .font(.system(size: 60))
                     .foregroundColor(badge.category.color)
-                    .symbolEffect(.pulse, options: .repeating, isActive: badge.isUnlocked)
+                    .scaleEffect(badge.isUnlocked ? 1.05 : 1.0)
+                    .animation(badge.isUnlocked ? Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default, value: badge.isUnlocked)
             }
             .shadow(color: badge.category.color.opacity(0.3), radius: 10, x: 0, y: 5)
             

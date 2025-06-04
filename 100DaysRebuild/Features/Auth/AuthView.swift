@@ -448,7 +448,7 @@ private extension AuthView {
                                 .scaleEffect(0.8)
                         }
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
                     .frame(maxWidth: .infinity)
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(
@@ -706,6 +706,7 @@ private extension AuthView {
                     .frame(height: 1)
             }
             .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
             
             VStack(spacing: 16) {
                 // Apple Sign In
@@ -756,7 +757,7 @@ private extension AuthView {
                 } label: {
                     Text("Continue with Google")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .frame(maxWidth: .infinity)
                         .frame(height: CalAIDesignTokens.buttonHeight)
                         .background(Color.theme.surface)

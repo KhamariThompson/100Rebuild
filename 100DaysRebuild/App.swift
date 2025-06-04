@@ -8,6 +8,7 @@ import Network
 import FirebaseFirestore
 import Foundation
 import RevenueCat
+import GoogleMobileAds
 
 // Replace the import with a direct implementation of OfflineBanner
 // @_exported import struct App.OfflineBanner
@@ -46,6 +47,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Configure RevenueCat after Firebase
         configureRevenueCat()
+        
+        // Initialize Google AdMob SDK
+        MobileAds.initialize()
+        print("MobileAds initialized")
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -791,7 +796,7 @@ struct AppContentView: View {
                 .zIndex(100) // Ensure it's on top
             }
         }
-        .onChange(of: userSession.isAuthenticated) { _, newValue in
+        .onChange(of: userSession.isAuthenticated) { newValue in
             // Only animate if we have a previous state and it's different
             if let previous = previousAuthState, previous != newValue {
                 withAnimation(Animation.easeInOut(duration: 0.3)) {

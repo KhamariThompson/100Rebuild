@@ -145,7 +145,7 @@ struct ShareCardCustomizerView: View {
             }
             .navigationTitle("Customize Share Card")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .toolbar(placement: .navigationBarTrailing) {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         isPresented = false

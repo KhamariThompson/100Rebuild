@@ -2,7 +2,11 @@ import SwiftUI
 
 struct MainTabView: View {
     @StateObject private var router = NavigationRouter()
+    @StateObject private var challengesViewModel = ChallengesViewModel()
     @State private var showNewChallengeSheet = false
+    @State private var showCheckInSheet = false
+    @State private var selectedChallengeForCheckIn: Challenge?
+    @State private var showChallengeSelector = false
     @State private var socialNotificationCount: Int? = 0
     @State private var isMenuExpanded = false
     
@@ -86,6 +90,7 @@ struct MainTabView: View {
                     FloatingActionMenu(
                         content: {
                             VStack(spacing: 16) {
+                                // Start New Challenge Button
                                 Button(action: {
                                     withAnimation {
                                         isMenuExpanded = false
@@ -94,11 +99,26 @@ struct MainTabView: View {
                                         }
                                     }
                                 }) {
-                                    Label("New Challenge", systemImage: "plus.circle.fill")
+                                    Label("Start New Challenge", systemImage: "plus.circle.fill")
                                         .font(.headline)
                                         .foregroundColor(.theme.accent)
                                 }
                                 
+                                // Check In Button
+                                Button(action: {
+                                    withAnimation {
+                                        isMenuExpanded = false
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            handleCheckInTapped()
+                                        }
+                                    }
+                                }) {
+                                    Label("Check In", systemImage: "checkmark.circle.fill")
+                                        .font(.headline)
+                                        .foregroundColor(.theme.accent)
+                                }
+                                
+                                // Cancel Button
                                 Button(action: {
                                     withAnimation {
                                         isMenuExpanded = false
@@ -117,16 +137,34 @@ struct MainTabView: View {
             }
         }
         .sheet(isPresented: $showNewChallengeSheet) {
-            // New Challenge Sheet view would go here
-            NavigationView {
-                Text("Create New Challenge")
-                    .navigationTitle("New Challenge")
-                    .navigationBarItems(
-                        trailing: Button("Close") {
-                            showNewChallengeSheet = false
-                        }
-                    )
+            NewChallengeView(isPresented: $showNewChallengeSheet, challengeTitle: $challengesViewModel.challengeTitle) { title, isTimed in
+                Task {
+                    await challengesViewModel.createChallenge(title: title, isTimed: isTimed)
+                }
             }
+        }
+        .sheet(isPresented: $showCheckInSheet) {
+            if let challenge = selectedChallengeForCheckIn {
+                EnhancedCheckInView(
+                    challengesViewModel: challengesViewModel,
+                    challenge: challenge
+                )
+            }
+        }
+        .sheet(isPresented: $showChallengeSelector) {
+            ChallengeSelectorView(
+                challenges: ChallengeStore.shared.getActiveChallenges(),
+                onSelect: { challenge in
+                    selectedChallengeForCheckIn = challenge
+                    showChallengeSelector = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showCheckInSheet = true
+                    }
+                },
+                onCancel: {
+                    showChallengeSelector = false
+                }
+            )
         }
         // Listen for notifications that might update the badge count
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("SocialUpdateReceived"))) { notification in
@@ -146,6 +184,75 @@ struct MainTabView: View {
                     }
                 }
         )
+        .onAppear {
+            // Load challenges when the view appears
+            Task {
+                await challengesViewModel.loadChallenges()
+            }
+        }
+    }
+    
+    private func handleCheckInTapped() {
+        // Get active challenges
+        let activeChallenges = ChallengeStore.shared.getActiveChallenges().filter { !$0.isCompleted && !$0.isCompletedToday }
+        
+        if activeChallenges.isEmpty {
+            // No active challenges, show the new challenge sheet
+            showNewChallengeSheet = true
+        } else if activeChallenges.count == 1 {
+            // Only one challenge, go directly to check-in
+            selectedChallengeForCheckIn = activeChallenges[0]
+            showCheckInSheet = true
+        } else {
+            // Multiple challenges, show selector
+            showChallengeSelector = true
+        }
+    }
+}
+
+// Challenge selector view for choosing which challenge to check in for
+struct ChallengeSelectorView: View {
+    let challenges: [Challenge]
+    let onSelect: (Challenge) -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("Select a challenge to check in")) {
+                    ForEach(challenges) { challenge in
+                        Button(action: {
+                            onSelect(challenge)
+                        }) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(challenge.title)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    Text("Day \(challenge.daysCompleted + 1) of 100")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "chevron.right")
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                }
+            }
+            .listStyle(InsetGroupedListStyle())
+            .navigationTitle("Check In")
+            .navigationBarItems(
+                trailing: Button("Cancel") {
+                    onCancel()
+                }
+            )
+        }
     }
 }
 

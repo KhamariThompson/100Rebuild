@@ -222,7 +222,7 @@ public struct ChallengeCardComponent: View {
                     HStack {
                         Text("Mark Complete ✅")
                             .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)

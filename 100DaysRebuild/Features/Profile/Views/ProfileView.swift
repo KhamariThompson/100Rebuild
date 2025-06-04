@@ -190,7 +190,7 @@ struct ProfileView: View {
             matching: .images,
             photoLibrary: .shared()
         )
-        .onChange(of: viewModel.selectedPhoto) { oldValue, newValue in
+        .onChange(of: viewModel.selectedPhoto) { newValue in
             if let newValue = newValue {
                 Task {
                     do {

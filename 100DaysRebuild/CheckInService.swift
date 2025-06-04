@@ -172,10 +172,41 @@ public class CheckInService {
         if !networkMonitor.isConnected {
             // Queue check-in for later processing
             savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
+            
+            // Immediately update ChallengeStore locally for optimistic UI update
+            Task {
+                do {
+                    if let uuid = UUID(uuidString: challengeId) {
+                        try await ChallengeStore.shared.updateLocalChallengeForOptimisticUI(challengeId: uuid)
+                    }
+                } catch {
+                    print("Failed to update local challenge: \(error)")
+                }
+            }
+            
             throw CheckInError.networkUnavailable
         }
         
-        return try await performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
+        // Update local state immediately for responsive UI
+        if let uuid = UUID(uuidString: challengeId) {
+            do {
+                try await ChallengeStore.shared.updateLocalChallengeForOptimisticUI(challengeId: uuid)
+            } catch {
+                print("Failed to update local challenge: \(error)")
+            }
+        }
+        
+        // Defer badge evaluation to not block check-in completion
+        let checkInSuccess = try await performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
+        
+        // Run badge evaluation in background
+        if checkInSuccess {
+            Task.detached(priority: .background) {
+                await BadgeService.shared.evaluateBadgesAfterCheckIn(challengeId: challengeId)
+            }
+        }
+        
+        return checkInSuccess
     }
     
     // Perform the actual check-in operation
@@ -186,7 +217,8 @@ public class CheckInService {
             let timeout = DispatchWorkItem {
                 continuation.resume(throwing: CheckInError.timeout)
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: timeout)
+            // Reduce timeout to 10 seconds for better user experience
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
             
             // Begin Firestore transaction
             firestore.runTransaction({ (transaction, errorPointer) -> Any? in
@@ -296,11 +328,7 @@ public class CheckInService {
                     return
                 }
                 
-                // Check for badge unlocks after successful check-in
-                Task {
-                    await BadgeService.shared.evaluateBadgesAfterCheckIn(challengeId: challengeId)
-                }
-                
+                // Removed badge evaluation from here - it's now done in the background
                 continuation.resume(returning: true)
             }
         }

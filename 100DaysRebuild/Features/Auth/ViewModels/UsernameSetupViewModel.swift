@@ -135,9 +135,8 @@ class UsernameSetupViewModel: ObservableObject {
             
             // 4. Update UserSession
             await MainActor.run {
-                userSession.username = username
-                // Mark onboarding as complete since username is set
-                userSession.hasCompletedOnboarding = true
+                try? await userSession.updateUsername(username)
+                try? await userSession.completeOnboarding()
             }
             
             isLoading = false

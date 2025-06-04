@@ -104,7 +104,7 @@ struct MainAppView: View {
         .onAppear { [weak viewModel] in
             viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
-        .onChange(of: UIDevice.current.orientation) { [weak viewModel] oldValue, newValue in
+        .onChange(of: UIDevice.current.orientation) { newValue in
             viewModel?.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
         }
     }
@@ -483,14 +483,14 @@ struct NotificationSettingsView: View {
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
-                        .onChange(of: isDailyReminderEnabled) { oldValue, newValue in
+                        .onChange(of: isDailyReminderEnabled) { newValue in
                             updateNotificationSettings()
                         }
                         .tint(.theme.accent)
                     
                     if isDailyReminderEnabled {
                         DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
-                            .onChange(of: reminderTime) { oldValue, newValue in
+                            .onChange(of: reminderTime) { newValue in
                                 updateNotificationSettings()
                             }
                     }
@@ -508,7 +508,7 @@ struct NotificationSettingsView: View {
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
-                        .onChange(of: isStreakReminderEnabled) { oldValue, newValue in
+                        .onChange(of: isStreakReminderEnabled) { newValue in
                             updateNotificationSettings()
                         }
                         .tint(.theme.accent)

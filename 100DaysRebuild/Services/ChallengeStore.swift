@@ -242,6 +242,61 @@ class ChallengeStore: ObservableObject {
         challenges.first { $0.id == id }
     }
     
+    /// Update a challenge locally for optimistic UI updates before Firebase sync completes
+    @MainActor
+    func updateLocalChallengeForOptimisticUI(challengeId: UUID) throws {
+        // Find the challenge in the local array
+        guard let index = challenges.firstIndex(where: { $0.id == challengeId }) else {
+            throw ChallengeError.notFound
+        }
+        
+        // Get a copy of the challenge
+        var challenge = challenges[index]
+        
+        // Skip if already completed today or fully completed
+        if challenge.isCompletedToday || challenge.isCompleted {
+            return
+        }
+        
+        // Apply the same logic as in Challenge.afterCheckIn() but directly here for speed
+        let now = Date()
+        let calendar = Calendar.current
+        var newStreakCount = challenge.streakCount
+        
+        if let lastCheckIn = challenge.lastCheckInDate {
+            let today = calendar.startOfDay(for: now)
+            let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
+            let daysBetween = calendar.dateComponents([.day], from: lastCheckInDay, to: today).day ?? 0
+            
+            if daysBetween == 1 {
+                // Checked in yesterday, continue streak
+                newStreakCount += 1
+            } else if daysBetween > 1 {
+                // Streak broken, start new streak
+                newStreakCount = 1
+            }
+        } else {
+            // First check-in
+            newStreakCount = 1
+        }
+        
+        // Update challenge properties
+        challenge.lastCheckInDate = now
+        challenge.isCompletedToday = true
+        challenge.streakCount = newStreakCount
+        challenge.daysCompleted += 1
+        challenge.lastModified = now
+        
+        // Update in the local array
+        challenges[index] = challenge
+        
+        // Update derived metrics
+        updateMetrics()
+        
+        // Post notification to update UI
+        NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
+    }
+    
     // MARK: - Private Methods
     
     /// Update local challenges array with a new or modified challenge

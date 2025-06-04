@@ -2,6 +2,7 @@ import SwiftUI
 import Firebase
 import FirebaseFirestore
 import Combine
+import GoogleMobileAds
 
 // Using canonical Challenge model
 // (No import needed as it will be accessed directly)
@@ -342,6 +343,14 @@ struct ChallengesView: View {
                     }
                 }
                 .padding(.bottom, AppSpacing.m)
+                
+                // AdMob Banner
+                if !subscriptionService.isProUser {
+                    AdMobBannerView()
+                        .frame(height: 60)
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.bottom, AppSpacing.m)
+                }
                 
                 // Add challenge button at bottom for easy access
                 Button(action: { 

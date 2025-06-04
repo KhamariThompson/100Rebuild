@@ -1,14 +1,17 @@
 {
   "images": [
     {
+      "filename": "testimonial-david.jpg",
       "idiom": "universal",
       "scale": "1x"
     },
     {
+      "filename": "testimonial-david.jpg",
       "idiom": "universal",
       "scale": "2x"
     },
     {
+      "filename": "testimonial-david.jpg",
       "idiom": "universal",
       "scale": "3x"
     }
