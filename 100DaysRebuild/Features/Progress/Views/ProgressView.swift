@@ -81,6 +81,7 @@ struct ProgressView: View {
     @State private var selectedBadge: ProgressBadge? = nil
     @State private var lastRefreshTime: Date = Date()
     @State private var isRefreshing = false
+    @State private var badgesSectionExpanded = false // State for badges section expand/collapse
     
     // Gradient for progress title
     private let progressGradient = LinearGradient(
@@ -197,6 +198,7 @@ struct ProgressView: View {
                 }
             }
             setupSignOutListener()
+            setupAuthStateListener()
         }
         .onChange(of: userStatsService.userStats) { _, _ in
             if hasLoadedOnce {
@@ -256,8 +258,8 @@ struct ProgressView: View {
             // 3. Consistency Heatmap
             consistencyHeatmapSection
             
-            // 4. Consolidated Pro Preview
-            consolidatedProPreviewSection
+            // 4. Advanced Analytics Section (consolidated)
+            advancedAnalyticsSection
             
             // 5. Daily Spark Section
             dailySparkSection
@@ -363,14 +365,58 @@ struct ProgressView: View {
     // 2. Milestone & Badges Section
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Improved section header with filter option
+            // Improved section header with Pro badge and expand/collapse toggle
             HStack {
+                // Header with optional PRO badge
+                HStack(spacing: AppSpacing.xs) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: AppSpacing.iconSizeSmall))
+                        .foregroundColor(.yellow)
+                    
                 Text("Milestones & Badges")
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundColor(Color.theme.text)
+                    
+                    if subscriptionService.isProUser {
+                        Text("PRO")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(6)
+                    }
+                }
                 
                 Spacer()
+                
+                // Expand/Collapse toggle
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        badgesSectionExpanded.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Text(badgesSectionExpanded ? "Collapse" : "Expand")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.theme.accent)
+                        
+                        Image(systemName: badgesSectionExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.theme.accent)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.theme.accent.opacity(0.1))
+                    .cornerRadius(8)
+                }
                 
                 // Category filter menu (Pro feature teaser)
                 Menu {
@@ -388,12 +434,9 @@ struct ProgressView: View {
                     Divider()
                     
                     Button(action: {
-                        // This would be implemented as a Pro feature
-                        if !subscriptionService.isProUser {
-                            viewModel.showProUpgradeSheet = true
-                        }
+                        // Reset filter
                     }) {
-                        Label("Show All", systemImage: "list.bullet")
+                        Label("Show All", systemImage: "tray.full")
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
@@ -403,7 +446,8 @@ struct ProgressView: View {
                 .disabled(!subscriptionService.isProUser)
             }
             
-            // Milestone badges section - specifically highlighting streak achievements
+            // Milestone badges section - always visible (collapsed view)
+            VStack(spacing: AppSpacing.m) {
             if let nextMilestoneBadge = getMilestoneProgressBadge() {
                 HStack {
                     Text("Milestone Progress")
@@ -416,15 +460,21 @@ struct ProgressView: View {
                 .padding(.top, 4)
                 
                 milestoneProgressView(badge: nextMilestoneBadge)
-                    .padding(.bottom, AppSpacing.s)
+                        .padding(.bottom, AppSpacing.xs)
+                        .transition(.opacity)
             }
             
             // Show "Next Badge to Unlock" teaser banner
             if let nextBadge = badgeService.getNextBadgeToUnlock() {
                 nextBadgeTeaser(nextBadge)
-                    .padding(.bottom, AppSpacing.s)
+                        .padding(.bottom, AppSpacing.xs)
+                        .transition(.opacity)
+                }
             }
             
+            // Expanded view - all badges
+            if badgesSectionExpanded {
+                VStack(spacing: AppSpacing.m) {
             if badgeService.getUnlockedBadges().isEmpty {
                 // Empty state
                 VStack(spacing: AppSpacing.m) {
@@ -439,6 +489,7 @@ struct ProgressView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, AppSpacing.l)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
                 // Use our BadgeGridView component with filter for newest badges
                 if let recentlyUnlockedBadges = getRecentlyUnlockedBadges(), !recentlyUnlockedBadges.isEmpty {
@@ -461,9 +512,20 @@ struct ProgressView: View {
                         }
                     )
                     .padding(.bottom, 8)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 
                 // Display all badges
+                        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                            HStack {
+                                Text("All Badges")
+                                    .font(.caption)
+                                    .foregroundColor(.theme.subtext)
+                                    .padding(.leading, 2)
+                                
+                                Spacer()
+                            }
+                            
                 BadgeGridView(
                     badges: badgeService.badges,
                     columns: 3,
@@ -472,6 +534,10 @@ struct ProgressView: View {
                         selectedBadge = convertToProgressBadge(badge)
                     }
                 )
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
             }
         }
         .padding()
@@ -479,6 +545,22 @@ struct ProgressView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .overlay(
+            // Enhanced visual treatment for Pro users
+            Group {
+                if subscriptionService.isProUser {
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.yellow.opacity(0.4), Color.yellow.opacity(0.1)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                }
+            }
         )
     }
     
@@ -617,38 +699,13 @@ struct ProgressView: View {
         )
     }
     
-    // 3. Consistency Heatmap Section
+    // 3. Consistency Heatmap
     private var consistencyHeatmapSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Section header with better styling
-            HStack {
-                Text("Consistency")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(Color.theme.text)
-                
-                Spacer()
-                
-                // Info button with tooltip
-                Button(action: {
-                    // Future implementation: show information about consistency tracking
-                    let generator = UIImpactFeedbackGenerator(style: .light)
-                    generator.impactOccurred()
-                }) {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(Color.theme.subtext)
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(AppScaleButtonStyle())
-            }
-            .padding(.bottom, 4)
-            
-            // Calendar view with proper centering
-            ConsistencyCalendarView(dateIntensityMap: viewModel.dateIntensityMap)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, AppSpacing.s)
-        }
-        .padding()
+        ConsistencyHeatmapView(
+            dateIntensityMap: viewModel.dateIntensityMap,
+            weeksToShow: 4
+        )
+        .padding(.vertical, 0) // No vertical padding needed as the component has its own internal padding
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
@@ -656,27 +713,100 @@ struct ProgressView: View {
         )
     }
     
-    // 4. Consolidated Pro Preview
-    private var consolidatedProPreviewSection: some View {
-        ProLockedView {
-            VStack(alignment: .leading, spacing: AppSpacing.m) {
+    // New 4. Advanced Analytics Section (combines previous sections)
+    private var advancedAnalyticsSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.m) {
+            // Enhanced header with PRO badge for paying subscribers
+            HStack(spacing: AppSpacing.s) {
+                // Analytics icon
+                Image(systemName: "chart.xyaxis.line")
+                    .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                    .foregroundColor(.theme.accent)
+                
                 Text("Advanced Analytics")
-                    .font(.title3)
-                    .fontWeight(.bold)
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.theme.text)
                 
-                // Enhanced pro analytics preview
+                Spacer()
+                
+                // PRO badge for subscribers
+                if subscriptionService.isProUser {
+                    Text("PRO")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(8)
+                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+                }
+            }
+            .padding(.horizontal, AppSpacing.s)
+            
+            if subscriptionService.isProUser {
+                // PRO USER: Show actual analytics with accurate data
                 VStack(spacing: AppSpacing.m) {
-                    // Projected completion with clear visual styling
-                    HStack(spacing: AppSpacing.l) {
-                        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                    // Check-in rates - row 1
+                    HStack(spacing: AppSpacing.m) {
+                        // Weekly check-in rate
+                        metricCard(
+                            title: "Last 7 Days",
+                            value: "\(Int(viewModel.weeklyCheckInRate * 100))%",
+                            icon: "calendar.badge.clock",
+                            color: .blue
+                        )
+                        
+                        // Monthly check-in rate
+                        metricCard(
+                            title: "Last 30 Days",
+                            value: "\(Int(viewModel.monthlyCheckInRate * 100))%",
+                            icon: "calendar",
+                            color: .green
+                        )
+                    }
+                    
+                    // Streaks - row 2
+                    HStack(spacing: AppSpacing.m) {
+                        // Longest streak ever
+                        metricCard(
+                            title: "Longest Streak",
+                            value: "\(viewModel.longestStreak) days",
+                            icon: "flame.fill",
+                            color: .orange
+                        )
+                        
+                        // Total active days this year
+                        metricCard(
+                            title: "Active Days (Year)",
+                            value: "\(viewModel.activeDaysThisYear)",
+                            icon: "checkmark.circle.fill",
+                            color: .theme.accent
+                        )
+                    }
+                    
+                    // Row 3 - Special metrics
+                    VStack(spacing: AppSpacing.s) {
+                        // Projected completion
+                        HStack(spacing: AppSpacing.s) {
+                            Image(systemName: "calendar.badge.clock")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 18))
+                                .frame(width: 24, height: 24)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
                             Text("Projected Completion")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.theme.subtext)
                             
                             if let projectedDate = viewModel.projectedCompletionDate {
                                 Text(projectedDate, style: .date)
-                                    .font(.system(size: 18, weight: .bold))
+                                        .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.theme.text)
                             } else {
                                 Text("Set a goal to see projection")
@@ -686,73 +816,266 @@ struct ProgressView: View {
                         }
                         
                         Spacer()
+                        }
+                        .padding()
+                        .background(Color.theme.surface.opacity(0.6))
+                        .cornerRadius(12)
                         
-                        // Current pace indicator
-                        VStack(alignment: .trailing, spacing: AppSpacing.xxs) {
-                            Text("Current Pace")
+                        // Average check-in time
+                        if let avgTime = viewModel.averageCheckInTime {
+                            HStack(spacing: AppSpacing.s) {
+                                Image(systemName: "clock.fill")
+                                    .foregroundColor(.purple)
+                                    .font(.system(size: 18))
+                                    .frame(width: 24, height: 24)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Average Check-in Time")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.theme.subtext)
                             
-                            Text(viewModel.currentPace)
-                                .font(.system(size: 18, weight: .bold))
+                                    Text(avgTime)
+                                        .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.theme.text)
                         }
-                    }
-                    .padding(.horizontal, AppSpacing.s)
-                    
-                    // Preview graph with enhanced visual style
-                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
-                        Text("Activity Trend")
+                                
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.theme.surface.opacity(0.6))
+                            .cornerRadius(12)
+                        }
+                        
+                        // Best streak month
+                        if let bestMonth = viewModel.bestStreakMonth {
+                            HStack(spacing: AppSpacing.s) {
+                                Image(systemName: "trophy.fill")
+                                    .foregroundColor(.yellow)
+                                    .font(.system(size: 18))
+                                    .frame(width: 24, height: 24)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Best Streak Month")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.theme.subtext)
-                            .padding(.horizontal, AppSpacing.s)
-                        
-                        // Simulated chart with enhanced visual fidelity
-                        ZStack {
-                            // Background grid
-                            VStack(spacing: 0) {
-                                ForEach(0..<4) { _ in
-                                    Divider()
-                                        .background(Color.theme.subtext.opacity(0.2))
+                                    
+                                    Text("\(bestMonth.month), \(bestMonth.consistency)% consistency")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.theme.text)
+                                }
+                                
                                     Spacer()
                                 }
-                            }
-                            
-                            // Chart bars
-                            HStack(alignment: .bottom, spacing: 8) {
-                                ForEach(0..<7) { index in
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.theme.accent,
-                                                    Color.theme.accent.opacity(0.7)
-                                                ]),
-                                                startPoint: .top,
-                                                endPoint: .bottom
-                                            )
-                                        )
-                                        .frame(height: CGFloat([30, 60, 45, 70, 50, 80, 65][index % 7]))
-                                }
-                                .frame(maxWidth: .infinity)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.horizontal, AppSpacing.s)
-                            .padding(.bottom, AppSpacing.s)
-                            .padding(.top, AppSpacing.l)
+                            .padding()
+                            .background(Color.theme.surface.opacity(0.6))
+                            .cornerRadius(12)
                         }
-                        .frame(height: 120)
                     }
                 }
-                .padding(AppSpacing.m)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .overlay(
+                    // Subtle glow for Pro users
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                                            LinearGradient(
+                                gradient: Gradient(colors: [Color.theme.accent.opacity(0.6), Color.theme.accent.opacity(0.1)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                )
+            } else {
+                // FREE USER: Show combined blurred preview with upgrade prompt
+                ZStack {
+                    // Blurred preview content
+                    VStack(spacing: AppSpacing.m) {
+                        // Row 1: Check-in rates
+                        HStack(spacing: AppSpacing.m) {
+                            metricCardPlaceholder()
+                            metricCardPlaceholder()
+                        }
+                        
+                        // Row 2: Streaks & Active days
+                        HStack(spacing: AppSpacing.m) {
+                            metricCardPlaceholder()
+                            metricCardPlaceholder()
+                        }
+                        
+                        // Row 3: Advanced metrics
+                        VStack(spacing: AppSpacing.s) {
+                            // Projected completion placeholder
+                            HStack {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.3))
+                                    .frame(width: 24, height: 24)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 100, height: 12)
+                                    
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 150, height: 16)
+                                }
+                                
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.theme.surface.opacity(0.6))
+                            .cornerRadius(12)
+                            
+                            // Activity trend chart placeholder
+                            VStack(alignment: .leading, spacing: 8) {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                                    .frame(width: 80, height: 14)
+                                
+                                HStack(alignment: .bottom, spacing: 6) {
+                                    ForEach(0..<7) { i in
+                                        Rectangle()
+                                            .fill(Color.theme.accent.opacity(0.3))
+                                            .frame(width: 20, height: CGFloat([30, 60, 45, 70, 50, 80, 65][i % 7]))
+                                    }
+                                }
+                                .padding(.top, 4)
+                            }
+                            .padding()
+                            .background(Color.theme.surface.opacity(0.6))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding()
+                    .blur(radius: 4)
+                    
+                    // Upgrade overlay
+                    VStack(spacing: AppSpacing.m) {
+                        Image(systemName: "chart.bar.fill")
+                            .font(.system(size: 42))
+                            .foregroundColor(.theme.accent)
+                        
+                        Text("Unlock Advanced Analytics")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.theme.text)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Track your progress with detailed metrics, insights, and predictions")
+                            .font(.system(size: 16))
+                            .foregroundColor(.theme.subtext)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .padding(.bottom, AppSpacing.xs)
+                        
+                        HStack(spacing: AppSpacing.m) {
+                            advancedFeatureItem(icon: "calendar.badge.clock", text: "Check-in Rates")
+                            advancedFeatureItem(icon: "chart.xyaxis.line", text: "Activity Trends")
+                        }
+                        .padding(.bottom, AppSpacing.xs)
+                        
+                        Button(action: {
+                            // Show upgrade prompt
+                            viewModel.showProUpgradeSheet = true
+                        }) {
+                            Text("Upgrade to Pro")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 32)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                                .shadow(color: Color.theme.accent.opacity(0.3), radius: 5, x: 0, y: 3)
+                        }
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.theme.surface.opacity(0.95))
+                    )
+                }
                 .background(
                     RoundedRectangle(cornerRadius: 16)
                         .fill(Color.theme.surface)
-                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                        .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
                 )
             }
-            .padding()
         }
+    }
+    
+    // Small feature item for Pro preview
+    private func advancedFeatureItem(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundColor(.theme.accent)
+            
+            Text(text)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.theme.subtext)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.theme.accent.opacity(0.1))
+        )
+    }
+    
+    // Helper for consistent metric cards
+    private func metricCard(title: String, value: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .font(.system(size: 16))
+                
+                Text(title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.theme.subtext)
+            }
+            
+            Text(value)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.theme.text)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+            .padding()
+        .background(Color.theme.surface.opacity(0.6))
+        .cornerRadius(12)
+    }
+    
+    // Placeholder for blurred metrics (free users)
+    private func metricCardPlaceholder() -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 16, height: 16)
+                
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 80, height: 14)
+            }
+            
+            Rectangle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 60, height: 20)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.theme.surface.opacity(0.6))
+        .cornerRadius(12)
     }
     
     // 5. Daily Spark Section
@@ -905,11 +1228,37 @@ struct ProgressView: View {
         }
     }
 
+    // Add a notification listener for auth state changes
+    private func setupAuthStateListener() {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("AuthStateChanged"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            if let userId = Auth.auth().currentUser?.uid {
+                print("ProgressView - Auth state changed, user logged in: \(userId)")
+                Task {
+                    // Reset the loading state first
+                    hasLoadedOnce = false
+                    // Refresh data
+                    await refreshData()
+                    hasLoadedOnce = true
+                }
+            }
+        }
+    }
+
     // Remove the observer when the view disappears
     private func removeSignOutListener() {
         NotificationCenter.default.removeObserver(
             self,
             name: NSNotification.Name("PreparingForSignOut"),
+            object: nil
+        )
+        
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSNotification.Name("AuthStateChanged"),
             object: nil
         )
     }
