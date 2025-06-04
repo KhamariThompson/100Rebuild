@@ -114,9 +114,37 @@ class UsernameSetupViewModel: ObservableObject {
         error = nil
         
         do {
-            try await userSession.updateUsername(username)
+            // 1. Get current user ID
+            guard let userId = userSession.currentUser?.uid else {
+                error = "User not authenticated"
+                isLoading = false
+                return
+            }
+            
+            // 2. Update Firestore user document
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["username": username])
+            
+            // 3. Create username reservation
+            try await Firestore.firestore()
+                .collection("usernames")
+                .document(username)
+                .setData(["userId": userId])
+            
+            // 4. Update UserSession
+            await MainActor.run {
+                userSession.username = username
+                // Mark onboarding as complete since username is set
+                userSession.hasCompletedOnboarding = true
+            }
+            
             isLoading = false
             showSuccess = true
+            
+            // Post notification that username has been updated
+            NotificationCenter.default.post(name: NSNotification.Name("UsernameUpdated"), object: nil)
         } catch {
             self.error = error.localizedDescription
             isLoading = false

@@ -48,10 +48,16 @@ class SocialViewModel: ObservableObject {
                 .document(userId)
                 .getDocument()
             
-            if document.exists, let data = document.data(), let username = data["username"] as? String {
+            if document.exists, let data = document.data(), let username = data["username"] as? String, !username.isEmpty {
                 self.username = username
                 usernameStatus = .claimed(username)
+                
+                // Update the username in UserSession as well
+                await MainActor.run {
+                    userSession.username = username
+                }
             } else {
+                // User exists but no username yet
                 usernameStatus = .unclaimed
             }
         } catch {

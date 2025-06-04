@@ -285,14 +285,9 @@ class UserSession: ObservableObject {
             .getDocument()
         
         if !document.exists {
-            // Generate a random username for new users
-            let randomSuffix = String(Int.random(in: 1000...9999))
-            let defaultUsername = "User\(randomSuffix)"
-            
             // Create a Sendable struct for the data to avoid [AnyHashable : Any] Sendable warning
             struct UserProfileData: Sendable {
                 let userId: String
-                let username: String
                 let joinedDate: Date
                 let completedChallenges: Int
                 let currentStreak: Int
@@ -302,7 +297,6 @@ class UserSession: ObservableObject {
             // Create the data using the Sendable struct
             let profileData = UserProfileData(
                 userId: userId,
-                username: defaultUsername,
                 joinedDate: Date(),
                 completedChallenges: 0,
                 currentStreak: 0,
@@ -314,7 +308,6 @@ class UserSession: ObservableObject {
                 // Convert struct to dictionary here
                 let data: [String: Any] = [
                     "userId": profileData.userId,
-                    "username": profileData.username,
                     "createdAt": FieldValue.serverTimestamp(),
                     "joinedDate": profileData.joinedDate,
                     "completedChallenges": profileData.completedChallenges,
@@ -326,59 +319,25 @@ class UserSession: ObservableObject {
                     .collection("users")
                     .document(profileData.userId)
                     .setData(data)
-                
-                // Create the username reservation
-                try await Firestore.firestore()
-                    .collection("usernames")
-                    .document(profileData.username)
-                    .setData(["userId": profileData.userId])
             }.value
             
-            // Set the username locally
+            // No username is set at this point
             await MainActor.run {
-                self.username = defaultUsername
-                self.hasCompletedOnboarding = true
+                self.username = nil
+                self.hasCompletedOnboarding = false
             }
             
-            print("UserSession: Created default profile document with username \(defaultUsername) for user \(userId)")
+            print("UserSession: Created default profile document without username for user \(userId)")
         } else if document.exists && document.data()?["username"] == nil {
-            // Document exists but username is missing - add one
-            let randomSuffix = String(Int.random(in: 1000...9999))
-            let defaultUsername = "User\(randomSuffix)"
+            // Document exists but username is missing - do not add one automatically
+            // User will set their username in the Social view
             
-            // Create a separate struct for this case too
-            struct UsernameUpdateData: Sendable {
-                let userId: String
-                let username: String
-            }
-            
-            let updateData = UsernameUpdateData(
-                userId: userId,
-                username: defaultUsername
-            )
-            
-            // Update using the same Task.detached pattern
-            try await Task.detached {
-                // Update the document with a username
-                try await Firestore.firestore()
-                    .collection("users")
-                    .document(updateData.userId)
-                    .updateData(["username": updateData.username])
-                
-                // Create a reservation for the username
-                try await Firestore.firestore()
-                    .collection("usernames")
-                    .document(updateData.username)
-                    .setData(["userId": updateData.userId])
-            }.value
-            
-            // Set the username locally
             await MainActor.run {
-                self.username = defaultUsername
-                self.hasCompletedOnboarding = true
+                self.username = nil
+                self.hasCompletedOnboarding = false
             }
             
-            print("UserSession: Added missing username \(defaultUsername) to existing user \(userId)")
+            print("UserSession: Profile exists but username is nil, user will set it in Social view")
         }
     }
     
