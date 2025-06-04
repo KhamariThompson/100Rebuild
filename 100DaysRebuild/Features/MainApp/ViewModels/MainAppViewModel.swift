@@ -14,6 +14,7 @@ class MainAppViewModel: ObservableObject {
     
     init() {
         setupCleanup()
+        setupSubscriptionMonitoring()
     }
     
     deinit {
@@ -42,10 +43,29 @@ class MainAppViewModel: ObservableObject {
     func showPaywallForFeature() {
         withAnimation {
             showPaywall = true
+            // Also set the subscription service property to ensure consistency
+            SubscriptionService.shared.showPaywall = true
         }
     }
     
     // MARK: - Private Methods
+    
+    private func setupSubscriptionMonitoring() {
+        // Monitor the subscription service's showPaywall property
+        SubscriptionService.shared.$showPaywall
+            .sink { [weak self] showPaywall in
+                guard let self = self else { return }
+                if showPaywall != self.showPaywall {
+                    // Update our local property to match the service
+                    DispatchQueue.main.async {
+                        withAnimation {
+                            self.showPaywall = showPaywall
+                        }
+                    }
+                }
+            }
+            .store(in: &cancellables)
+    }
     
     private func setupCleanup() {
         // Store the workItem for cleanup

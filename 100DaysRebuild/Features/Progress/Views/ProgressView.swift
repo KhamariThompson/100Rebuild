@@ -200,7 +200,7 @@ struct ProgressView: View {
             setupSignOutListener()
             setupAuthStateListener()
         }
-        .onChange(of: userStatsService.userStats) { _, _ in
+        .onChange(of: userStatsService.userStats) { newValue in
             if hasLoadedOnce {
                 print("ProgressView - UserStatsService updated")
                 Task {

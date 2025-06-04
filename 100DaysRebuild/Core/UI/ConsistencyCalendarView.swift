@@ -196,7 +196,7 @@ struct CheckInAnimationModifier: ViewModifier {
                 hasAnimated = true
             }
             // Reset animation state if intensity changes
-            .onChange(of: intensity) { oldValue, newValue in
+            .onChange(of: intensity) { newValue in
                 if newValue > 0 {
                     // Briefly scale down and then back up to create a "pop" effect
                     withAnimation(.easeInOut(duration: 0.1)) {

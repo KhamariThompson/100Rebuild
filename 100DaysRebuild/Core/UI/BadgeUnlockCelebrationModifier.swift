@@ -11,166 +11,223 @@ struct BadgeUnlockCelebrationModifier: ViewModifier {
         content
             .overlay {
                 if isPresented, let badge = badge {
-                    ZStack {
-                        // Dimmed background
-                        Color.black.opacity(0.7)
-                            .ignoresSafeArea()
-                            .onTapGesture {
-                                withAnimation {
-                                    isPresented = false
-                                }
-                            }
-                        
-                        // Confetti effect
-                        BadgeConfettiView()
-                            .opacity(showConfetti ? 1 : 0)
-                        
-                        // Badge celebration card
-                        VStack(spacing: 24) {
-                            // Animated badge icon
-                            ZStack {
-                                // Glow effect
-                                Circle()
-                                    .fill(badge.category.color.opacity(0.2))
-                                    .frame(width: 140, height: 140)
-                                    .blur(radius: 15)
-                                
-                                // Starburst effect
-                                ForEach(0..<8, id: \.self) { i in
-                                    Rectangle()
-                                        .fill(badge.category.color.opacity(0.4))
-                                        .frame(width: 50, height: 4)
-                                        .offset(x: 35)
-                                        .rotationEffect(.degrees(Double(i) * 45 + animationProgress * 30))
-                                }
-                                
-                                // Badge background
-                                Circle()
-                                    .fill(badge.category.color.opacity(0.15))
-                                    .frame(width: 100, height: 100)
-                                
-                                // Badge icon
-                                Image(systemName: badge.iconName)
-                                    .font(.system(size: 50))
-                                    .foregroundColor(badge.category.color)
-                                    .symbolEffect(.bounce, options: .repeating, value: isPresented)
-                            }
-                            .scaleEffect(animationProgress)
-                            
-                            // Badge info
-                            VStack(spacing: 16) {
-                                // Badge unlocked text
-                                Text("Badge Unlocked!")
-                                    .font(.system(size: 28, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .opacity(animationProgress)
-                                
-                                // Badge name
-                                Text(badge.name)
-                                    .font(.system(size: 22, weight: .bold))
-                                    .foregroundColor(badge.category.color)
-                                    .opacity(animationProgress)
-                                
-                                // Description
-                                Text(badge.description)
-                                    .font(.body)
-                                    .multilineTextAlignment(.center)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .padding(.horizontal, 32)
-                                    .opacity(animationProgress)
-                                
-                                // Category
-                                HStack {
-                                    Image(systemName: badge.category.icon)
-                                        .foregroundColor(badge.category.color)
-                                    
-                                    Text(badge.category.rawValue)
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.8))
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    Capsule()
-                                        .fill(badge.category.color.opacity(0.2))
-                                )
-                                .opacity(animationProgress)
-                                
-                                // Reward if any
-                                if badge.reward.type != .none {
-                                    VStack(spacing: 4) {
-                                        Text("Reward Earned")
-                                            .font(.headline)
-                                            .foregroundColor(.yellow)
-                                        
-                                        Text(badge.reward.description)
-                                            .font(.subheadline)
-                                            .foregroundColor(.white.opacity(0.8))
-                                    }
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 16)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.yellow.opacity(0.1))
-                                    )
-                                    .opacity(animationProgress)
-                                }
-                                
-                                // Continue button
-                                Button {
-                                    withAnimation {
-                                        isPresented = false
-                                    }
-                                } label: {
-                                    Text("Continue")
-                                        .font(.headline)
-                                        .foregroundColor(.white)
-                                        .frame(width: 200)
-                                        .padding(.vertical, 12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(badge.category.color)
-                                        )
-                                }
-                                .buttonStyle(ScaleButtonStyle())
-                                .opacity(animationProgress)
-                                .padding(.top, 16)
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 32)
-                        .background(
-                            RoundedRectangle(cornerRadius: 24)
-                                .fill(Color.black.opacity(0.8))
-                                .shadow(color: badge.category.color.opacity(0.3), radius: 20, x: 0, y: 10)
-                        )
-                        .padding(32)
-                    }
-                    .transition(.opacity)
-                    .onAppear {
-                        // Create staggered animations
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                            animationProgress = 1.0
-                        }
-                        
-                        // Small delay before confetti
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            withAnimation(.easeIn(duration: 0.3)) {
-                                showConfetti = true
-                            }
-                        }
-                        
-                        // Play haptic feedback
-                        let generator = UINotificationFeedbackGenerator()
-                        generator.notificationOccurred(.success)
-                    }
-                    .onDisappear {
-                        // Reset animation states
-                        animationProgress = 0.0
-                        showConfetti = false
-                    }
+                    celebrationOverlay(for: badge)
                 }
             }
+    }
+    
+    // Extracted main overlay content
+    private func celebrationOverlay(for badge: Badge) -> some View {
+        ZStack {
+            // Dimmed background
+            dimmedBackground
+            
+            // Confetti effect
+            BadgeConfettiView()
+                .opacity(showConfetti ? 1 : 0)
+            
+            // Badge celebration card
+            badgeCelebrationCard(for: badge)
+        }
+        .transition(.opacity)
+        .onAppear(perform: performEntryAnimations)
+        .onDisappear(perform: resetAnimationStates)
+    }
+    
+    // Dimmed background
+    private var dimmedBackground: some View {
+        Color.black.opacity(0.7)
+            .ignoresSafeArea()
+            .onTapGesture {
+                withAnimation {
+                    isPresented = false
+                }
+            }
+    }
+    
+    // Badge celebration card
+    private func badgeCelebrationCard(for badge: Badge) -> some View {
+        VStack(spacing: 24) {
+            // Animated badge icon
+            animatedBadgeIcon(for: badge)
+            
+            // Badge info
+            badgeInfoSection(for: badge)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 32)
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color.black.opacity(0.8))
+                .shadow(color: badge.category.color.opacity(0.3), radius: 20, x: 0, y: 10)
+        )
+        .padding(32)
+    }
+    
+    // Animated badge icon
+    private func animatedBadgeIcon(for badge: Badge) -> some View {
+        ZStack {
+            // Glow effect
+            Circle()
+                .fill(badge.category.color.opacity(0.2))
+                .frame(width: 140, height: 140)
+                .blur(radius: 15)
+            
+            // Starburst effect
+            starburstEffect(for: badge)
+            
+            // Badge background
+            Circle()
+                .fill(badge.category.color.opacity(0.15))
+                .frame(width: 100, height: 100)
+            
+            // Badge icon
+            if #available(iOS 17.0, *) {
+                Image(systemName: badge.iconName)
+                    .font(.system(size: 50))
+                    .foregroundColor(badge.category.color)
+                    .symbolEffect(.bounce, options: .repeating, value: isPresented)
+            } else {
+                // Fallback on earlier versions
+                Image(systemName: badge.iconName)
+                    .font(.system(size: 50))
+                    .foregroundColor(badge.category.color)
+            }
+        }
+        .scaleEffect(animationProgress)
+    }
+    
+    // Starburst rays effect
+    private func starburstEffect(for badge: Badge) -> some View {
+        ForEach(0..<8, id: \.self) { i in
+            Rectangle()
+                .fill(badge.category.color.opacity(0.4))
+                .frame(width: 50, height: 4)
+                .offset(x: 35)
+                .rotationEffect(.degrees(Double(i) * 45 + animationProgress * 30))
+        }
+    }
+    
+    // Badge info section
+    private func badgeInfoSection(for badge: Badge) -> some View {
+        VStack(spacing: 16) {
+            // Badge unlocked text
+            Text("Badge Unlocked!")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.white)
+                .opacity(animationProgress)
+            
+            // Badge name
+            Text(badge.name)
+                .font(.system(size: 22, weight: .bold))
+                .foregroundColor(badge.category.color)
+                .opacity(animationProgress)
+            
+            // Description
+            Text(badge.description)
+                .font(.body)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.horizontal, 32)
+                .opacity(animationProgress)
+            
+            // Category
+            badgeCategoryPill(for: badge)
+            
+            // Reward if any
+            if badge.reward.type != .none {
+                badgeRewardSection(for: badge)
+            }
+            
+            // Continue button
+            continueButton(with: badge.category.color)
+        }
+    }
+    
+    // Badge category pill
+    private func badgeCategoryPill(for badge: Badge) -> some View {
+        HStack {
+            Image(systemName: badge.category.icon)
+                .foregroundColor(badge.category.color)
+            
+            Text(badge.category.rawValue)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(badge.category.color.opacity(0.2))
+        )
+        .opacity(animationProgress)
+    }
+    
+    // Badge reward section
+    private func badgeRewardSection(for badge: Badge) -> some View {
+        VStack(spacing: 4) {
+            Text("Reward Earned")
+                .font(.headline)
+                .foregroundColor(.yellow)
+            
+            Text(badge.reward.description)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.yellow.opacity(0.1))
+        )
+        .opacity(animationProgress)
+    }
+    
+    // Continue button
+    private func continueButton(with color: Color) -> some View {
+        Button {
+            withAnimation {
+                isPresented = false
+            }
+        } label: {
+            Text("Continue")
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(width: 200)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(color)
+                )
+        }
+        .buttonStyle(ScaleButtonStyle())
+        .opacity(animationProgress)
+        .padding(.top, 16)
+    }
+    
+    // Animation functions
+    private func performEntryAnimations() {
+        // Create staggered animations
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+            animationProgress = 1.0
+        }
+        
+        // Small delay before confetti
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.easeIn(duration: 0.3)) {
+                showConfetti = true
+            }
+        }
+        
+        // Play haptic feedback
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+    
+    private func resetAnimationStates() {
+        // Reset animation states
+        animationProgress = 0.0
+        showConfetti = false
     }
 }
 

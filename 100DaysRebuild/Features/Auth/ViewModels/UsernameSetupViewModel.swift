@@ -134,7 +134,7 @@ class UsernameSetupViewModel: ObservableObject {
                 .setData(["userId": userId])
             
             // 4. Update UserSession
-            await MainActor.run {
+            Task {
                 try? await userSession.updateUsername(username)
                 try? await userSession.completeOnboarding()
             }

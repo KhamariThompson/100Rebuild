@@ -12,53 +12,57 @@ struct MainTabView: View {
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            TabView(selection: $router.selectedTab) {
-                // Home Tab
-                NavigationView {
-                    Text("Home Tab")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.theme.background)
-                        .navigationTitle("Home")
-                        .contentPaddingForTabBar()
+            if #available(iOS 17.0, *) {
+                TabView(selection: $router.selectedTab) {
+                    // Home Tab
+                    NavigationView {
+                        Text("Home Tab")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.theme.background)
+                            .navigationTitle("Home")
+                            .contentPaddingForTabBar()
+                    }
+                    .tag(0)
+                    
+                    // Progress Tab
+                    NavigationView {
+                        Text("Progress Tab")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.theme.background)
+                            .navigationTitle("Progress")
+                            .contentPaddingForTabBar()
+                    }
+                    .tag(1)
+                    
+                    // Social Tab
+                    NavigationView {
+                        Text("Social Tab")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.theme.background)
+                            .navigationTitle("Social")
+                            .contentPaddingForTabBar()
+                    }
+                    .tag(2)
+                    
+                    // Profile Tab
+                    NavigationView {
+                        Text("Profile Tab")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color.theme.background)
+                            .navigationTitle("Profile")
+                            .contentPaddingForTabBar()
+                    }
+                    .tag(3)
                 }
-                .tag(0)
-                
-                // Progress Tab
-                NavigationView {
-                    Text("Progress Tab")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.theme.background)
-                        .navigationTitle("Progress")
-                        .contentPaddingForTabBar()
+                .disabled(isMenuExpanded) // Disable tab view interaction when menu is expanded
+                .edgesIgnoringSafeArea(.bottom)
+                .onChange(of: router.selectedTab) { oldValue, newValue in
+                    // Make sure the tab change is intentional and not a bug
+                    // This prevents auto-switching back to home tab
+                    print("Tab changed from \(oldValue) to \(newValue)")
                 }
-                .tag(1)
-                
-                // Social Tab
-                NavigationView {
-                    Text("Social Tab")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.theme.background)
-                        .navigationTitle("Social")
-                        .contentPaddingForTabBar()
-                }
-                .tag(2)
-                
-                // Profile Tab
-                NavigationView {
-                    Text("Profile Tab")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.theme.background)
-                        .navigationTitle("Profile")
-                        .contentPaddingForTabBar()
-                }
-                .tag(3)
-            }
-            .disabled(isMenuExpanded) // Disable tab view interaction when menu is expanded
-            .edgesIgnoringSafeArea(.bottom)
-            .onChange(of: router.selectedTab) { oldValue, newValue in
-                // Make sure the tab change is intentional and not a bug
-                // This prevents auto-switching back to home tab
-                print("Tab changed from \(oldValue) to \(newValue)")
+            } else {
+                // Fallback on earlier versions
             }
             
             ZStack(alignment: .bottom) {

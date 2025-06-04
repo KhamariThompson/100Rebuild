@@ -40,7 +40,7 @@ struct ChangeEmailView: View {
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
                             .submitLabel(.next)
-                            .onChange(of: newEmail) { _, newValue in
+                            .onChange(of: newEmail) { newValue in
                                 validateEmail()
                             }
                         

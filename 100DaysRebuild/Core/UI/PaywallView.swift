@@ -57,7 +57,7 @@ struct PaywallView: View {
                     Spacer()
                     
                     Button {
-                        dismiss()
+                        dismissPaywall()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 28))
@@ -112,7 +112,7 @@ struct PaywallView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Close") {
-                    dismiss()
+                    dismissPaywall()
                 }
             }
         }
@@ -193,7 +193,7 @@ struct PaywallView: View {
                 isLoading = false
                 
                 // Dismiss paywall on successful purchase
-                dismiss()
+                dismissPaywall()
                 
                 // Show success feedback
                 let generator = UINotificationFeedbackGenerator()
@@ -242,6 +242,19 @@ struct PaywallView: View {
         }
     }
     
+    // Add a custom dismiss method to ensure both the Environment dismiss and showPaywall property are handled
+    private func dismissPaywall() {
+        // Call the environment dismiss action
+        dismiss()
+        
+        // Also set the subscription service flag to false
+        subscriptionService.showPaywall = false
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+    
     // Helper function to open a URL
     private func openURL(_ url: URL) {
         UIApplication.shared.open(url)
@@ -271,7 +284,7 @@ struct PaywallView: View {
                 // Check if user has active subscription after restoration
                 if subscriptionService.isProUser {
                     // Successful restoration with active subscription
-                    dismiss()
+                    dismissPaywall()
                     
                     // Success feedback
                     let generator = UINotificationFeedbackGenerator()

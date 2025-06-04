@@ -37,7 +37,7 @@ struct ChangeUsernameView: View {
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .submitLabel(.done)
-                                .onChange(of: username) { _, newValue in
+                                .onChange(of: username) { newValue in
                                     // Enforce username constraints (letters, numbers, underscores, no spaces)
                                     let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
                                     if filtered != newValue {

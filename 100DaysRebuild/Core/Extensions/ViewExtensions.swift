@@ -478,34 +478,38 @@ struct AdaptiveKeyboardHandler: ViewModifier {
 // Modifier to ensure text inputs have safe options
 struct SafeTextInputModifier: ViewModifier {
     func body(content: Content) -> some View {
-        content
-            .onChange(of: UIResponder.currentFirstResponder()) { _, newValue in
-                if let textField = newValue as? UITextField {
-                    // Disable predictive options to prevent RTIInputSystemClient errors
-                    textField.autocorrectionType = .no
-                    textField.spellCheckingType = .no
-                    textField.smartQuotesType = .no
-                    textField.smartDashesType = .no
-                    textField.smartInsertDeleteType = .no
+        if #available(iOS 17.0, *) {
+            content
+                .onChange(of: UIResponder.currentFirstResponder()) { _, newValue in
+                    if let textField = newValue as? UITextField {
+                        // Disable predictive options to prevent RTIInputSystemClient errors
+                        textField.autocorrectionType = .no
+                        textField.spellCheckingType = .no
+                        textField.smartQuotesType = .no
+                        textField.smartDashesType = .no
+                        textField.smartInsertDeleteType = .no
+                        
+                        // Disable input assistant
+                        textField.inputAssistantItem.leadingBarButtonGroups = []
+                        textField.inputAssistantItem.trailingBarButtonGroups = []
+                    }
                     
-                    // Disable input assistant
-                    textField.inputAssistantItem.leadingBarButtonGroups = []
-                    textField.inputAssistantItem.trailingBarButtonGroups = []
+                    if let textView = newValue as? UITextView {
+                        // Disable predictive options to prevent RTIInputSystemClient errors
+                        textView.autocorrectionType = .no
+                        textView.spellCheckingType = .no
+                        textView.smartQuotesType = .no
+                        textView.smartDashesType = .no
+                        textView.smartInsertDeleteType = .no
+                        
+                        // Disable input assistant
+                        textView.inputAssistantItem.leadingBarButtonGroups = []
+                        textView.inputAssistantItem.trailingBarButtonGroups = []
+                    }
                 }
-                
-                if let textView = newValue as? UITextView {
-                    // Disable predictive options to prevent RTIInputSystemClient errors
-                    textView.autocorrectionType = .no
-                    textView.spellCheckingType = .no
-                    textView.smartQuotesType = .no
-                    textView.smartDashesType = .no
-                    textView.smartInsertDeleteType = .no
-                    
-                    // Disable input assistant
-                    textView.inputAssistantItem.leadingBarButtonGroups = []
-                    textView.inputAssistantItem.trailingBarButtonGroups = []
-                }
-            }
+        } else {
+            // Fallback on earlier versions
+        }
     }
 }
 

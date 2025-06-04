@@ -389,7 +389,7 @@ struct SettingsView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 30)
             }
-            .onChange(of: scrollToSection) { oldValue, newValue in
+            .onChange(of: scrollToSection) { newValue in
                 if let section = newValue {
                     withAnimation {
                         proxy.scrollTo(section, anchor: .top)
@@ -850,7 +850,7 @@ struct SettingsView: View {
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
-                            .onChange(of: isDailyReminderEnabled) { oldValue, newValue in
+                            .onChange(of: isDailyReminderEnabled) { newValue in
                                 if newValue {
                                     Task { try? await scheduleReminders() }
                                 } else {
@@ -862,7 +862,7 @@ struct SettingsView: View {
                         
                         DatePicker("Time", selection: $reminderTime, displayedComponents: .hourAndMinute)
                             .datePickerStyle(.compact)
-                            .onChange(of: reminderTime) { oldValue, newValue in
+                            .onChange(of: reminderTime) { newValue in
                                 if isDailyReminderEnabled {
                                     Task { try? await updateReminderTime() }
                                 }
@@ -881,7 +881,7 @@ struct SettingsView: View {
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
-                            .onChange(of: isStreakReminderEnabled) { oldValue, newValue in
+                            .onChange(of: isStreakReminderEnabled) { newValue in
                                 if newValue {
                                     Task { try? await scheduleStreakReminder() }
                                 } else {
@@ -908,7 +908,7 @@ struct SettingsView: View {
                         Toggle("Sound", isOn: $isSoundEnabled)
                             .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
-                            .onChange(of: isSoundEnabled) { _, _ in
+                            .onChange(of: isSoundEnabled) { _ in
                                 Task { 
                                     do {
                                         await updateNotificationSettings()
@@ -921,7 +921,7 @@ struct SettingsView: View {
                         Toggle("Vibration", isOn: $isVibrationEnabled)
                             .tint(Color.theme.accent)
                             .disabled(!notificationService.isAuthorized)
-                            .onChange(of: isVibrationEnabled) { _, _ in
+                            .onChange(of: isVibrationEnabled) { _ in
                                 Task { 
                                     do {
                                         await updateNotificationSettings()

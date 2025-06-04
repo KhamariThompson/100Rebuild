@@ -98,14 +98,14 @@ struct MainAppView: View {
         }
         .ignoresSafeArea(.keyboard)
         .accentColor(Color.theme.accent)
-        .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { [weak viewModel] _ in
-            viewModel?.handleNotificationSettingsRequest()
+        .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
+            viewModel.handleNotificationSettingsRequest()
         }
         .onAppear { [weak viewModel] in
             viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
         .onChange(of: UIDevice.current.orientation) { newValue in
-            viewModel?.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
+            viewModel.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
         }
     }
     
@@ -204,9 +204,22 @@ struct MainAppView: View {
     }
     
     private var paywallOverlay: some View {
-        PaywallView()
-            .transition(.opacity)
-            .zIndex(100)
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    // Don't dismiss on background tap to avoid accidental dismissals
+                }
+            
+            // Use the PaywallView with its built-in dismiss functionality
+            PaywallView()
+                .background(Color.theme.background)
+                .cornerRadius(16)
+                .padding(.horizontal)
+        }
+        .transition(.opacity)
+        .zIndex(100)
     }
     
     private var notificationPermissionOverlay: some View {

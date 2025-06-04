@@ -190,7 +190,7 @@ struct SimpleCheckInSheet: View {
                             .stroke(Color.theme.accent, lineWidth: 1)
                     )
                 }
-                .onChange(of: photoItem) { oldValue, newValue in
+                .onChange(of: photoItem) { newValue in
                     Task {
                         if let data = try? await newValue?.loadTransferable(type: Data.self),
                            let image = UIImage(data: data) {

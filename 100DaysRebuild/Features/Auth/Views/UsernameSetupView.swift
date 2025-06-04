@@ -51,7 +51,7 @@ struct UsernameSetupView: View {
                         .disableAutocorrection(true)
                         .focused($isUsernameFocused)
                         .submitLabel(.done)
-                        .onChange(of: viewModel.username) { oldValue, newValue in
+                        .onChange(of: viewModel.username) { newValue in
                             if !newValue.isEmpty {
                                 viewModel.validateUsername()
                             }

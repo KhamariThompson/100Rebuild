@@ -16,313 +16,390 @@ struct CheckInNotePromptView: View {
     
     var body: some View {
         ZStack {
-            // Background with gradient
-            LinearGradient(
-                gradient: Gradient(colors: [Color.theme.background, Color.theme.background.opacity(0.9)]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            .onTapGesture {
-                dismissKeyboard()
-            }
-            
-            // Content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Day \(dayNumber) Reflection")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.theme.text)
-                            .padding(.top, 8)
-                        
-                        Text(challenge.title)
-                            .font(.system(size: 18))
-                            .foregroundColor(.theme.subtext)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.regularMaterial)
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-                    )
-                    .opacity(showAnimation ? 1 : 0)
-                    .offset(y: showAnimation ? 0 : -20)
-                    
-                    // Prompt card
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Today's Prompt")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.theme.subtext)
-                        
-                        Text(prompt)
-                            .font(.system(size: 22, weight: .medium))
-                            .foregroundColor(.theme.accent)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.regularMaterial)
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-                    )
-                    .opacity(showAnimation ? 1 : 0)
-                    .offset(y: showAnimation ? 0 : -15)
-                    
-                    // Journal input card
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Your Reflection")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.theme.text)
-                        
-                        TextEditor(text: $viewModel.note)
-                            .focused($isTextFieldFocused)
-                            .scrollContentBackground(.hidden)
-                            .background(Color.clear)
-                            .frame(minHeight: 150)
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.theme.surface.opacity(0.8))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
-                            )
-                            .overlay(
-                                Group {
-                                    if viewModel.note.isEmpty && !isTextFieldFocused {
-                                        Text("Write your thoughts here...")
-                                            .foregroundColor(.theme.subtext.opacity(0.6))
-                                            .padding(.horizontal, 20)
-                                            .padding(.vertical, 20)
-                                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                            .allowsHitTesting(false)
-                                    }
-                                }
-                            )
-                            .accessibilityHint("Journal entry. Double tap to edit.")
-                            .onChange(of: viewModel.note) { oldValue, newValue in
-                                if newValue.count % 20 == 0 && newValue.count > 0 {
-                                    let generator = UIImpactFeedbackGenerator(style: .light)
-                                    generator.impactOccurred()
-                                }
-                            }
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.regularMaterial)
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-                    )
-                    .opacity(showAnimation ? 1 : 0)
-                    .offset(y: showAnimation ? 0 : -10)
-                    
-                    // Photo attachment card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Add Photo (Optional)")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.theme.text)
-                        
-                        if let selectedImage = viewModel.selectedImage {
-                            ZStack(alignment: .topTrailing) {
-                                Image(uiImage: selectedImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(height: 200)
-                                    .frame(maxWidth: .infinity)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                                    .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
-                                
-                                Button(action: {
-                                    viewModel.selectedImage = nil
-                                    photoItem = nil
-                                }) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.black.opacity(0.7))
-                                            .frame(width: 30, height: 30)
-                                        
-                                        Image(systemName: "xmark")
-                                            .font(.system(size: 12, weight: .bold))
-                                            .foregroundColor(.white)
-                                    }
-                                }
-                                .padding(8)
-                            }
-                        } else {
-                            PhotosPicker(selection: $photoItem, matching: .images) {
-                                VStack {
-                                    Image(systemName: "camera.fill")
-                                        .font(.system(size: 30))
-                                        .foregroundColor(.theme.accent.opacity(0.8))
-                                        .padding(.bottom, 8)
-                                    
-                                    Text("Add a photo to your reflection")
-                                        .font(.system(size: 14))
-                                        .multilineTextAlignment(.center)
-                                        .foregroundColor(.theme.subtext)
-                                }
-                                .frame(height: 120)
-                                .frame(maxWidth: .infinity)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(Color.theme.surface.opacity(0.8))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
-                                )
-                            }
-                        }
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.regularMaterial)
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-                    )
-                    .opacity(showAnimation ? 1 : 0)
-                    .offset(y: showAnimation ? 0 : 10)
-                    .onChange(of: photoItem) {
-                        if let newValue = photoItem {
-                            loadTransferable(from: newValue)
-                        }
-                    }
-                    
-                    // Action buttons
-                    VStack(spacing: 16) {
-                        Button(action: {
-                            Task {
-                                // Save the note and photo
-                                await viewModel.saveCheckInDetails()
-                                isPresented = false
-                                
-                                // Provide haptic feedback on successful save
-                                let generator = UINotificationFeedbackGenerator()
-                                generator.notificationOccurred(.success)
-                            }
-                        }) {
-                            if viewModel.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .padding(.vertical, 16)
-                                    .frame(maxWidth: .infinity)
-                            } else {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(Color.adaptiveForeground(for: colorScheme))
-                                        .padding(.trailing, 6)
-                                    
-                                    Text("Save")
-                                        .font(.system(size: 18, weight: .semibold))
-                                        .foregroundColor(Color.adaptiveForeground(for: colorScheme))
-                                }
-                                .padding(.vertical, 16)
-                                .frame(maxWidth: .infinity)
-                            }
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .shadow(color: Color.theme.accent.opacity(0.3), radius: 10, x: 0, y: 5)
-                        )
-                        .disabled(viewModel.isLoading)
-                        
-                        Button(action: {
-                            isPresented = false
-                        }) {
-                            Text("Skip")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.theme.subtext)
-                                .padding(.vertical, 16)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .opacity(showAnimation ? 1 : 0)
-                    .padding(.bottom, 40)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 24)
-            }
-            .safeAreaInset(edge: .top) {
-                HStack {
-                    Button(action: { isPresented = false }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.theme.text)
-                            .padding(10)
-                            .background(
-                                Circle()
-                                    .fill(Color.theme.surface)
-                                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
-                            )
-                    }
-                    .accessibilityLabel("Close reflection view")
-                    
-                    Spacer()
-                    
-                    Text("Journal")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.theme.text)
-                    
-                    Spacer()
-                    
-                    // Empty view to balance the layout
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 36, height: 36)
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .background(
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .ignoresSafeArea()
-                )
-            }
+            backgroundView
+            mainContentView
         }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Done") {
-                    isTextFieldFocused = false
-                }
+                doneKeyboardButton
+            }
+        }
+        .onAppear(perform: handleOnAppear)
+    }
+    
+    // MARK: - Component Views
+    
+    private var backgroundView: some View {
+        LinearGradient(
+            gradient: Gradient(colors: [Color.theme.background, Color.theme.background.opacity(0.9)]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .onTapGesture {
+            dismissKeyboard()
+        }
+    }
+    
+    private var mainContentView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                headerCard
+                promptCard
+                journalInputCard
+                photoAttachmentCard
+                actionButtons
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+        }
+        .safeAreaInset(edge: .top) {
+            topNavigationBar
+        }
+    }
+    
+    private var headerCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Day \(dayNumber) Reflection")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.theme.text)
+                .padding(.top, 8)
+            
+            Text(challenge.title)
+                .font(.system(size: 18))
+                .foregroundColor(.theme.subtext)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(cardBackground)
+        .opacity(showAnimation ? 1 : 0)
+        .offset(y: showAnimation ? 0 : -20)
+    }
+    
+    private var promptCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Today's Prompt")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.theme.subtext)
+            
+            Text(prompt)
+                .font(.system(size: 22, weight: .medium))
                 .foregroundColor(.theme.accent)
-                .fontWeight(.semibold)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(cardBackground)
+        .opacity(showAnimation ? 1 : 0)
+        .offset(y: showAnimation ? 0 : -15)
+    }
+    
+    private var journalInputCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Your Reflection")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.theme.text)
+            
+            journalTextEditor
+        }
+        .padding(20)
+        .background(cardBackground)
+        .opacity(showAnimation ? 1 : 0)
+        .offset(y: showAnimation ? 0 : -10)
+    }
+    
+    private var journalTextEditor: some View {
+        TextEditor(text: $viewModel.note)
+            .focused($isTextFieldFocused)
+            .scrollContentBackground(.hidden)
+            .background(Color.clear)
+            .frame(minHeight: 150)
+            .padding(16)
+            .background(textEditorBackground)
+            .overlay(textEditorBorder)
+            .overlay(placeholderText)
+            .accessibilityHint("Journal entry. Double tap to edit.")
+            .onChange(of: viewModel.note) { newValue in
+                handleTextChange(newValue: newValue)
+            }
+    }
+    
+    private var textEditorBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.theme.surface.opacity(0.8))
+    }
+    
+    private var textEditorBorder: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
+    }
+    
+    private var placeholderText: some View {
+        Group {
+            if viewModel.note.isEmpty && !isTextFieldFocused {
+                Text("Write your thoughts here...")
+                    .foregroundColor(.theme.subtext.opacity(0.6))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 20)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
             }
         }
-        .onAppear {
-            // Focus the text field automatically
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                isTextFieldFocused = true
-            }
+    }
+    
+    private var photoAttachmentCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add Photo (Optional)")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.theme.text)
             
-            // Animate elements in
-            withAnimation(.easeOut(duration: 0.5)) {
-                showAnimation = true
-            }
-            
-            // Light haptic feedback
-            let impact = UIImpactFeedbackGenerator(style: .light)
-            impact.impactOccurred()
+            photoContent
         }
+        .padding(20)
+        .background(cardBackground)
+        .opacity(showAnimation ? 1 : 0)
+        .offset(y: showAnimation ? 0 : 10)
+        .onChange(of: photoItem) { newValue in
+            if let newItem = newValue {
+                loadTransferable(from: newItem)
+            }
+        }
+    }
+    
+    private var photoContent: some View {
+        Group {
+            if let selectedImage = viewModel.selectedImage {
+                selectedPhotoView(image: selectedImage)
+            } else {
+                photoPickerButton
+            }
+        }
+    }
+    
+    private func selectedPhotoView(image: UIImage) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: Color.black.opacity(0.1), radius: 6, x: 0, y: 3)
+            
+            deletePhotoButton
+        }
+    }
+    
+    private var deletePhotoButton: some View {
+        Button(action: {
+            viewModel.selectedImage = nil
+            photoItem = nil
+        }) {
+            ZStack {
+                Circle()
+                    .fill(Color.black.opacity(0.7))
+                    .frame(width: 30, height: 30)
+                
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+            }
+        }
+        .padding(8)
+    }
+    
+    private var photoPickerButton: some View {
+        PhotosPicker(selection: $photoItem, matching: .images) {
+            VStack {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 30))
+                    .foregroundColor(.theme.accent.opacity(0.8))
+                    .padding(.bottom, 8)
+                
+                Text("Add a photo to your reflection")
+                    .font(.system(size: 14))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.theme.subtext)
+            }
+            .frame(height: 120)
+            .frame(maxWidth: .infinity)
+            .background(photoPickerBackground)
+            .overlay(photoPickerBorder)
+        }
+    }
+    
+    private var photoPickerBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color.theme.surface.opacity(0.8))
+    }
+    
+    private var photoPickerBorder: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
+    }
+    
+    private var actionButtons: some View {
+        VStack(spacing: 16) {
+            saveButton
+            skipButton
+        }
+        .opacity(showAnimation ? 1 : 0)
+        .padding(.bottom, 40)
+    }
+    
+    private var saveButton: some View {
+        Button(action: handleSave) {
+            Group {
+                if viewModel.isLoading {
+                    loadingView
+                } else {
+                    saveButtonContent
+                }
+            }
+        }
+        .background(saveButtonBackground)
+        .disabled(viewModel.isLoading)
+    }
+    
+    private var loadingView: some View {
+        ProgressView()
+            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+    }
+    
+    private var saveButtonContent: some View {
+        HStack {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 18))
+                .foregroundColor(Color.adaptiveForeground(for: colorScheme))
+                .padding(.trailing, 6)
+            
+            Text("Save")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(Color.adaptiveForeground(for: colorScheme))
+        }
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+    }
+    
+    private var saveButtonBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .shadow(color: Color.theme.accent.opacity(0.3), radius: 10, x: 0, y: 5)
+    }
+    
+    private var skipButton: some View {
+        Button(action: {
+            isPresented = false
+        }) {
+            Text("Skip")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.theme.subtext)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity)
+        }
+    }
+    
+    private var topNavigationBar: some View {
+        HStack {
+            closeButton
+            Spacer()
+            Text("Journal")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.theme.text)
+            Spacer()
+            // Empty view to balance the layout
+            Circle()
+                .fill(Color.clear)
+                .frame(width: 36, height: 36)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .background(
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+        )
+    }
+    
+    private var closeButton: some View {
+        Button(action: { isPresented = false }) {
+            Image(systemName: "xmark")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.theme.text)
+                .padding(10)
+                .background(
+                    Circle()
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                )
+        }
+        .accessibilityLabel("Close reflection view")
+    }
+    
+    private var doneKeyboardButton: some View {
+        Button("Done") {
+            isTextFieldFocused = false
+        }
+        .foregroundColor(.theme.accent)
+        .fontWeight(.semibold)
+    }
+    
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 20)
+            .fill(.regularMaterial)
+            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func handleSave() {
+        Task {
+            // Save the note and photo
+            await viewModel.saveCheckInDetails()
+            isPresented = false
+            
+            // Provide haptic feedback on successful save
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.success)
+        }
+    }
+    
+    private func handleTextChange(newValue: String) {
+        if newValue.count % 20 == 0 && newValue.count > 0 {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+        }
+    }
+    
+    private func handleOnAppear() {
+        // Focus the text field automatically
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            isTextFieldFocused = true
+        }
+        
+        // Animate elements in
+        withAnimation(.easeOut(duration: 0.5)) {
+            showAnimation = true
+        }
+        
+        // Light haptic feedback
+        let impact = UIImpactFeedbackGenerator(style: .light)
+        impact.impactOccurred()
     }
     
     private func dismissKeyboard() {
         isTextFieldFocused = false
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), 
-                                      to: nil, from: nil, for: nil)
+                                       to: nil, from: nil, for: nil)
     }
     
     private func loadTransferable(from imageSelection: PhotosPickerItem) {

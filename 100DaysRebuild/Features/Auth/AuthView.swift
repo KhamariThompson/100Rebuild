@@ -430,65 +430,60 @@ private extension AuthView {
     
     // Main authentication form
     var authForm: some View {
-        VStack(spacing: 28) {
-            // Email & Password fields based on auth mode
-            switch viewModel.authMode {
-            case .emailSignIn, .emailSignUp:
-                emailPasswordForm
-                
-                // Sign In/Up button
-                Button(action: submitCredentials) {
-                    HStack(spacing: 12) {
-                        Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Sign Up")
-                            .font(.system(size: 17, weight: .semibold))
-                        
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        }
-                    }
-                    .foregroundColor(colorScheme == .dark ? .black : .white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CalAIDesignTokens.buttonHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.3))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.1 : 0), lineWidth: colorScheme == .dark ? 1 : 0)
-                    )
-                    .shadow(color: isButtonEnabled ? Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
-                }
-                .disabled(!isButtonEnabled)
-                .padding(.top, 4)
-                
-                // Forgot password link (sign in mode only)
-                if viewModel.authMode == .emailSignIn {
-                    Button("Forgot Password?") {
-                        withAnimation {
-                            viewModel.authMode = .forgotPassword
-                        }
-                    }
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.theme.accent)
-                    .padding(.top, 8)
-                }
-                
-            case .forgotPassword:
+        Group {
+            if viewModel.authMode == .forgotPassword {
                 forgotPasswordForm
-                
-            case .googleSignIn, .appleSignIn:
-                // These auth modes are handled directly by their respective buttons
-                // and don't need dedicated form UI in the authForm view
-                EmptyView()
+            } else {
+                standardAuthForm
             }
         }
     }
     
-    // Email and password form fields
-    var emailPasswordForm: some View {
+    // Standard sign in/sign up form
+    var standardAuthForm: some View {
+        VStack(spacing: 24) {
+            // Email and password fields
+            emailPasswordFields
+            
+            // Forgot password link (only in sign in mode)
+            if viewModel.authMode == .emailSignIn {
+                Button {
+                    withAnimation {
+                        viewModel.authMode = .forgotPassword
+                    }
+                } label: {
+                    Text("Forgot your password?")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.theme.accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, -12)
+            }
+            
+            // Submit button
+            Button(action: submitCredentials) {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Create Account")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: CalAIDesignTokens.buttonHeight)
+            .background(
+                RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                    .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.3))
+                    .shadow(color: isButtonEnabled ? Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
+            )
+            .disabled(!isButtonEnabled)
+        }
+    }
+    
+    // Email and password input fields
+    var emailPasswordFields: some View {
         VStack(spacing: 16) {
             // Email field
             VStack(alignment: .leading, spacing: 8) {
@@ -515,7 +510,7 @@ private extension AuthView {
                         print("Email field submitted, moving to password")
                         focusedField = Field.password
                     }
-                    .onChange(of: viewModel.email) { _, newValue in
+                    .onChange(of: viewModel.email) { newValue in
                         if !newValue.isEmpty {
                             Task { @MainActor in
                                 viewModel.updateValidationState()
@@ -558,7 +553,7 @@ private extension AuthView {
                             submitCredentials()
                         }
                     }
-                    .onChange(of: viewModel.password) { _, newValue in
+                    .onChange(of: viewModel.password) { newValue in
                         if !newValue.isEmpty {
                             Task { @MainActor in
                                 viewModel.updateValidationState()
@@ -596,7 +591,7 @@ private extension AuthView {
                         .onSubmit {
                             submitCredentials()
                         }
-                        .onChange(of: viewModel.confirmPassword) { _, newValue in
+                        .onChange(of: viewModel.confirmPassword) { newValue in
                             if !newValue.isEmpty {
                                 Task { @MainActor in
                                     viewModel.updateValidationState()
@@ -612,7 +607,7 @@ private extension AuthView {
                 }
             }
         }
-        .onChange(of: focusedField) { _, newValue in
+        .onChange(of: focusedField) { newValue in
             print("Focus changed to: \(String(describing: newValue))")
         }
     }

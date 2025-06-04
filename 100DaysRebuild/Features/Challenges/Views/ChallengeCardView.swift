@@ -255,7 +255,7 @@ struct ChallengeCardView: View {
             // Ensure isCheckedIn matches challenge state on appear
             isCheckedIn = challenge.isCompletedToday
         }
-        .onChange(of: challenge) { oldChallenge, newChallenge in
+        .onChange(of: challenge) { newChallenge in
             // Update the isCheckedIn state when challenge changes
             isCheckedIn = newChallenge.isCompletedToday
         }

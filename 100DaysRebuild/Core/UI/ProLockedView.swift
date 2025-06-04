@@ -23,7 +23,7 @@ struct ProLockedView<Content: View>: View {
                 .opacity(subscriptionService.isProUser ? 1 : 0.4)
                 .scaleEffect(subscriptionService.isProUser ? 1 : 0.98)
                 .animation(.easeInOut(duration: 0.5), value: subscriptionService.isProUser)
-                .onChange(of: subscriptionService.isProUser) { oldValue, newValue in
+                .onChange(of: subscriptionService.isProUser) { newValue in
                     withAnimation(.easeInOut(duration: 0.5)) {
                         isContentVisible = newValue
                     }

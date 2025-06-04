@@ -19,6 +19,10 @@ struct AdMobBannerView: View {
                     
                     Button(action: {
                         subscriptionService.showPaywall = true
+                        
+                        // Add haptic feedback for better user experience
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
                     }) {
                         Text("Upgrade")
                             .font(.footnote)
