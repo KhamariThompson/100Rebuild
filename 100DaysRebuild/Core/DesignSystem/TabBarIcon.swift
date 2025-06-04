@@ -70,7 +70,7 @@ struct TabBarIcon: View {
                 .opacity(titleOpacity)
         }
         .frame(maxWidth: .infinity)
-        .onChange(of: isSelected) { oldValue, newValue in
+        .onChange(of: isSelected) { newValue in
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 iconOffset = newValue ? -4 : 0
                 titleOpacity = newValue ? 1.0 : 0.7

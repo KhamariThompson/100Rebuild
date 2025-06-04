@@ -67,7 +67,7 @@ public enum AuthComponents {
                     .focused(isFocused, equals: true)
                     .submitLabel(submitLabel)
                     .onSubmit(onSubmit)
-                    .onChange(of: text) { oldValue, newValue in
+                    .onChange(of: text) { newValue in
                         if let onTextChange = onTextChange {
                             onTextChange(newValue)
                         }
@@ -170,7 +170,7 @@ public enum AuthComponents {
                         .stroke(errorMessage == nil ? Color.theme.border.opacity(0.3) : Color.red, lineWidth: 1)
                 )
                 .focused(isFocused, equals: true)
-                .onChange(of: text) { oldValue, newValue in
+                .onChange(of: text) { newValue in
                     if let onTextChange = onTextChange {
                         onTextChange(newValue)
                     }

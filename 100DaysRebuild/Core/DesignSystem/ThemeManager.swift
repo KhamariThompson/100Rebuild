@@ -198,9 +198,9 @@ struct AppThemeModifier: ViewModifier {
                     lastTheme = themeManager.currentTheme
                 }
             }
-            .onChange(of: themeManager.currentTheme) { oldValue, newValue in
+            .onChange(of: themeManager.currentTheme) { newValue in
                 // Only apply animation if this isn't the first appearance
-                if lastTheme != nil && oldValue != newValue {
+                if lastTheme != nil && lastTheme != newValue {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         lastTheme = newValue
                     }
