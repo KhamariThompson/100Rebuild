@@ -245,13 +245,15 @@ struct MainAppView: View {
                 }) {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.black) // Changed from white to black for better visibility
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .frame(width: 50, height: 50)
                         .background(
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        colors: [.white, Color.white.opacity(0.9)],
+                                        colors: colorScheme == .dark ? 
+                                            [.white, Color.white.opacity(0.9)] : 
+                                            [Color.black, Color.black.opacity(0.9)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -260,7 +262,10 @@ struct MainAppView: View {
                         .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
                         .overlay(
                             Circle()
-                                .stroke(Color.black.opacity(0.3), lineWidth: 1.5) // Added darker border for better visibility
+                                .stroke(colorScheme == .dark ? 
+                                    Color.black.opacity(0.3) : 
+                                    Color.white.opacity(0.3), 
+                                    lineWidth: 1.5)
                         )
                 }
                 .offset(y: -30) // Increased offset to make button more visible
