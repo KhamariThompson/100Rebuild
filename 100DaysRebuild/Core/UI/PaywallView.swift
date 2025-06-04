@@ -500,7 +500,7 @@ struct PaywallView: View {
                     
                     Text(price)
                         .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                 }
                 .zIndex(1)
                 
@@ -520,7 +520,7 @@ struct PaywallView: View {
                     
                     Text("per month")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .padding(.leading, 30)
                 }
                 .padding(.leading, -15)
@@ -758,11 +758,11 @@ struct PaywallView: View {
                 HStack {
                     Text("Upgrade Now")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                     
                     Text("• \(price)/month")
                         .font(.system(size: 16))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
@@ -776,7 +776,7 @@ struct PaywallView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        .stroke(colorScheme == .dark ? Color.black.opacity(0.2) : Color.white.opacity(0.2), lineWidth: 1)
                 )
                 .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
             }
