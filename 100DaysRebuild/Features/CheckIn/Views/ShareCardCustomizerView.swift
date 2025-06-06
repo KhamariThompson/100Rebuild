@@ -34,85 +34,85 @@ struct ShareCardCustomizerView: View {
     
     // Card preview component
     private var cardPreviewSection: some View {
-        VStack {
-            if let preview = previewImage {
-                Image(uiImage: preview)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-                    .padding(.horizontal)
-                    .onTapGesture {
-                        showPreviewFullScreen = true
+                VStack {
+                    if let preview = previewImage {
+                        Image(uiImage: preview)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                            .padding(.horizontal)
+                            .onTapGesture {
+                                showPreviewFullScreen = true
+                            }
+                    } else {
+                        ProgressView()
+                            .frame(height: 300)
                     }
-            } else {
-                ProgressView()
-                    .frame(height: 300)
-            }
-        }
-        .frame(height: UIScreen.main.bounds.height * 0.5)
-        .padding(.top)
+                }
+                .frame(height: UIScreen.main.bounds.height * 0.5)
+                .padding(.top)
     }
     
     // Layout style selection component
     private var layoutStyleSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Layout Style")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            Picker("Layout Style", selection: $selectedTab) {
-                Text("Modern").tag(0)
-                Text("Classic").tag(1)
-                Text("Minimal").tag(2)
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .accessibilityLabel("Select layout style")
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Layout Style")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            Picker("Layout Style", selection: $selectedTab) {
+                                Text("Modern").tag(0)
+                                Text("Classic").tag(1)
+                                Text("Minimal").tag(2)
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .accessibilityLabel("Select layout style")
             .onChange(of: selectedTab) { value in
                 switch value {
-                case 0:
-                    viewModel.setCardLayout(.modern)
-                case 1:
-                    viewModel.setCardLayout(.classic)
-                case 2:
-                    viewModel.setCardLayout(.minimal)
-                default:
-                    viewModel.setCardLayout(.modern)
-                }
-                updatePreview()
-            }
-        }
-        .padding(.horizontal)
+                                case 0:
+                                    viewModel.setCardLayout(.modern)
+                                case 1:
+                                    viewModel.setCardLayout(.classic)
+                                case 2:
+                                    viewModel.setCardLayout(.minimal)
+                                default:
+                                    viewModel.setCardLayout(.modern)
+                                }
+                                updatePreview()
+                            }
+                        }
+                        .padding(.horizontal)
     }
-    
+                        
     // Background style selection component
     private var backgroundStyleSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Background Style")
-                .font(.headline)
-                .foregroundColor(.theme.text)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(backgroundOptions.indices, id: \.self) { index in
-                        BackgroundStyleButton(
-                            title: backgroundOptions[index].0,
-                            style: backgroundOptions[index].1,
-                            isSelected: getIsBackgroundSelected(backgroundOptions[index].1)
-                        ) {
-                            viewModel.setCardBackground(backgroundOptions[index].1)
-                            updatePreview()
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Background Style")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(backgroundOptions.indices, id: \.self) { index in
+                                        BackgroundStyleButton(
+                                            title: backgroundOptions[index].0,
+                                            style: backgroundOptions[index].1,
+                                            isSelected: getIsBackgroundSelected(backgroundOptions[index].1)
+                                        ) {
+                                            viewModel.setCardBackground(backgroundOptions[index].1)
+                                            updatePreview()
+                                        }
+                                        .accessibilityLabel("\(backgroundOptions[index].0) background style")
+                                        .accessibilityAddTraits(getIsBackgroundSelected(backgroundOptions[index].1) ? .isSelected : [])
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                            .accessibilityLabel("Background style options")
                         }
-                        .accessibilityLabel("\(backgroundOptions[index].0) background style")
-                        .accessibilityAddTraits(getIsBackgroundSelected(backgroundOptions[index].1) ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal)
-            }
-            .accessibilityLabel("Background style options")
-        }
-        .padding(.top, 8)
-        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.horizontal)
     }
     
     // Customization options container
@@ -121,91 +121,91 @@ struct ShareCardCustomizerView: View {
             VStack(alignment: .leading, spacing: 20) {
                 layoutStyleSection
                 backgroundStyleSection
-            }
-            .padding(.vertical, 20)
-        }
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: -3)
-        )
+                    }
+                    .padding(.vertical, 20)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: -3)
+                )
     }
-    
+                
     // Share button component
     private var shareButton: some View {
-        Button(action: {
-            shareCurrentDesign()
-        }) {
-            HStack {
-                Image(systemName: "square.and.arrow.up")
-                Text("Share Your Milestone")
+                Button(action: {
+                    shareCurrentDesign()
+                }) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.up")
+                        Text("Share Your Milestone")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.theme.accent)
+                            .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
+                    )
+                    .padding(.horizontal)
+                    .padding(.vertical, 20)
+                }
+                .accessibilityLabel("Share your milestone")
             }
-            .font(.headline)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.theme.accent)
-                    .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
-            )
-            .padding(.horizontal)
-            .padding(.vertical, 20)
-        }
-        .accessibilityLabel("Share your milestone")
-    }
     
     // Full-screen preview component
     private var fullScreenPreview: some View {
         Group {
-            if let preview = previewImage {
-                ZStack {
-                    Color.black.ignoresSafeArea()
-                    
-                    VStack {
-                        Image(uiImage: preview)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .padding()
+                if let preview = previewImage {
+                    ZStack {
+                        Color.black.ignoresSafeArea()
                         
-                        HStack(spacing: 40) {
-                            Button(action: {
-                                showPreviewFullScreen = false
-                            }) {
-                                Text("Back")
+                        VStack {
+                            Image(uiImage: preview)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .padding()
+                            
+                            HStack(spacing: 40) {
+                                Button(action: {
+                                    showPreviewFullScreen = false
+                                }) {
+                                    Text("Back")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 24)
+                                        .background(
+                                            Capsule()
+                                                .stroke(Color.white, lineWidth: 2)
+                                        )
+                                }
+                                
+                                Button(action: {
+                                    shareImage = preview
+                                    showingShareSheet = true
+                                }) {
+                                    HStack {
+                                        Image(systemName: "square.and.arrow.up")
+                                        Text("Share")
+                                    }
                                     .font(.headline)
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.black)
                                     .padding(.vertical, 12)
                                     .padding(.horizontal, 24)
                                     .background(
                                         Capsule()
-                                            .stroke(Color.white, lineWidth: 2)
+                                            .fill(Color.white)
                                     )
-                            }
-                            
-                            Button(action: {
-                                shareImage = preview
-                                showingShareSheet = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "square.and.arrow.up")
-                                    Text("Share")
                                 }
-                                .font(.headline)
-                                .foregroundColor(.black)
-                                .padding(.vertical, 12)
-                                .padding(.horizontal, 24)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.white)
-                                )
                             }
+                            .padding(.bottom, 40)
                         }
-                        .padding(.bottom, 40)
                     }
+                    .statusBar(hidden: true)
                 }
-                .statusBar(hidden: true)
-            }
         }
     }
     

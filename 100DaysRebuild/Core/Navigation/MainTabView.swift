@@ -149,9 +149,18 @@ struct MainTabView: View {
         }
         .sheet(isPresented: $showCheckInSheet) {
             if let challenge = selectedChallengeForCheckIn {
-                EnhancedCheckInView(
-                    challengesViewModel: challengesViewModel,
-                    challenge: challenge
+                SimpleCheckInSheet(
+                    challenge: challenge,
+                    dayNumber: challenge.daysCompleted + 1,
+                    onCheckIn: { note, image in
+                        Task {
+                            await challengesViewModel.checkInToChallenge(challenge, note: note, image: image)
+                        }
+                        showCheckInSheet = false
+                    },
+                    onDismiss: {
+                        showCheckInSheet = false
+                    }
                 )
             }
         }

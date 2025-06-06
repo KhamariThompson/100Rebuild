@@ -1259,11 +1259,11 @@ struct SettingsView: View {
     }
     
     private func getAppVersion() -> String {
-        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.3"
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.4"
     }
     
     private func getBuildNumber() -> String {
-        return Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "2"
     }
     
     private func getFormattedDate() -> String {

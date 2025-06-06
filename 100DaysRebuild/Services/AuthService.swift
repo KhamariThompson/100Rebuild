@@ -27,9 +27,11 @@ class AuthService {
     func signInWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign in with email: \(email)")
-            let _ = try await Auth.auth().signIn(withEmail: email, password: password)
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
             print("AuthService: Sign in successful")
             await userSession.handleAuthSuccess(provider: "password")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
         } catch {
             print("AuthService: Sign in failed - \(error.localizedDescription)")
@@ -42,9 +44,11 @@ class AuthService {
     func signUpWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign up with email: \(email)")
-            let _ = try await Auth.auth().createUser(withEmail: email, password: password)
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("AuthService: Sign up successful")
             await userSession.handleAuthSuccess(provider: "password")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
         } catch {
             print("AuthService: Sign up failed - \(error.localizedDescription)")
@@ -180,6 +184,8 @@ class AuthService {
             
             print("AuthService: Firebase authentication with Google successful")
             await userSession.handleAuthSuccess(provider: "google.com")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: Auth.auth().currentUser!.uid)
             return true
         } catch {
             print("AuthService: Google sign in failed - \(error.localizedDescription)")
@@ -286,6 +292,8 @@ class AuthService {
             // Success, notify UserSession
             print("AuthService: Apple sign-in successful for user: \(firebaseUser.uid)")
             await userSession.handleAuthSuccess(provider: "apple.com")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: firebaseUser.uid)
             return true
         } catch {
             print("AuthService: Error signing in with Apple: \(error.localizedDescription)")
@@ -308,10 +316,19 @@ class AuthService {
             
             // 1. Sign out from RevenueCat first
             do {
+                print("🔐 RevenueCat: AuthService - Logging out from RevenueCat")
                 try await Purchases.shared.logOut()
-                print("AuthService: Successfully signed out from RevenueCat")
+                print("🔐 RevenueCat: AuthService - Successfully signed out from RevenueCat")
+                print("🔐 RevenueCat: AuthService - New anonymous appUserID: \(Purchases.shared.appUserID)")
+                
+                // Notify that Pro status is reset
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": false]
+                )
             } catch {
-                print("AuthService: RevenueCat sign out error - \(error.localizedDescription)")
+                print("🔐 RevenueCat: AuthService - RevenueCat sign out error - \(error.localizedDescription)")
                 // Continue with Firebase sign out even if RevenueCat fails
             }
             
@@ -326,6 +343,64 @@ class AuthService {
             print("AuthService: Sign out failed - \(error.localizedDescription)")
             await userSession.handleSignOutError(error)
             return false
+        }
+    }
+    
+    // MARK: - RevenueCat Integration
+    
+    /// Identify the user with RevenueCat using their Firebase UID
+    private func identifyUserWithRevenueCat(uid: String) async {
+        do {
+            print("🔐 RevenueCat: AuthService - Identifying user with RevenueCat: \(uid)")
+            print("🔐 RevenueCat: AuthService - Previous appUserID: \(Purchases.shared.appUserID)")
+            
+            // First ensure the current RevenueCat user ID isn't already the Firebase UID
+            if Purchases.shared.appUserID != uid {
+                // Log in with the Firebase UID to ensure entitlements are specific to this user
+                let loginResult = try await Purchases.shared.logIn(uid)
+                print("🔐 RevenueCat: AuthService - Successfully identified user with RevenueCat")
+                print("🔐 RevenueCat: AuthService - New appUserID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: AuthService - Original appUserID: \(loginResult.customerInfo.originalAppUserId)")
+                
+                // Check if this specific user has Pro entitlement
+                let activeEntitlements = loginResult.customerInfo.entitlements.active
+                let hasPro = activeEntitlements["pro"]?.isActive ?? false
+                
+                print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
+                
+                // Notify the app about subscription status
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": hasPro]
+                )
+            } else {
+                // If the IDs already match, just refresh subscription status
+                print("🔐 RevenueCat: AuthService - User already identified with same UID: \(uid)")
+                let customerInfo = try await Purchases.shared.customerInfo()
+                
+                // Check if this specific user has Pro entitlement
+                let activeEntitlements = customerInfo.entitlements.active
+                let hasPro = activeEntitlements["pro"]?.isActive ?? false
+                
+                print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
+                
+                // Notify the app about subscription status
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": hasPro]
+                )
+            }
+        } catch {
+            print("🔐 RevenueCat: AuthService - Failed to identify user with RevenueCat: \(error.localizedDescription)")
+            
+            // Ensure this user doesn't have Pro access on error
+            NotificationCenter.default.post(
+                name: NSNotification.Name("SubscriptionStatusChanged"),
+                object: nil,
+                userInfo: ["isProUser": false]
+            )
         }
     }
 }

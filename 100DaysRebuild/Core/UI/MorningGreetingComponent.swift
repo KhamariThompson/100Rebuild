@@ -3,7 +3,7 @@ import SwiftUI
 /// A personalized greeting component showing time of day and username
 public struct MorningGreetingComponent: View {
     // User data
-    let userName: String?
+    let userName: String? // This should be the user's display name for personalized greetings, not their social username
     let streakCount: Int
     let timeOfDay: TimeOfDay
     

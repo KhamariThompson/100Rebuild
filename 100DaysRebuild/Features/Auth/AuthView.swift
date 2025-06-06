@@ -242,7 +242,7 @@ struct AuthModeSelector: View {
                 Text("Sign In")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(viewModel.authMode == .emailSignIn ? 
-                        Color.adaptiveForeground(for: colorScheme) : 
+                        (colorScheme == .dark ? .black : .white) : 
                         .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -269,7 +269,8 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign Up")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignUp ? .black : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignUp ? 
+                        (colorScheme == .dark ? .black : .white) : .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -686,22 +687,28 @@ private extension AuthView {
     var socialSignInSection: some View {
         VStack(spacing: 24) {
             // Divider with "Or continue with" text
-            HStack {
+            HStack(spacing: 0) {
+                Spacer()
+                
                 Rectangle()
                     .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
+                    .frame(maxWidth: .infinity)
                 
                 Text("Or continue with")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color.theme.subtext)
                     .padding(.horizontal, 16)
+                    .fixedSize()
                 
                 Rectangle()
                     .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+                    
+                Spacer()
             }
             .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, alignment: .center)
             
             VStack(spacing: 16) {
                 // Apple Sign In
@@ -728,7 +735,7 @@ private extension AuthView {
                             }
                         }
                     )
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .signInWithAppleButtonStyle(.white) // Always white background with black text
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .overlay(
@@ -752,10 +759,10 @@ private extension AuthView {
                 } label: {
                     Text("Continue with Google")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                        .foregroundColor(.black) // Always black text
                         .frame(maxWidth: .infinity)
                         .frame(height: CalAIDesignTokens.buttonHeight)
-                        .background(Color.theme.surface)
+                        .background(Color.white) // Always white background
                         .cornerRadius(CalAIDesignTokens.buttonRadius)
                         .overlay(
                             RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
@@ -942,7 +949,12 @@ struct SignInWithAppleButton: UIViewRepresentable {
         button.clipsToBounds = true
         
         // Match button corner radius with SwiftUI buttons
-        button.cornerRadius = 8
+        button.cornerRadius = CalAIDesignTokens.buttonRadius
+
+        // Adjust text size to match the Google button text size
+        if let titleLabel = button.subviews.first?.subviews.first as? UILabel {
+            titleLabel.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        }
         
         // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.buttonTapped))

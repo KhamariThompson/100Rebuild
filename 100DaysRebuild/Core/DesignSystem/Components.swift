@@ -170,7 +170,7 @@ public enum AppComponents {
         public init(
             value: Double,
             color: Color = Color.theme.accent,
-            height: CGFloat = AppSpacing.xs,
+            height: CGFloat = 8.0,
             showBackground: Bool = true
         ) {
             self.value = max(0, min(1, value))

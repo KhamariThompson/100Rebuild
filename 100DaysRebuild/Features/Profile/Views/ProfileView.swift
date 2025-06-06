@@ -13,6 +13,7 @@ struct ProfileView: View {
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var badgeService: BadgeService
     @StateObject private var viewModel = ProfileViewModel()
+    @Environment(\.colorScheme) private var colorScheme
     
     @State private var isShowingSettings = false
     @State private var isShowingAnalytics = false
@@ -277,13 +278,6 @@ struct ProfileView: View {
         .onAppear {
             // Load user profile data
             viewModel.loadUserProfile()
-            
-            // Show username prompt if no username is set
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if !viewModel.isInitialLoad && viewModel.username.isEmpty {
-                    isShowingUsernamePrompt = true
-                }
-            }
             
             // Add observer for profile photo updates
             NotificationCenter.default.addObserver(
@@ -735,7 +729,7 @@ struct ProfileView: View {
                     Text("Start Challenge")
                         .font(AppTypography.callout())
                         .fontWeight(.medium)
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .padding(.vertical, 10)
                         .padding(.horizontal, 24)
                         .background(
@@ -791,12 +785,10 @@ struct ProfileView: View {
                         .frame(width: 100, height: 100)
                         .clipShape(Circle())
                         .transition(.opacity)
-                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else if let photoURL = userSession.photoURL {
                     // Remote image from URL
                     ProfilePictureView(url: photoURL, size: 100)
                         .transition(.opacity)
-                        .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 } else {
                     // Fallback to initials
                     InitialAvatarView(
@@ -805,7 +797,6 @@ struct ProfileView: View {
                         backgroundColor: Color.theme.accent
                     )
                     .transition(.opacity)
-                    .successCheckmark(isShowing: viewModel.showSuccessAnimation)
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.isLoadingImage)
@@ -852,6 +843,7 @@ struct ProfileView: View {
         @Binding var username: String
         var onSave: () -> Void
         @Environment(\.dismiss) private var dismiss
+        @Environment(\.colorScheme) private var colorScheme
         
         var body: some View {
             ZStack {
@@ -902,7 +894,7 @@ struct ProfileView: View {
                             Text("Save Username")
                                 .font(AppTypography.callout())
                                 .fontWeight(.medium)
-                                .foregroundColor(.white)
+                                .foregroundColor(colorScheme == .dark ? .black : .white)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(

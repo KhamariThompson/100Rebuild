@@ -415,16 +415,10 @@ class ProfileViewModel: ObservableObject {
                     self.username = newUsername
                     self.isLoading = false
                     self.isEditingUsername = false
-                    self.showSuccessAnimation = true
                     
                     // Trigger haptic feedback
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
-                    
-                    // Hide success animation after a delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                        self.showSuccessAnimation = false
-                    }
                 }
             } else {
                 await MainActor.run {

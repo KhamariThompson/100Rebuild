@@ -79,7 +79,7 @@ struct UsernameSetupView: View {
                 Spacer()
                 
                 // Continue button with consistent styling
-                Button(action: {
+                Button {
                     Task {
                         await viewModel.saveUsername()
                         if viewModel.showSuccess {
@@ -88,7 +88,7 @@ struct UsernameSetupView: View {
                             dismiss()
                         }
                     }
-                }) {
+                } label: {
                     if viewModel.isLoading {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
@@ -116,7 +116,7 @@ struct UsernameSetupView: View {
                     } else {
                         Text("Continue")
                             .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(.white)
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
                             .frame(maxWidth: .infinity)
                             .frame(height: CalAIDesignTokens.buttonHeight)
                             .background(

@@ -140,20 +140,37 @@ struct ChallengeDetailView: View {
         .background(Color.theme.background.ignoresSafeArea())
         .navigationTitle("Challenge Details")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showCheckInSheet) {
-            EnhancedCheckInView(
-                challengesViewModel: viewModel,
-                challenge: challenge
-            )
-        }
         .sheet(isPresented: $showTimerSession) {
             TimerSessionView(challenge: challenge)
+        }
+        .sheet(isPresented: $showCheckInSheet) {
+            SimpleCheckInSheet(
+                challenge: challenge,
+                dayNumber: challenge.daysCompleted + 1,
+                onCheckIn: { note, image in
+                    Task {
+                        await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                        await viewModel.loadChallenges()
+                    }
+                    showCheckInSheet = false
+                },
+                onDismiss: {
+                    showCheckInSheet = false
+                }
+            )
         }
         .sheet(isPresented: $showEditSheet) {
             EditChallengeSheet(viewModel: viewModel, challenge: challenge)
         }
         .navigationDestination(isPresented: $showHistoryView) {
             CheckInHistoryView(challenge: challenge)
+        }
+        .alert(isPresented: $viewModel.showError) {
+            Alert(
+                title: Text("Oops!"),
+                message: Text(viewModel.errorMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
     

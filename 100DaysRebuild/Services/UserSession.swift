@@ -21,6 +21,7 @@ class UserSession: ObservableObject {
     @Published private(set) var hasCompletedOnboarding = false
     @Published var currentUser: FirebaseAuth.User?
     @Published private(set) var username: String?
+    @Published private(set) var displayName: String?
     @Published private(set) var photoURL: URL?
     @Published var isNetworkAvailable = true
     @Published var errorMessage: String?
@@ -109,6 +110,7 @@ class UserSession: ObservableObject {
             currentUser = nil
             isAuthenticated = false
             username = nil
+            displayName = nil
             photoURL = nil
             lastSignInTime = nil
         }
@@ -146,6 +148,7 @@ class UserSession: ObservableObject {
                     self.currentUser = nil
                     self.isAuthenticated = false
                     self.username = nil
+                    self.displayName = nil
                     self.photoURL = nil
                     self.lastSignInTime = nil
                 }
@@ -185,7 +188,8 @@ class UserSession: ObservableObject {
                     
                     if let data = document.data() {
                         self.username = data["username"] as? String
-                        self.hasCompletedOnboarding = self.username != nil
+                        self.displayName = data["displayName"] as? String
+                        self.hasCompletedOnboarding = data["hasCompletedOnboarding"] as? Bool ?? false
                         
                         if let username = self.username {
                             print("UserSession: Loaded cached profile with username: \(username)")
@@ -194,7 +198,6 @@ class UserSession: ObservableObject {
                             // Even in offline mode, we can set a local username to improve UX
                             let tempUsername = "User\(String(userId.prefix(4)))"
                             self.username = tempUsername
-                            self.hasCompletedOnboarding = true
                             print("UserSession: Using temporary username \(tempUsername) until online")
                         }
                         
@@ -227,7 +230,12 @@ class UserSession: ObservableObject {
             if document.exists, let data = document.data() {
                 print("UserSession: Profile document exists")
                 self.username = data["username"] as? String
-                self.hasCompletedOnboarding = self.username != nil
+                self.displayName = data["displayName"] as? String
+                
+                // Add debug logging for hasCompletedOnboarding
+                let hasCompletedValue = data["hasCompletedOnboarding"] as? Bool ?? false
+                print("DEBUG: Loading hasCompletedOnboarding from Firestore: \(hasCompletedValue)")
+                self.hasCompletedOnboarding = hasCompletedValue
                 
                 if let photoURLString = data["photoURL"] as? String,
                    let url = URL(string: photoURLString) {
@@ -247,6 +255,7 @@ class UserSession: ObservableObject {
                 // Document doesn't exist - this is normal for new users
                 print("UserSession: No profile document exists for user \(userId), creating one")
                 self.username = nil
+                self.displayName = nil
                 self.photoURL = nil
                 self.hasCompletedOnboarding = false
                 
@@ -482,6 +491,7 @@ class UserSession: ObservableObject {
             currentUser = nil
             isAuthenticated = false
             username = nil
+            displayName = nil
             photoURL = nil
             hasCompletedOnboarding = false
             errorMessage = nil
@@ -503,6 +513,11 @@ class UserSession: ObservableObject {
     }
     
     func updateUsername(_ newUsername: String) async throws {
+        guard !newUsername.isEmpty else {
+            throw NSError(domain: "UserSession", code: 106, 
+                         userInfo: [NSLocalizedDescriptionKey: "Username cannot be empty."])
+        }
+        
         guard isNetworkAvailable else {
             throw NSError(domain: "UserSession", code: 100, 
                          userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."])
@@ -550,7 +565,9 @@ class UserSession: ObservableObject {
                 // Check if the username belongs to this user
                 if let ownerId = usernameDoc.data()?["userId"] as? String, ownerId == userId {
                     // Username already belongs to this user, so we can skip the update
-                    self.username = newUsername.lowercased()
+                    await MainActor.run {
+                        self.username = newUsername.lowercased()
+                    }
                     return
                 }
                 
@@ -559,10 +576,7 @@ class UserSession: ObservableObject {
             }
             
             // Get current username for reservation update
-            guard let currentUsername = userDoc.data()?["username"] as? String else {
-                throw NSError(domain: "UserSession", code: 105,
-                             userInfo: [NSLocalizedDescriptionKey: "Couldn't retrieve current username."])
-            }
+            var currentUsername = userDoc.data()?["username"] as? String
             
             // Run transaction to update username and reservation atomically
             try await firestore.runTransaction { [self] transaction, errorPointer in
@@ -573,9 +587,11 @@ class UserSession: ObservableObject {
                     "lastUsernameChangeAt": FieldValue.serverTimestamp()
                 ], forDocument: userRef)
                 
-                // Delete old username reservation
-                let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
-                transaction.deleteDocument(oldUsernameRef)
+                // Delete old username reservation if it exists
+                if let currentUsername = currentUsername, !currentUsername.isEmpty {
+                    let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
+                    transaction.deleteDocument(oldUsernameRef)
+                }
                 
                 // Create new username reservation
                 let newUsernameRef = firestore.collection("usernames").document(newUsername.lowercased())
@@ -585,8 +601,17 @@ class UserSession: ObservableObject {
             }
             
             // Update local state
-            self.username = newUsername.lowercased()
-            self.hasCompletedOnboarding = true
+            await MainActor.run {
+                self.username = newUsername.lowercased()
+                self.hasCompletedOnboarding = true
+                
+                // Notify any observers that the username has been updated
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("UserProfileUpdated"),
+                    object: nil,
+                    userInfo: ["username": newUsername.lowercased()]
+                )
+            }
             
         } catch {
             errorMessage = "Error updating username: \(error.localizedDescription)"
@@ -697,6 +722,7 @@ class UserSession: ObservableObject {
                 self.currentUser = nil
                 self.isAuthenticated = false
                 self.username = nil
+                self.displayName = nil
                 self.photoURL = nil
                 self.hasCompletedOnboarding = false
                 self.errorMessage = nil
@@ -887,19 +913,64 @@ class UserSession: ObservableObject {
     
     /// Completes the onboarding process for the user
     func completeOnboarding() async {
-        guard let userId = currentUser?.uid else { return }
+        guard let userId = currentUser?.uid else {
+            print("DEBUG: completeOnboarding - No user ID available")
+            return
+        }
+        
+        print("DEBUG: completeOnboarding - Starting for user \(userId)")
         
         do {
-            // Update Firestore to mark onboarding as completed
+            print("DEBUG: completeOnboarding - Updating Firestore to mark onboarding as completed")
+            // Update Firestore to mark onboarding as completed and save the display name
             try await firestore.collection("users").document(userId).updateData([
-                "hasCompletedOnboarding": true
+                "hasCompletedOnboarding": true,
+                "displayName": self.displayName ?? self.username ?? "" // Use displayName if available, or username as fallback
             ])
             
+            print("DEBUG: completeOnboarding - Firestore update successful")
+            
             // Update local state
-            self.hasCompletedOnboarding = true
+            await MainActor.run {
+                self.hasCompletedOnboarding = true
+                print("DEBUG: completeOnboarding - Local hasCompletedOnboarding set to true")
+            }
+            
+            // Post notification that user profile was updated
+            NotificationCenter.default.post(name: NSNotification.Name("UserProfileUpdated"), object: nil)
+            print("DEBUG: completeOnboarding - Sent UserProfileUpdated notification")
+            
         } catch {
-            print("Error completing onboarding: \(error.localizedDescription)")
+            print("DEBUG: Error completing onboarding: \(error.localizedDescription)")
             self.errorMessage = "Failed to complete onboarding: \(error.localizedDescription)"
+        }
+    }
+    
+    /// Update the user's display name - separate from username
+    func updateDisplayName(_ newDisplayName: String) async throws {
+        guard let userId = currentUser?.uid else {
+            throw NSError(domain: "UserSession", code: 101, 
+                         userInfo: [NSLocalizedDescriptionKey: "No user is signed in."])
+        }
+        
+        do {
+            // Update Firestore with new display name
+            try await firestore
+                .collection("users")
+                .document(userId)
+                .updateData(["displayName": newDisplayName])
+            
+            // Update local state
+            self.displayName = newDisplayName
+            
+            // Post notification that user profile was updated
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserProfileUpdated"),
+                object: nil
+            )
+        } catch {
+            errorMessage = "Error updating display name: \(error.localizedDescription)"
+            throw error
         }
     }
 } 

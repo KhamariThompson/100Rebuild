@@ -5,6 +5,10 @@ import SwiftUI
 
 enum SubscriptionPlan: String {
     case monthly = "com.KhamariThompson.100Days.monthlyv2"
+    
+    var productId: String {
+        return self.rawValue
+    }
 }
 
 @MainActor

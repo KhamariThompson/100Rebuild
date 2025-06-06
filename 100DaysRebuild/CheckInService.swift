@@ -3,6 +3,7 @@ import Firebase
 import FirebaseFirestore
 import FirebaseAuth
 import Combine
+import Network // For NetworkMonitor
 
 // Make these symbols accessible to other files by prefixing with 'public'
 public enum CheckInError: Error, LocalizedError {
@@ -12,6 +13,7 @@ public enum CheckInError: Error, LocalizedError {
     case transactionFailed
     case timeout
     case alreadyCheckedInToday
+    case authRequired
     
     public var errorDescription: String? {
         switch self {
@@ -27,6 +29,8 @@ public enum CheckInError: Error, LocalizedError {
             return "The operation timed out. Please try again."
         case .alreadyCheckedInToday:
             return "You've already checked in today. Come back tomorrow!"
+        case .authRequired:
+            return "Authentication required to perform this operation"
         }
     }
 }
@@ -136,64 +140,16 @@ public class CheckInService {
     
     // Main check-in function with robust error handling
     public func checkIn(for challengeId: String, durationInMinutes: Int? = nil) async throws -> Bool {
-        // Verify Firebase is initialized
-        let firebaseAvailabilityService = FirebaseAvailabilityService.shared
-        let firebaseReady = await firebaseAvailabilityService.waitForFirebase()
-        guard firebaseReady else {
-            throw CheckInError.firestoreError(NSError(
-                domain: "AppError", 
-                code: 500, 
-                userInfo: [NSLocalizedDescriptionKey: "Firebase unavailable"]
-            ))
-        }
-        
-        // Verify authentication
         guard let userId = Auth.auth().currentUser?.uid else {
-            throw CheckInError.notAuthenticated
+            throw CheckInError.authRequired
         }
         
-        // Check if already checked in today
-        do {
-            let alreadyCheckedIn = try await isCheckedInToday(for: challengeId)
-            if alreadyCheckedIn {
-                throw CheckInError.alreadyCheckedInToday
-            }
-        } catch let error as CheckInError {
-            if case .alreadyCheckedInToday = error {
-                throw error
-            }
-            // For other errors, continue with check-in attempt
-        } catch {
-            // For other errors, continue with check-in attempt
-        }
-        
-        // Handle offline state
-        let networkMonitor = NetworkMonitor.shared
-        if !networkMonitor.isConnected {
+        if !NetworkMonitor.shared.isConnected {
             // Queue check-in for later processing
             savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
             
-            // Immediately update ChallengeStore locally for optimistic UI update
-            Task {
-                do {
-                    if let uuid = UUID(uuidString: challengeId) {
-                        try await ChallengeStore.shared.updateLocalChallengeForOptimisticUI(challengeId: uuid)
-                    }
-                } catch {
-                    print("Failed to update local challenge: \(error)")
-                }
-            }
-            
+            // Don't update local challenge for optimistic UI - let the UI update after modal completes
             throw CheckInError.networkUnavailable
-        }
-        
-        // Update local state immediately for responsive UI
-        if let uuid = UUID(uuidString: challengeId) {
-            do {
-                try await ChallengeStore.shared.updateLocalChallengeForOptimisticUI(challengeId: uuid)
-            } catch {
-                print("Failed to update local challenge: \(error)")
-            }
         }
         
         // Defer badge evaluation to not block check-in completion

@@ -10,6 +10,8 @@ struct MainAppChallengesTabView: View {
     @State private var scrollOffset: CGFloat = 0
     @State private var currentTime = Date()
     @State private var timer: Timer? = nil
+    @State private var challengeToCheckIn: Challenge?
+    @State private var isShowingCheckInSheet = false
     
     // Quotes for motivation
     private let motivationalQuotes = [
@@ -124,6 +126,33 @@ struct MainAppChallengesTabView: View {
             // Clean up timer when view disappears
             timer?.invalidate()
             timer = nil
+        }
+        .sheet(isPresented: $isShowingCheckInSheet) {
+            if let challenge = challengeToCheckIn {
+                SimpleCheckInSheet(
+                    challenge: challenge,
+                    dayNumber: challenge.daysCompleted + 1,
+                    onCheckIn: { note, image in
+                        Task {
+                            await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                        }
+                        isShowingCheckInSheet = false
+                    },
+                    onDismiss: {
+                        isShowingCheckInSheet = false
+                    }
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("InitializeCheckIn"))) { notification in
+            if let userInfo = notification.userInfo,
+               let challenge = userInfo["challenge"] as? Challenge {
+                // Set the challenge to check in
+                self.challengeToCheckIn = challenge
+                
+                // No delay - show immediately
+                self.isShowingCheckInSheet = true
+            }
         }
     }
     
@@ -334,12 +363,6 @@ struct MainAppChallengesTabView: View {
     private func getStreakAtRisk() -> Challenge? {
         let calendar = Calendar.current
         let now = Date()
-        
-        // Find challenges that:
-        // 1. Have not been completed today
-        // 2. Are not already completed (100 days)
-        // 3. Have an active streak (> 0)
-        // 4. Are within 2 hours of the streak breaking point (assumed to be midnight)
         
         // Calculate midnight tonight
         guard let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) else {

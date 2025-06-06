@@ -230,7 +230,19 @@ class ChallengesViewModel: ObservableObject {
         
         do {
             let profile = try await FirebaseService.shared.fetchUserProfile(userId: userId)
+            
+            // First try to get the display name from the profile
             userName = profile?.displayName ?? ""
+            
+            // If display name is empty, try the one from UserSession
+            if userName.isEmpty {
+                userName = userSession.displayName ?? ""
+            }
+            
+            // If still empty, fall back to username as last resort
+            if userName.isEmpty {
+                userName = userSession.username ?? ""
+            }
             
             // Extract first name
             if let firstName = userName.components(separatedBy: " ").first, !firstName.isEmpty {
@@ -240,6 +252,15 @@ class ChallengesViewModel: ObservableObject {
             }
         } catch {
             print("Failed to load user profile: \(error.localizedDescription)")
+            
+            // Even if there's an error, try to use the displayName or username from UserSession
+            if let displayName = userSession.displayName, !displayName.isEmpty {
+                userName = displayName
+                userFirstName = displayName.components(separatedBy: " ").first ?? displayName
+            } else if let username = userSession.username {
+                userName = username
+                userFirstName = username.components(separatedBy: " ").first ?? username
+            }
         }
     }
     
@@ -330,25 +351,75 @@ class ChallengesViewModel: ObservableObject {
         isLoading = true
         
         do {
-            // Start by performing the basic check-in using the CheckInService
+            guard let userId = userSession.currentUser?.uid else {
+                throw NSError(domain: "CheckInError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
+            }
+            
+            // 1. Perform the basic check-in using the CheckInService to update challenge metadata
             try await CheckInService.shared.checkIn(for: challenge.id.uuidString)
             
-            // If there's a note, save it (implement separately if needed)
+            // 2. Prepare standardized check-in data structure to support future consistency heatmap
+            let date = Date()
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let dateString = dateFormatter.string(from: date)
+            
+            // Get a reference to Firestore
+            let firestore = Firestore.firestore()
+            
+            // Create a reference to the structured check-in document
+            let checkInRef = firestore
+                .collection("users").document(userId)
+                .collection("checkIns").document(dateString)
+            
+            // Base check-in data
+            var checkInData: [String: Any] = [
+                "date": date,
+                "dayNumber": challenge.daysCompleted + 1,
+                "challengeId": challenge.id.uuidString,
+                "challengeTitle": challenge.title,
+                "timestamp": FieldValue.serverTimestamp()
+            ]
+            
+            // 3. Add journal note if provided
             if !note.isEmpty {
-                // Note: Implement note saving logic directly here as needed
-                print("Note for challenge: \(note)")
+                checkInData["note"] = note
             }
             
-            // If there's an image, upload it (implement separately if needed)
+            // 4. Handle image upload if provided
             if let image = image {
-                // Note: Implement image upload logic directly here as needed
-                print("Image provided for check-in")
+                // Create a storage reference with a standardized path
+                let storageRef = Storage.storage().reference()
+                let photoId = UUID().uuidString
+                let photoRef = storageRef.child("users/\(userId)/checkIns/\(dateString)/\(photoId).jpg")
+                
+                // Compress the image for better performance
+                guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                    throw NSError(domain: "CheckInError", code: 400, userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to process image"
+                    ])
+                }
+                
+                // Upload the image
+                let metadata = StorageMetadata()
+                metadata.contentType = "image/jpeg"
+                
+                let _ = try await photoRef.putDataAsync(imageData, metadata: metadata)
+                
+                // Get download URL
+                let downloadURL = try await photoRef.downloadURL()
+                
+                // Add photo URL to check-in data
+                checkInData["photoURL"] = downloadURL.absoluteString
             }
             
-            // Update the local challenges data
+            // 5. Save structured check-in data
+            try await checkInRef.setData(checkInData, merge: true)
+            
+            // 6. Update the local challenges data
             await loadChallenges()
             
-            // Refresh user stats to ensure they're up to date
+            // 7. Refresh user stats to ensure they're up to date
             await refreshUserStats()
             
             isLoading = false
@@ -434,16 +505,34 @@ class ChallengesViewModel: ObservableObject {
     
     /// Get the most urgent challenge (close to breaking streak)
     var mostUrgentChallenge: Challenge? {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Calculate midnight tonight
+        guard let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) else {
+            return nil
+        }
+        let midnight = calendar.startOfDay(for: tomorrowDate)
+        
+        // Calculate the cutoff time (2 hours before midnight)
+        guard let twoPreviousHours = calendar.date(byAdding: .hour, value: -2, to: midnight) else {
+            return nil
+        }
+        
+        // Only show the alert if we're within 2 hours of midnight
+        if now < twoPreviousHours {
+            return nil
+        }
+        
         // Find challenges where:
         // 1. The challenge has not been completed today
         // 2. The challenge isn't completed (all 100 days)
-        // 3. The streak is at risk (not checked in yesterday)
-        // 4. Sort by highest streak count first to prioritize preserving longer streaks
-        
+        // 3. Has an active streak (> 0)
         let urgentChallenges = challenges.filter { challenge in
             !challenge.isCompletedToday && 
             !challenge.isCompleted && 
-            challenge.hasStreakExpired
+            challenge.streakCount > 0 &&
+            !challenge.hasStreakExpired  // Only include challenges where streak is still active
         }
         
         return urgentChallenges.max(by: { $0.streakCount < $1.streakCount })

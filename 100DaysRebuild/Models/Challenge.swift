@@ -17,15 +17,16 @@ struct Challenge: Identifiable, Codable, Equatable {
     var hasStreakExpired: Bool {
         guard let lastCheckIn = lastCheckInDate else { return true }
         
-        // A streak is considered expired if more than 1 day has passed since the last check-in
+        // A streak is considered expired if the last check-in was before yesterday
+        // This allows users to check in anytime during the current day, even if more than 24 hours have passed
         let calendar = Calendar.current
         let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
         let today = calendar.startOfDay(for: Date())
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
         
-        let daysSinceLastCheckIn = calendar.dateComponents([.day], from: lastCheckInDay, to: today).day ?? 0
-        
-        // Streak is expired if more than 1 day has passed
-        return daysSinceLastCheckIn > 1
+        // Streak is expired if the last check-in was before yesterday
+        // This means the user must check in at least once per calendar day, but not exactly every 24 hours
+        return lastCheckInDay < yesterday
     }
     
     var endDate: Date {
@@ -89,13 +90,13 @@ struct Challenge: Identifiable, Codable, Equatable {
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
             let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
-            let daysBetween = calendar.dateComponents([.day], from: lastCheckInDay, to: today).day ?? 0
+            let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
             
-            if daysBetween == 1 {
-                // Checked in yesterday, continue streak
+            if lastCheckInDay == yesterday || lastCheckInDay == today {
+                // Checked in yesterday or already today, continue streak
                 updatedChallenge.streakCount = streakCount + 1
-            } else if daysBetween > 1 {
-                // Streak broken, start new streak
+            } else if lastCheckInDay < yesterday {
+                // Streak broken (last check-in was before yesterday), start new streak
                 updatedChallenge.streakCount = 1
                 
                 // Reset progress if the streak was broken (auto-restart)

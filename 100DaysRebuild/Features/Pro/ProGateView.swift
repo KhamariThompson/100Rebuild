@@ -185,7 +185,7 @@ struct ProFeatureWrapper<Content: View, Fallback: View>: View {
     
     var body: some View {
         ZStack {
-            if subscriptionService.isProUser || subscriptionService.isSandboxUser {
+            if subscriptionService.isProUser {
                 content
             } else {
                 fallback

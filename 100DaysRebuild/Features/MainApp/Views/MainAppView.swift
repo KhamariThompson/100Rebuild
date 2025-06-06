@@ -79,6 +79,15 @@ struct MainAppView: View {
                     Spacer()
                     customTabBar
                 }
+                
+                // Add subscription warning banner at the top
+                VStack {
+                    if subscriptionService.isProUser {
+                        SubscriptionBanner()
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    Spacer()
+                }
             }
             
             // Overlays - only show when not changing tabs to prevent flickering
@@ -213,13 +222,13 @@ struct MainAppView: View {
                 }
             
             // Use the PaywallView with its built-in dismiss functionality
-            PaywallView()
+        PaywallView()
                 .background(Color.theme.background)
                 .cornerRadius(16)
                 .padding(.horizontal)
         }
-        .transition(.opacity)
-        .zIndex(100)
+            .transition(.opacity)
+            .zIndex(100)
     }
     
     private var notificationPermissionOverlay: some View {

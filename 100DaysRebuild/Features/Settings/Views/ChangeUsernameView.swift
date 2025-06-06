@@ -32,30 +32,30 @@ struct ChangeUsernameView: View {
                                 Spacer()
                             }
                             .padding()
-                        } else {
-                            TextField("New Username", text: $username)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .submitLabel(.done)
-                                .onChange(of: username) { newValue in
-                                    // Enforce username constraints (letters, numbers, underscores, no spaces)
-                                    let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
-                                    if filtered != newValue {
-                                        username = filtered
-                                    }
+                        }
+                        
+                        TextField("New Username", text: $username)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .submitLabel(.done)
+                            .onChange(of: username) { newValue in
+                                // Enforce username constraints (letters, numbers, underscores, no spaces)
+                                let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "_" }
+                                if filtered != newValue {
+                                    username = filtered
                                 }
-                            
-                            if !canChangeUsername, let nextDate = nextChangeDate {
-                                HStack {
-                                    Image(systemName: "clock.fill")
-                                        .foregroundColor(Color.theme.subtext)
-                                    
-                                    Text("Username can be changed again on \(nextDate.formatted(date: .abbreviated, time: .shortened))")
-                                        .font(.footnote)
-                                        .foregroundColor(Color.theme.subtext)
-                                }
-                                .padding(.vertical, 8)
                             }
+                        
+                        if !canChangeUsername, let nextDate = nextChangeDate {
+                            HStack {
+                                Image(systemName: "clock.fill")
+                                    .foregroundColor(Color.theme.subtext)
+                                
+                                Text("Username can be changed again on \(nextDate.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.footnote)
+                                    .foregroundColor(Color.theme.subtext)
+                            }
+                            .padding(.vertical, 8)
                         }
                     } header: {
                         Text("Enter New Username")

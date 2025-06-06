@@ -17,7 +17,6 @@ public struct ChallengeCardComponent: View {
     
     // Display state
     @State private var isPerformingCheckIn = false
-    @State private var isCheckedIn = false
     @State private var showConfetti = false
     
     // Background tint based on challenge type
@@ -31,7 +30,6 @@ public struct ChallengeCardComponent: View {
     init(challenge: Challenge, onCheckIn: @escaping () -> Void) {
         self.challenge = challenge
         self.onCheckIn = onCheckIn
-        self._isCheckedIn = State(initialValue: challenge.isCompletedToday)
     }
     
     private func handleCheckIn() {
@@ -52,15 +50,8 @@ public struct ChallengeCardComponent: View {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
-        // Optimistically update UI immediately
-        isCheckedIn = true
-        showConfetti = true
-        
         // Call the check-in action (which will show the check-in sheet)
         onCheckIn()
-        
-        // Animate checkmark completion
-        confettiCounter += 1
         
         // Reset animation after a short delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -69,11 +60,6 @@ public struct ChallengeCardComponent: View {
                 scale = 1.0
             }
             isPerformingCheckIn = false
-            
-            // Stop confetti after the animation duration
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
-                showConfetti = false
-            }
         }
     }
     
@@ -199,7 +185,7 @@ public struct ChallengeCardComponent: View {
                         .fill(Color.yellow.opacity(0.1))
                 )
                 
-            } else if challenge.isCompletedToday || isCheckedIn {
+            } else if challenge.isCompletedToday {
                 // Today's check-in completed
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
@@ -298,7 +284,7 @@ extension ChallengeCardComponent {
     func getCountdownText() -> String {
         if challenge.isCompleted {
             return "Completed all 100 days! 🎉"
-        } else if challenge.isCompletedToday || isCheckedIn {
+        } else if challenge.isCompletedToday {
             return "Day \(challenge.daysCompleted) of 100 complete"
         } else {
             return "Day \(challenge.daysCompleted + 1) of 100"

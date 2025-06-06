@@ -23,7 +23,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         configureFirebaseOnce()
         
         // Configure RevenueCat after Firebase
-        configureRevenueCatOnce()
+        configureRevenueCat()
+        
+        // Set up transaction observation for StoreKit updates
+        observeTransactionUpdates()
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -33,6 +36,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Set up network connectivity monitoring after Firebase is configured
         startNetworkMonitoring()
+        
+        // Enhanced app state monitoring
+        setupAppStateMonitoring()
         
         return true
     }
@@ -59,24 +65,87 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         print("DEBUG: Firebase configured with persistence disabled")
     }
     
-    private func configureRevenueCatOnce() {
+    private func configureRevenueCat() {
+        // Skip if already configured
         guard !AppDelegate.revenueCatConfigured else {
-            print("DEBUG: RevenueCat already configured, skipping configuration")
+            #if DEBUG
+            print("🔐 RevenueCat: Already configured, skipping initialization")
+            #endif
             return
         }
         
-        Purchases.logLevel = .debug
+        // Get the current Firebase user ID if available
+        let currentUserId = Auth.auth().currentUser?.uid
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Initial configuration with Firebase UID: \(currentUserId ?? "none")")
+        #endif
+        
+        // Configure RevenueCat with proper production settings
+        #if DEBUG
+        Purchases.logLevel = .debug // More verbose logging in debug builds
+        #else
+        Purchases.logLevel = .error // Only log errors in production
+        #endif
+        
         Purchases.configure(
             with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
-                .with(appUserID: nil)
-                .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
+                .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
+                .with(observerMode: false)
                 .with(userDefaults: UserDefaults.standard)
                 .with(usesStoreKit2IfAvailable: true)
                 .build()
         )
         
+        // Set the delegate immediately
+        Purchases.shared.delegate = SubscriptionService.shared
+        
+        // Mark as configured to ensure it only happens once
         AppDelegate.revenueCatConfigured = true
-        print("DEBUG: RevenueCat configured successfully")
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
+        #endif
+        
+        // Check and log the current environment
+        Task {
+            do {
+                let customerInfo = try await Purchases.shared.customerInfo()
+                #if DEBUG
+                print("🔐 RevenueCat: Environment = \(customerInfo.entitlementVerification?.environment.rawValue ?? "unknown")")
+                print("🔐 RevenueCat: Initial Pro status = \(customerInfo.entitlements["pro"]?.isActive ?? false)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("🔐 RevenueCat: Failed to get initial customer info: \(error.localizedDescription)")
+                #endif
+            }
+            
+            // Only identify if we have a Firebase user
+            if let currentUserId = currentUserId {
+                await SubscriptionService.shared.identifyCurrentUser()
+            }
+        }
+    }
+    
+    // Add transaction observation for StoreKit updates
+    private func observeTransactionUpdates() {
+        Task {
+            for await verificationResult in Transaction.updates {
+                if case .verified(let transaction) = verificationResult {
+                    #if DEBUG
+                    print("🔐 RevenueCat: Transaction update received for: \(transaction.productID)")
+                    #endif
+                    
+                    // Always finish the transaction
+                    await transaction.finish()
+                    
+                    // Refresh subscription status
+                    await SubscriptionService.shared.updateSubscriptionStatus()
+                }
+            }
+        }
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -132,6 +201,62 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
     
+    // Enhanced app state monitoring
+    private func setupAppStateMonitoring() {
+        // App did become active notification observer
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func handleAppDidBecomeActive() {
+        #if DEBUG
+        print("🔐 RevenueCat: App became active, verifying user identity and subscription")
+        #endif
+        
+        Task {
+            // Check if the current user is properly identified with RevenueCat
+            if let currentFirebaseUID = Auth.auth().currentUser?.uid {
+                #if DEBUG
+                print("🔐 RevenueCat: Current Firebase UID: \(currentFirebaseUID)")
+                print("🔐 RevenueCat: Current RevenueCat appUserID: \(Purchases.shared.appUserID)")
+                #endif
+                
+                if Purchases.shared.appUserID != currentFirebaseUID {
+                    #if DEBUG
+                    print("🔐 RevenueCat: Identity mismatch detected, re-identifying user")
+                    #endif
+                    await SubscriptionService.shared.identifyCurrentUser()
+                } else {
+                    #if DEBUG
+                    print("🔐 RevenueCat: User identity matches")
+                    #endif
+                }
+                
+                // Refresh subscription status
+                await SubscriptionService.shared.updateSubscriptionStatus()
+                
+                // Log environment
+                #if DEBUG
+                do {
+                    let customerInfo = try await Purchases.shared.customerInfo()
+                    print("🔐 RevenueCat: Environment = \(customerInfo.entitlementVerification?.environment.rawValue ?? "unknown")")
+                    print("🔐 RevenueCat: Pro status = \(customerInfo.entitlements["pro"]?.isActive ?? false)")
+                } catch {
+                    print("🔐 RevenueCat: Failed to get customer info: \(error.localizedDescription)")
+                }
+                #endif
+            } else {
+                #if DEBUG
+                print("🔐 RevenueCat: No Firebase user logged in")
+                #endif
+            }
+        }
+    }
+    
     deinit {
         networkMonitor.cancel()
         print("✅ AppDelegate released")
@@ -169,17 +294,27 @@ struct App100Days: App {
                     }
                     .environmentObject(themeManager)
                 } else {
-                    MainAppView()
-                        .environmentObject(userSession)
-                        .environmentObject(themeManager)
-                        .environmentObject(appStateCoordinator)
-                        .overlay(
-                            appStateCoordinator.appState == .offline ?
-                                OfflineBanner()
-                                    .transition(.move(edge: .top))
-                                    .animation(.spring(), value: appStateCoordinator.appState)
-                                : nil
-                        )
+                    // Debug print to verify onboarding status
+                    let _ = print("DEBUG: User authenticated: \(userSession.isAuthenticated), hasCompletedOnboarding: \(userSession.hasCompletedOnboarding)")
+                    
+                    if userSession.isAuthenticated && !userSession.hasCompletedOnboarding {
+                        OnboardingView()
+                            .environmentObject(userSession)
+                            .environmentObject(themeManager)
+                            .environmentObject(appStateCoordinator)
+                    } else {
+                        MainAppView()
+                            .environmentObject(userSession)
+                            .environmentObject(themeManager)
+                            .environmentObject(appStateCoordinator)
+                            .overlay(
+                                appStateCoordinator.appState == .offline ?
+                                    OfflineBanner()
+                                        .transition(.move(edge: .top))
+                                        .animation(.spring(), value: appStateCoordinator.appState)
+                                    : nil
+                            )
+                    }
                 }
             }
             .onAppear {

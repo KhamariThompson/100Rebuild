@@ -130,16 +130,38 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract RevenueCat configuration to a separate method
     private func configureRevenueCat() {
+        // Set to .debug in both Debug and Release for now to troubleshoot issues
         Purchases.logLevel = .debug
+        
+        // Check for sandbox receipt
+        #if DEBUG
+        print("🔐 RevenueCat: Checking for sandbox receipt...")
+        // Add this code to check if we're using a sandbox receipt
+        if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
+            print("�� RevenueCat: ⚠️ App is using a sandbox receipt")
+        } else {
+            print("🔐 RevenueCat: App is using a production receipt")
+        }
+        #endif
+        
+        // Verify the API key is correct for the environment
+        let apiKey = "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
+        print("🔐 RevenueCat: Configuring with API key: \(apiKey)")
+        
         Purchases.configure(
-            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+            with: Configuration.Builder(withAPIKey: apiKey)
                 .with(appUserID: nil)
                 .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
                 .with(userDefaults: UserDefaults.standard)
                 .with(usesStoreKit2IfAvailable: true)
                 .build()
         )
-        print("RevenueCat configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        
+        // Add the current class as a delegate to receive updates
+        Purchases.shared.delegate = SubscriptionService.shared
+        
+        print("🔐 RevenueCat: Configured with key: \(apiKey)")
+        print("🔐 RevenueCat: Initial appUserID: \(Purchases.shared.appUserID)")
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -831,7 +853,7 @@ struct AppContentView: View {
                         // Reset remaining services
                         userStatsService.reset()
                         badgeService.reset()
-                        subscriptionService.reset()
+                        SubscriptionService.shared.reset()
                         notificationService.reset()
                         
                         // Reset after a short delay to prepare for future sign-ins

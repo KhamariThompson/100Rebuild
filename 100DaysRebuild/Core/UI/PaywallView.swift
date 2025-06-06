@@ -1,6 +1,8 @@
 import SwiftUI
 import RevenueCat
 import StoreKit
+import Firebase
+import FirebaseAuth
 
 /// A paywall view that shows Pro subscription benefits and a purchase button
 struct PaywallView: View {
@@ -29,6 +31,8 @@ struct PaywallView: View {
     @State private var activeTab: String = "unlock-potential"
     @State private var currentOfferingIdentifier: String?
     @State private var animateGradient = false
+    @State private var isDeletedAccountCase = false
+    @State private var showAccountRecoveryInfo = false
     
     // RevenueCat integration
     private let monthlySKU = "100days_premium_monthlyv2"
@@ -116,8 +120,8 @@ struct PaywallView: View {
                 }
             }
         }
-        .alert("Subscription Error", isPresented: $showingError) {
-            Button("OK", role: .cancel) {}
+        .alert(alertTitle, isPresented: $showingError) {
+            alertButtons
         } message: {
             Text(errorMessage)
         }
@@ -147,22 +151,30 @@ struct PaywallView: View {
             isLoading = true
             do {
                 let offerings = try await subscriptionService.getOfferings()
+                #if DEBUG
                 print("Received offerings: \(offerings)")
+                #endif
                 
                 // Look for monthly package
                 if let current = offerings?.current, let monthlyPackage = current.availablePackages.first(where: { $0.identifier == monthlySKU || $0.packageType == .monthly }) {
                     self.monthlyPackage = monthlyPackage
                     self.formattedPrice = monthlyPackage.storeProduct.localizedPriceString
+                    #if DEBUG
                     print("Found monthly package: \(monthlyPackage.identifier) at \(monthlyPackage.storeProduct.localizedPriceString)")
+                    #endif
                 } else {
+                    #if DEBUG
                     print("No monthly package found in available packages")
+                    #endif
                 }
                 
                 if let current = offerings?.current {
                     self.currentOfferingIdentifier = current.identifier
                 }
             } catch {
+                #if DEBUG
                 print("Failed to load offerings: \(error.localizedDescription)")
+                #endif
                 formattedPrice = nil
                 offeringsFailedToLoad = true
             }
@@ -173,24 +185,23 @@ struct PaywallView: View {
     private func purchaseSubscription() {
         isLoading = true
         
-        // Check if we're in a sandbox environment (App Store review)
-        if subscriptionService.isSandboxUser {
-            // Show special message for sandbox users (App Store reviewers)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.isLoading = false
-                self.showingError = true
-                self.errorMessage = "This is a sandbox environment. In the production app, this would initiate a real purchase. For testing purposes, premium features are already enabled."
-            }
-            return
-        }
-        
         // Regular purchase flow
         Task {
             do {
+                // Ensure user is properly identified with RevenueCat first
+                if let currentUser = Auth.auth().currentUser,
+                   Purchases.shared.appUserID != currentUser.uid {
+                    print("🔐 RevenueCat: Re-identifying user before purchase attempt")
+                    await subscriptionService.identifyCurrentUser()
+                }
+                
                 // Attempt to purchase using the service
                 try await subscriptionService.purchaseSubscription(plan: .monthly)
                 
                 isLoading = false
+                
+                // Verify the purchase was successful by refreshing subscription status
+                await subscriptionService.refreshSubscriptionStatus()
                 
                 // Dismiss paywall on successful purchase
                 dismissPaywall()
@@ -229,6 +240,10 @@ struct PaywallView: View {
                         errorMessage = "The purchase was cancelled."
                     case .unknown:
                         errorMessage = "An unknown error occurred. Please try again later."
+                    case .accountMismatch:
+                        errorMessage = "This subscription belongs to a different account. Please sign in with the original account."
+                    case .userNotSignedIn:
+                        errorMessage = "You must be signed in to make this purchase. Please sign in and try again."
                     }
                 } else {
                     // Generic error message
@@ -262,22 +277,24 @@ struct PaywallView: View {
     
     private func restorePurchases() {
         isLoading = true
-        
-        // Check if we're in a sandbox environment (App Store review)
-        if subscriptionService.isSandboxUser {
-            // Show special message for sandbox users (App Store reviewers)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.isLoading = false
-                self.showingError = true
-                self.errorMessage = "This is a sandbox environment. For testing purposes, premium features are already enabled without requiring restoration."
-            }
-            return
-        }
+        isDeletedAccountCase = false
+        showAccountRecoveryInfo = false
         
         // Regular restore flow
         Task {
             do {
+                // Ensure user is properly identified with RevenueCat first
+                if let currentUser = Auth.auth().currentUser,
+                   Purchases.shared.appUserID != currentUser.uid {
+                    print("🔐 RevenueCat: Re-identifying user before restore attempt")
+                    await subscriptionService.identifyCurrentUser()
+                }
+                
+                print("🔐 RevenueCat: Starting restore purchases from PaywallView")
                 try await subscriptionService.restorePurchases()
+                
+                // Verify the restore was successful by forcing a refresh
+                await subscriptionService.refreshSubscriptionStatus()
                 
                 isLoading = false
                 
@@ -298,9 +315,21 @@ struct PaywallView: View {
                 isLoading = false
                 showingError = true
                 
+                // Check if it might be a deleted account case
+                if subscriptionService.isDeletedAccountDetected {
+                    isDeletedAccountCase = true
+                    showAccountRecoveryInfo = true
+                }
+                
                 // Handle specific errors
                 if let subscriptionError = error as? SubscriptionError {
                     switch subscriptionError {
+                    case .accountMismatch:
+                        if isDeletedAccountCase {
+                            errorMessage = "We detected that you have a valid subscription on this device, but it's tied to a different account that may have been deleted.\n\nFor security reasons, subscriptions cannot be automatically transferred between accounts.\n\nPlease contact our support team with your receipt information so we can assist you in recovering your subscription."
+                        } else {
+                            errorMessage = "This subscription belongs to a different account. Please sign in with the original account that purchased Pro."
+                        }
                     case .notSignedIntoAppStore:
                         errorMessage = "Please sign in to your App Store account to restore purchases."
                     case .restoreFailed:
@@ -325,6 +354,8 @@ struct PaywallView: View {
                         errorMessage = "There was an error with your previous purchase. Please contact support."
                     case .unknown:
                         errorMessage = "An error occurred while restoring purchases. Please try again."
+                    case .userNotSignedIn:
+                        errorMessage = "You must be signed in to restore purchases. Please sign in and try again."
                     }
                 } else {
                     // Generic error message
@@ -334,6 +365,37 @@ struct PaywallView: View {
                 // Error feedback
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(.error)
+            }
+        }
+    }
+    
+    // MARK: - Alert View Configuration
+    
+    private var alertTitle: String {
+        if isDeletedAccountCase {
+            return "Subscription Recovery"
+        } else {
+            return "Subscription Error"
+        }
+    }
+    
+    private var alertButtons: some View {
+        Group {
+            if isDeletedAccountCase && showAccountRecoveryInfo {
+                Button("Contact Support") {
+                    // Provide your app's support email
+                    if let supportURL = URL(string: "mailto:support@100days.site?subject=Subscription%20Recovery&body=I%20have%20a%20subscription%20tied%20to%20a%20deleted%20account.%20My%20current%20Firebase%20UID%20is%20\(Auth.auth().currentUser?.uid ?? "unknown").") {
+                        UIApplication.shared.open(supportURL)
+                    }
+                    showingError = false
+                }
+                Button("Not Now", role: .cancel) {
+                    showingError = false
+                }
+            } else {
+                Button("OK", role: .cancel) {
+                    showingError = false
+                }
             }
         }
     }

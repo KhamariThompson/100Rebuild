@@ -27,6 +27,41 @@ class SocialViewModel: ObservableObject {
     @Published var isOffline = false // Track offline status
     @Published var error: String? = nil // For displaying errors
     
+    // Computed properties for UI
+    var validationBorderColor: Color {
+        switch usernameStatus {
+        case .validating:
+            return .yellow
+        case .claimed:
+            return .green
+        case .invalid, .error:
+            return .red
+        case .unclaimed:
+            return username.isEmpty ? Color.theme.border : .green
+        }
+    }
+    
+    var validationMessageColor: Color {
+        switch usernameStatus {
+        case .validating:
+            return .yellow
+        case .claimed:
+            return .green
+        case .invalid, .error:
+            return .red
+        case .unclaimed:
+            return username.isEmpty ? Color.theme.subtext : .green
+        }
+    }
+    
+    var canClaimUsername: Bool {
+        if case .validating = usernameStatus { return false }
+        if case .claimed = usernameStatus { return false }
+        if case .invalid = usernameStatus { return false }
+        if case .error = usernameStatus { return false }
+        return !username.isEmpty && username.count >= 3
+    }
+    
     // Dependencies
     private let firestore = Firestore.firestore()
     
@@ -90,15 +125,29 @@ class SocialViewModel: ObservableObject {
         isLoading = true
         
         do {
+            // Check UserSession first - this should be most up-to-date
+            if let sessionUsername = UserSession.shared.username, !sessionUsername.isEmpty {
+                self.username = sessionUsername
+                usernameStatus = .claimed(sessionUsername)
+                isLoading = false
+                return
+            }
+            
+            // If not in UserSession, check Firestore
             let document = try await firestore
                 .collection("users")
                 .document(userId)
                 .getDocument()
             
-            if document.exists, let data = document.data(), let username = data["username"] as? String {
+            if document.exists, let data = document.data(), let username = data["username"] as? String, !username.isEmpty {
                 self.username = username
                 usernameStatus = .claimed(username)
+                
+                // Update the UserSession as well
+                try? await UserSession.shared.updateUsername(username)
             } else {
+                // No username found or empty username
+                self.username = ""
                 usernameStatus = .unclaimed
             }
         } catch {
@@ -109,10 +158,27 @@ class SocialViewModel: ObservableObject {
         isLoading = false
     }
     
-    /// Validates the input username
+    /// Shows the username setup UI and prepares for username validation
+    func showUsernameSetup() {
+        // Reset the validation state
+        username = ""
+        validationMessage = "Enter a username"
+        usernameStatus = .unclaimed
+        
+        // Display a text field or prompt for username input
+        // This method is called when the user taps the "Set Username" button
+    }
+    
+    // UPDATED CODE: Add proper debouncing
+    private var validationTask: Task<Void, Never>?
+    
+    /// Validates the input username with debouncing to prevent rapid UI updates
     func validateUsername(username: String) {
         // Reset validation state
         self.username = username
+        
+        // Cancel any pending validation task
+        validationTask?.cancel()
         
         // Quick format checks
         if username.isEmpty {
@@ -141,8 +207,23 @@ class SocialViewModel: ObservableObject {
             return
         }
         
-        // If we pass all local validation, check availability
-        checkUsernameAvailability(username: username)
+        // Set intermediate state without checking server yet
+        validationMessage = "Valid format, checking availability..."
+        
+        // Create a new task with debounce to avoid rapid server calls
+        validationTask = Task { @MainActor in
+            // Wait for user to stop typing
+            do {
+                try await Task.sleep(nanoseconds: 600_000_000) // 600ms debounce
+                if !Task.isCancelled {
+                    // Only set validating state once debounce completes
+                    self.usernameStatus = .validating
+                    await self.checkUsernameAvailability(username: username)
+                }
+            } catch {
+                // Task was cancelled, ignore
+            }
+        }
     }
     
     /// Claims the validated username for the user

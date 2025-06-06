@@ -1,6 +1,7 @@
 import SwiftUI
 import UserNotifications
 import Foundation
+import FirebaseFirestore
 
 struct OnboardingView: View {
     @EnvironmentObject var userSession: UserSession
@@ -349,6 +350,14 @@ struct OnboardingView: View {
                     withAnimation {
                         animateContent = false
                         
+                        // If on name step, save the name to userSession
+                        if currentStep == 1 && !userName.isEmpty {
+                            Task {
+                                // Set as display name, not username
+                                try? await userSession.updateDisplayName(userName)
+                            }
+                        }
+                        
                         // Delay the next step appearance for smoother transition
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                             currentStep += 1
@@ -362,7 +371,7 @@ struct OnboardingView: View {
             }) {
                 Text(currentStep == totalSteps - 1 ? "Get Started" : "Continue")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .background(
@@ -428,7 +437,25 @@ struct OnboardingView: View {
         
         // Complete onboarding in UserSession
         Task {
+            print("DEBUG: Starting onboarding completion process")
+            
+            // Save selected category preference
+            if let userId = userSession.currentUser?.uid {
+                do {
+                    print("DEBUG: Attempting to save category preference for user \(userId)")
+                    try await Firestore.firestore().collection("users").document(userId).updateData([
+                        "preferredCategory": selectedCategory
+                    ])
+                    print("DEBUG: Successfully saved category preference")
+                } catch {
+                    print("DEBUG: Error saving category preference: \(error.localizedDescription)")
+                    // Continue with onboarding completion even if this fails
+                }
+            }
+            
+            print("DEBUG: Calling userSession.completeOnboarding()")
             await userSession.completeOnboarding()
+            print("DEBUG: Completed userSession.completeOnboarding()")
             
             // Simulate a brief loading time
             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -436,6 +463,10 @@ struct OnboardingView: View {
             // Update UI on main thread
             await MainActor.run {
                 isLoading = false
+                print("DEBUG: Onboarding UI updates complete, hasCompletedOnboarding = \(userSession.hasCompletedOnboarding)")
+                
+                // Ensure router properly navigates to main app
+                router.changeTab(to: 0) // Navigate to the first tab in the app
             }
         }
     }
@@ -504,6 +535,7 @@ struct CategoryCard: View {
     let category: String
     let isSelected: Bool
     let onTap: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         Button(action: onTap) {
@@ -511,12 +543,12 @@ struct CategoryCard: View {
                 // Icon
                 Image(systemName: iconForCategory(category))
                     .font(.system(size: 28))
-                    .foregroundColor(isSelected ? .white : .theme.accent)
+                    .foregroundColor(isSelected ? (colorScheme == .dark ? .black : .white) : .theme.accent)
                 
                 // Label
                 Text(category)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(isSelected ? .white : .theme.text)
+                    .foregroundColor(isSelected ? (colorScheme == .dark ? .black : .white) : .theme.text)
             }
             .frame(height: 120)
             .frame(maxWidth: .infinity)

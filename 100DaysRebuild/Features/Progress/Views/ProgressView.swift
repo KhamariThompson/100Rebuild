@@ -74,6 +74,7 @@ struct ProgressView: View {
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userStatsService: UserStatsService
     @EnvironmentObject var badgeService: BadgeService
+    @Environment(\.colorScheme) private var colorScheme
     
     @State private var loadTask: Task<Void, Never>? = nil
     @State private var hasLoadedOnce = false
@@ -1356,7 +1357,7 @@ struct ProgressView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
             .background(Color.theme.accent)
-            .foregroundColor(.white)
+            .foregroundColor(colorScheme == .dark ? .black : .white)
             .cornerRadius(12)
         }
         .padding()

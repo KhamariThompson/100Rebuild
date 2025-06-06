@@ -9,6 +9,7 @@ struct SocialView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @State private var scrollOffset: CGFloat = 0
+    @State private var showUsernameSetup = false
     
     // Animation states
     @State private var heroAppeared = false
@@ -99,6 +100,10 @@ struct SocialView: View {
                 .zIndex(100)
             }
         }
+        .sheet(isPresented: $showUsernameSetup) {
+            UsernameSetupView()
+                .environmentObject(userSession)
+        }
         .onAppear {
             // Staggered animations
             withAnimation(.easeOut(duration: 0.6)) {
@@ -115,6 +120,11 @@ struct SocialView: View {
                 withAnimation(.easeOut(duration: 0.8)) {
                     socialsAppeared = true
                 }
+            }
+            
+            // Only fetch the username when the view appears
+            Task {
+                await viewModel.loadUserUsername()
             }
         }
     }
@@ -147,137 +157,34 @@ struct SocialView: View {
     }
     
     // 2. Username Claim Section
-    private var usernameClaimSection: some View {
+    private var usernameCard: some View {
         VStack(spacing: 0) {
             if case .claimed(let username) = viewModel.usernameStatus {
                 // User has already claimed a username
-                VStack(alignment: .center, spacing: AppSpacing.m) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(.theme.success)
-                    
-                    VStack(spacing: AppSpacing.xs) {
-                        Text("Your username is")
-                            .font(AppTypography.body())
-                            .foregroundColor(.theme.text)
-                        
-                        Text("@\(username)")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.theme.accent)
-                    }
-                    
-                    Text("You're all set for the social features launch!")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, AppSpacing.xs)
-                }
-                .padding(AppSpacing.l)
+                UsernameDisplayView(username: username)
+            } else if case .unclaimed = viewModel.usernameStatus {
+                // User needs to set up a username
+                UsernameInputView(viewModel: viewModel)
             } else {
-                // User has not claimed a username yet
-                VStack(alignment: .center, spacing: AppSpacing.m) {
-                    Text("Claim Your Username")
-                        .font(AppTypography.title3())
-                        .fontWeight(.bold)
-                        .foregroundColor(.theme.text)
+                // Error state
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Username Setup Required")
+                        .font(.headline)
+                        .foregroundColor(Color.theme.text)
                     
-                    Text("Reserve your username now to secure your identity before others claim it.")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext)
-                        .multilineTextAlignment(.center)
-                        .padding(.bottom, AppSpacing.xs)
-                    
-                    // Username text field
-                    VStack(alignment: .leading, spacing: AppSpacing.s) {
-                        HStack {
-                            Text("@")
-                                .foregroundColor(.theme.accent)
-                                .font(.headline)
-                            
-                            TextField("Choose a username", text: Binding(
-                                get: { viewModel.username },
-                                set: { newValue in
-                                    let filtered = viewModel.filterUsername(newValue)
-                                    viewModel.validateUsername(username: filtered)
-                                }
-                            ))
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .textInputAutocapitalization(.never)
-                            .textContentType(.username)
-                            .submitLabel(.done)
-                            .padding(.vertical, AppSpacing.s)
-                        }
-                        .padding(.horizontal, AppSpacing.m)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(validationBorderColor, lineWidth: 1)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.theme.surface)
-                                )
-                        )
-                        
-                        // Validation message
-                        if !viewModel.validationMessage.isEmpty {
-                            HStack {
-                                if viewModel.isCheckingUsername {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                        .frame(width: 16, height: 16)
-                                        .padding(.trailing, 4)
-                                } else if isInvalidStatus {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.theme.error)
-                                        .font(.system(size: 12))
-                                } else if viewModel.validationMessage == "Username available!" {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.theme.success)
-                                        .font(.system(size: 12))
-                                }
-                                
-                                Text(viewModel.validationMessage)
-                                    .font(AppTypography.caption1())
-                                    .foregroundColor(validationMessageColor)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 4)
-                        }
-                    }
-                    
-                    // Claim button
-                    Button {
-                        Task {
-                            // Trigger haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.prepare()
-                            
-                            await viewModel.claimUsername()
-                        }
-                    } label: {
-                        Text("Claim Username")
-                            .font(AppTypography.headline())
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.m)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.5))
-                            )
-                    }
-                    .disabled(!canClaimUsername)
-                    .buttonStyle(AppScaleButtonStyle())
-                    .padding(.top, AppSpacing.s)
+                    Text("We couldn't find your username. Please reload the app or contact support if this issue persists.")
+                        .font(.subheadline)
+                        .foregroundColor(Color.theme.subtext)
                 }
-                .padding(AppSpacing.l)
+                .padding()
             }
         }
+        .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                       radius: 12, x: 0, y: 8)
+                       radius: 8, x: 0, y: 4)
         )
     }
     
@@ -553,7 +460,7 @@ struct SocialView: View {
                 .offset(y: heroAppeared ? 0 : 20)
             
             // Username claim section
-            usernameClaimSection
+            usernameCard
                 .opacity(heroAppeared ? 1 : 0)
                 .offset(y: heroAppeared ? 0 : 30)
             
@@ -634,6 +541,77 @@ struct SocialView: View {
 }
 
 // MARK: - Supporting Views and Models
+
+// Username Input View for username setup
+struct UsernameInputView: View {
+    @ObservedObject var viewModel: SocialViewModel
+    @FocusState private var isUsernameFocused: Bool
+    @State private var localUsername: String = ""
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Your Username")
+                .font(.headline)
+                .foregroundColor(Color.theme.text)
+            
+            Text("This username will be used for social features. It must be unique and contain only letters and numbers.")
+                .font(.subheadline)
+                .foregroundColor(Color.theme.subtext)
+            
+            // Username input field with local state
+            TextField("Username", text: $localUsername)
+                .padding()
+                .background(Color.theme.surface)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(viewModel.validationBorderColor, lineWidth: 1)
+                )
+                .focused($isUsernameFocused)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .onChange(of: localUsername) { _ in 
+                    // Only update viewModel when needed (debounce in ViewModel)
+                    viewModel.validateUsername(username: localUsername)
+                }
+            
+            // Validation message
+            if !viewModel.validationMessage.isEmpty {
+                Text(viewModel.validationMessage)
+                    .font(.caption)
+                    .foregroundColor(viewModel.validationMessageColor)
+            }
+            
+            // Claim button
+            Button {
+                Task {
+                    await viewModel.claimUsername()
+                }
+            } label: {
+                Text("Claim Username")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(viewModel.canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.3))
+                    .cornerRadius(10)
+            }
+            .disabled(!viewModel.canClaimUsername)
+            .padding(.top, 8)
+        }
+        .padding()
+        .onAppear {
+            // Initialize local username from view model
+            localUsername = viewModel.username
+            
+            // Auto-focus the username field with a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                isUsernameFocused = true
+            }
+        }
+    }
+}
 
 // Feature Card Model
 struct FeatureCard: Identifiable {
