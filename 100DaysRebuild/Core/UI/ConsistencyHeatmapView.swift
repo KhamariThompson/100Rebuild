@@ -11,6 +11,9 @@ public struct ConsistencyHeatmapView: View {
     // Color for heatmap cells
     var accentColor: Color = .theme.accent
     
+    // Environment properties
+    @Environment(\.colorScheme) private var colorScheme
+    
     // State variables for interactive features
     @State private var selectedTimeRange: TimeRange = .oneMonth
     @State private var currentStartDate: Date
@@ -477,22 +480,29 @@ public struct ConsistencyHeatmapView: View {
             
             // Legend row
             HStack(spacing: AppSpacing.xs) {
-                // Less-More scale centered
-                HStack(spacing: 4) {
-                    Text("Less")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
-                
-                    // Color scale
-                    ForEach(0..<5) { i in
+                // Simple check-in vs no check-in legend
+                HStack(spacing: 8) {
+                    // No check-in
+                    HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(i == 0 ? Color.gray.opacity(0.2) : accentColor.opacity(Double(i + 1) / 5.0))
+                            .fill(Color.gray.opacity(0.2))
                             .frame(width: 24, height: 12)
+                        
+                        Text("No Check-in")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
                     }
                     
-                    Text("More")
-                        .font(.subheadline)
-                        .foregroundColor(.theme.subtext)
+                    // Check-in
+                    HStack(spacing: 4) {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(colorScheme == .light ? Color.black : Color.white)
+                            .frame(width: 24, height: 12)
+                        
+                        Text("Check-in")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.subtext)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 
@@ -534,12 +544,14 @@ public struct ConsistencyHeatmapView: View {
         let intensity = cell.intensity
         let isToday = cell.isToday
         let isFuture = cell.isFuture
-        let hasCheckIn = intensity > 0 && isToday
+        let hasCheckIn = intensity > 0
         
-        let color: Color = if intensity == 0 {
-            isFuture ? Color.gray.opacity(0.1) : Color.gray.opacity(0.2)
+        // Simplified color scheme: Black/White for check-ins (depending on mode), gray for no check-ins
+        let color: Color
+        if hasCheckIn {
+            color = colorScheme == .light ? .black : .white // Use black in light mode, white in dark mode
         } else {
-            accentColor.opacity(Double(intensity) / 5.0)
+            color = isFuture ? Color.gray.opacity(0.1) : Color.gray.opacity(0.2)
         }
         
         return ZStack {
@@ -556,7 +568,7 @@ public struct ConsistencyHeatmapView: View {
             }
             
             // Pulse animation for today's check-in
-            if hasCheckIn {
+            if hasCheckIn && isToday {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color.theme.accent.opacity(0.2))
                     .frame(width: size, height: size)
@@ -580,18 +592,37 @@ struct HeatmapCell {
 // Preview for the ConsistencyHeatmapView
 struct ConsistencyHeatmapView_Previews: PreviewProvider {
     static var previews: some View {
-        ScrollView {
-            VStack(spacing: AppSpacing.l) {
-                // Generate sample data
-                ConsistencyHeatmapView(
-                    dateIntensityMap: generateSampleData(),
-                    weeksToShow: 12
-                )
-                .padding(.horizontal)
+        Group {
+            // Dark mode preview
+            ScrollView {
+                VStack(spacing: AppSpacing.l) {
+                    // Generate sample data
+                    ConsistencyHeatmapView(
+                        dateIntensityMap: generateSampleData(),
+                        weeksToShow: 12
+                    )
+                    .padding(.horizontal)
+                }
             }
+            .background(Color.theme.background)
+            .preferredColorScheme(.dark)
+            .previewDisplayName("Dark Mode")
+            
+            // Light mode preview
+            ScrollView {
+                VStack(spacing: AppSpacing.l) {
+                    // Generate sample data
+                    ConsistencyHeatmapView(
+                        dateIntensityMap: generateSampleData(),
+                        weeksToShow: 12
+                    )
+                    .padding(.horizontal)
+                }
+            }
+            .background(Color.theme.background)
+            .preferredColorScheme(.light)
+            .previewDisplayName("Light Mode")
         }
-        .background(Color.theme.background)
-        .preferredColorScheme(.dark)
     }
     
     // Helper to generate sample intensity data

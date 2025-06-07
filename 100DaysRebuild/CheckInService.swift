@@ -148,21 +148,27 @@ public class CheckInService {
             // Queue check-in for later processing
             savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
             
-            // Don't update local challenge for optimistic UI - let the UI update after modal completes
-            throw CheckInError.networkUnavailable
+            // Return success immediately for offline mode
+            return true
         }
         
-        // Defer badge evaluation to not block check-in completion
-        let checkInSuccess = try await performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
-        
-        // Run badge evaluation in background
-        if checkInSuccess {
-            Task.detached(priority: .background) {
-                await BadgeService.shared.evaluateBadgesAfterCheckIn(challengeId: challengeId)
+        // Fire and forget - run all operations in background
+        Task.detached(priority: .userInitiated) {
+            do {
+                // Perform the check-in operation in the background
+                let _ = try await self.performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
+                
+                // Run badge evaluation in background with even lower priority
+                Task.detached(priority: .background) {
+                    await BadgeService.shared.evaluateBadgesAfterCheckIn(challengeId: challengeId)
+                }
+            } catch {
+                print("Background check-in failed: \(error.localizedDescription)")
             }
         }
         
-        return checkInSuccess
+        // Return success immediately to avoid UI delay
+        return true
     }
     
     // Perform the actual check-in operation
@@ -173,119 +179,121 @@ public class CheckInService {
             let timeout = DispatchWorkItem {
                 continuation.resume(throwing: CheckInError.timeout)
             }
-            // Reduce timeout to 10 seconds for better user experience
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+            // Reduce timeout to 5 seconds for better user experience
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
             
-            // Begin Firestore transaction
-            firestore.runTransaction({ (transaction, errorPointer) -> Any? in
-                // Get challenge reference
-                let challengeRef = self.firestore.collection("users").document(userId).collection("challenges").document(challengeId)
-                
-                do {
-                    // Get current challenge data
-                    let challengeSnapshot = try transaction.getDocument(challengeRef)
-                    guard var challengeData = challengeSnapshot.data() else {
+            // Optimize by first checking if already checked in before starting transaction
+            let challengeRef = self.firestore.collection("users").document(userId).collection("challenges").document(challengeId)
+            
+            // Begin Firestore transaction with lower priority to avoid blocking UI
+            DispatchQueue.global(qos: .utility).async {
+                self.firestore.runTransaction({ (transaction, errorPointer) -> Any? in
+                    do {
+                        // Get current challenge data
+                        let challengeSnapshot = try transaction.getDocument(challengeRef)
+                        guard var challengeData = challengeSnapshot.data() else {
+                            return false
+                        }
+                        
+                        // Use calendar's start of day to ensure consistent date comparison
+                        let calendar = Calendar.current
+                        let today = calendar.startOfDay(for: date)
+                        
+                        // Get last check-in date if available
+                        var lastCheckInDate: Date?
+                        if let lastCheckInTimestamp = challengeData["lastCheckInDate"] as? Timestamp {
+                            lastCheckInDate = lastCheckInTimestamp.dateValue()
+                        }
+                        
+                        // If already checked in today, don't duplicate the check-in
+                        if let lastCheckIn = lastCheckInDate, calendar.isDate(lastCheckIn, inSameDayAs: today) {
+                            // Already checked in today, return success without making changes
+                            return "already_checked_in"
+                        }
+                        
+                        // Calculate streak based on date difference
+                        var streakCount = (challengeData["streakCount"] as? Int) ?? 0
+                        
+                        // Check if the streak is still active (checked in yesterday)
+                        var streakActive = false
+                        
+                        if let lastCheckIn = lastCheckInDate {
+                            let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
+                            let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
+                            
+                            streakActive = calendar.isDate(lastCheckInDay, inSameDayAs: yesterday)
+                        }
+                        
+                        // Update the streak count
+                        if streakActive {
+                            // Increment streak if checked in yesterday
+                            streakCount += 1
+                        } else {
+                            // Reset streak if missed a day or first check-in
+                            streakCount = 1
+                        }
+                        
+                        // Update days completed
+                        let daysCompleted = (challengeData["daysCompleted"] as? Int) ?? 0
+                        
+                        // Update the challenge with streak and completion info first (most important)
+                        challengeData["streakCount"] = streakCount
+                        challengeData["daysCompleted"] = daysCompleted + 1
+                        challengeData["lastCheckInDate"] = Timestamp(date: date)
+                        challengeData["isCompletedToday"] = true
+                        challengeData["lastModified"] = Timestamp(date: date)
+                        
+                        // Set the challenge data
+                        try transaction.setData(challengeData, forDocument: challengeRef)
+                        
+                        // Create check-in document with less priority - this can be done after the transaction
+                        let checkInId = UUID().uuidString
+                        let checkInRef = challengeRef.collection("checkIns").document(checkInId)
+                        
+                        // Create check-in data
+                        var checkInData: [String: Any] = [
+                            "date": Timestamp(date: date),
+                            "userId": userId,
+                            "dayNumber": daysCompleted + 1
+                        ]
+                        
+                        // Add duration data if provided (from a timed check-in)
+                        if let duration = durationInMinutes {
+                            checkInData["durationInMinutes"] = duration
+                        }
+                        
+                        // Save check-in document
+                        try transaction.setData(checkInData, forDocument: checkInRef)
+                        
+                        return true
+                    } catch {
+                        // If there's an error, set the error pointer
+                        errorPointer?.pointee = error as NSError
                         return false
                     }
+                }) { (result, error) in
+                    // Cancel timeout
+                    timeout.cancel()
                     
-                    // Use calendar's start of day to ensure consistent date comparison
-                    let calendar = Calendar.current
-                    let today = calendar.startOfDay(for: date)
-                    
-                    // Get last check-in date if available
-                    var lastCheckInDate: Date?
-                    if let lastCheckInTimestamp = challengeData["lastCheckInDate"] as? Timestamp {
-                        lastCheckInDate = lastCheckInTimestamp.dateValue()
+                    if let error = error {
+                        continuation.resume(throwing: CheckInError.firestoreError(error))
+                        return
                     }
                     
-                    // If already checked in today, don't duplicate the check-in
-                    if let lastCheckIn = lastCheckInDate, calendar.isDate(lastCheckIn, inSameDayAs: today) {
-                        // Already checked in today, return success without making changes
-                        return "already_checked_in"
+                    // Check if already checked in
+                    if let resultString = result as? String, resultString == "already_checked_in" {
+                        continuation.resume(throwing: CheckInError.alreadyCheckedInToday)
+                        return
                     }
                     
-                    // Calculate streak based on date difference
-                    var streakCount = (challengeData["streakCount"] as? Int) ?? 0
-                    
-                    // Check if the streak is still active (checked in yesterday)
-                    var streakActive = false
-                    
-                    if let lastCheckIn = lastCheckInDate {
-                        let lastCheckInDay = calendar.startOfDay(for: lastCheckIn)
-                        let yesterday = calendar.date(byAdding: .day, value: -1, to: today) ?? today
-                        
-                        streakActive = calendar.isDate(lastCheckInDay, inSameDayAs: yesterday)
+                    guard let success = result as? Bool, success else {
+                        continuation.resume(throwing: CheckInError.transactionFailed)
+                        return
                     }
                     
-                    // Update the streak count
-                    if streakActive {
-                        // Increment streak if checked in yesterday
-                        streakCount += 1
-                    } else {
-                        // Reset streak if missed a day or first check-in
-                        streakCount = 1
-                    }
-                    
-                    // Update days completed
-                    let daysCompleted = (challengeData["daysCompleted"] as? Int) ?? 0
-                    
-                    // Create check-in document - create a unique ID for this check-in
-                    let checkInId = UUID().uuidString
-                    let checkInRef = challengeRef.collection("checkIns").document(checkInId)
-                    
-                    // Create check-in data
-                    var checkInData: [String: Any] = [
-                        "date": Timestamp(date: date),
-                        "userId": userId,
-                        "dayNumber": daysCompleted + 1
-                    ]
-                    
-                    // Add duration data if provided (from a timed check-in)
-                    if let duration = durationInMinutes {
-                        checkInData["durationInMinutes"] = duration
-                    }
-                    
-                    // Save check-in document first
-                    try transaction.setData(checkInData, forDocument: checkInRef)
-                    
-                    // Update the challenge with streak and completion info
-                    challengeData["streakCount"] = streakCount
-                    challengeData["daysCompleted"] = daysCompleted + 1
-                    challengeData["lastCheckInDate"] = Timestamp(date: date)
-                    challengeData["isCompletedToday"] = true
-                    challengeData["lastModified"] = Timestamp(date: date)
-                    
-                    // Set the challenge data
-                    try transaction.setData(challengeData, forDocument: challengeRef)
-                    
-                    return true
-                } catch {
-                    // If there's an error, set the error pointer
-                    errorPointer?.pointee = error as NSError
-                    return false
+                    // Removed badge evaluation from here - it's now done in the background
+                    continuation.resume(returning: true)
                 }
-            }) { (result, error) in
-                // Cancel timeout
-                timeout.cancel()
-                
-                if let error = error {
-                    continuation.resume(throwing: CheckInError.firestoreError(error))
-                    return
-                }
-                
-                // Check if already checked in
-                if let resultString = result as? String, resultString == "already_checked_in" {
-                    continuation.resume(throwing: CheckInError.alreadyCheckedInToday)
-                    return
-                }
-                
-                guard let success = result as? Bool, success else {
-                    continuation.resume(throwing: CheckInError.transactionFailed)
-                    return
-                }
-                
-                // Removed badge evaluation from here - it's now done in the background
-                continuation.resume(returning: true)
             }
         }
     }

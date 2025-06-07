@@ -7,6 +7,7 @@ struct MainAppChallengesTabView: View {
     @EnvironmentObject private var subscriptionService: SubscriptionService
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var userStatsService: UserStatsService
+    @EnvironmentObject private var userSession: UserSession
     @State private var scrollOffset: CGFloat = 0
     @State private var currentTime = Date()
     @State private var timer: Timer? = nil
@@ -100,6 +101,9 @@ struct MainAppChallengesTabView: View {
                         await userStatsService.refreshUserStats()
                     }
                 }
+                .environmentObject(subscriptionService)
+                .environmentObject(ThemeManager.shared)
+                .environmentObject(userSession)
             }
             .alert(isPresented: $viewModel.showError) {
                 Alert(
@@ -142,16 +146,6 @@ struct MainAppChallengesTabView: View {
                         isShowingCheckInSheet = false
                     }
                 )
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("InitializeCheckIn"))) { notification in
-            if let userInfo = notification.userInfo,
-               let challenge = userInfo["challenge"] as? Challenge {
-                // Set the challenge to check in
-                self.challengeToCheckIn = challenge
-                
-                // No delay - show immediately
-                self.isShowingCheckInSheet = true
             }
         }
     }
@@ -221,7 +215,7 @@ struct MainAppChallengesTabView: View {
             
             VStack(spacing: 20) {
                 ForEach(viewModel.challenges) { challenge in
-                    ChallengesCardView(challenge: challenge, viewModel: viewModel)
+                    ChallengesCardView(challenge: challenge, viewModel: viewModel, challengeToCheckIn: $challengeToCheckIn, isShowingCheckInSheet: $isShowingCheckInSheet)
                         .padding(.horizontal)
                 }
                 
@@ -308,7 +302,9 @@ struct MainAppChallengesTabView: View {
                     
                     Button(action: {
                         if let challenge = getStreakAtRisk() {
-                            viewModel.initializeCheckIn(for: challenge)
+                            // Directly set the state variables instead of using initializeCheckIn
+                            challengeToCheckIn = challenge
+                            isShowingCheckInSheet = true
                         }
                     }) {
                         Text("Check in now")
@@ -476,12 +472,21 @@ struct ChallengesCardView: View {
     let challenge: Challenge
     @ObservedObject var viewModel: ChallengesViewModel
     @State private var showActionSheet = false
+    @Binding var challengeToCheckIn: Challenge?
+    @Binding var isShowingCheckInSheet: Bool
     
     var body: some View {
         ChallengeCardComponent(challenge: challenge) {
             // Handle check-in action
-            if !challenge.isCompletedToday && !challenge.isCompleted {
-                viewModel.initializeCheckIn(for: challenge)
+            if !challenge.isCompletedToday && !challenge.isCompleted && 
+               !(challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0) {
+                // Directly set the state variables instead of using initializeCheckIn
+                challengeToCheckIn = challenge
+                isShowingCheckInSheet = true
+            } else if challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0 {
+                // Show the expired challenge alert instead of check-in sheet
+                viewModel.currentExpiredChallenge = challenge
+                viewModel.showExpiredChallengeAlert = true
             }
         }
         .contextMenu {

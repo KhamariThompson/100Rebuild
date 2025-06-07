@@ -477,7 +477,11 @@ class UserSession: ObservableObject {
             print("DEBUG: UserSession: RevenueCat sign out error - \(error.localizedDescription)")
         }
         
-        // 6. Perform Firebase sign-out
+        // 6. Reset SubscriptionService completely
+        await SubscriptionService.shared.reset()
+        print("DEBUG: UserSession: Reset SubscriptionService state")
+        
+        // 7. Perform Firebase sign-out
         do {
             try auth.signOut()
             print("DEBUG: UserSession: Successfully signed out from Firebase Auth")
@@ -485,7 +489,7 @@ class UserSession: ObservableObject {
             print("DEBUG: UserSession: Firebase sign out error - \(error.localizedDescription)")
         }
         
-        // 7. Reset all state
+        // 8. Reset all state
         await MainActor.run {
             authState = .signedOut
             currentUser = nil
@@ -498,10 +502,10 @@ class UserSession: ObservableObject {
             lastSignInTime = nil
         }
         
-        // 8. Set up new auth state listener
+        // 9. Set up new auth state listener
         setupAuthStateListener()
         
-        // 9. Finally, trigger navigation
+        // 10. Finally, trigger navigation
         await MainActor.run {
             NotificationCenter.default.post(
                 name: NSNotification.Name("ForceNavigateToWelcome"),

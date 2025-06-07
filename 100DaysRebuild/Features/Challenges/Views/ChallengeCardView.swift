@@ -28,12 +28,7 @@ struct ChallengeCardView: View {
         
         isPerformingCheckIn = true
         
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-            isAnimating = true
-            scale = 0.95
-        }
-        
-        // Haptic feedback
+        // Haptic feedback - lightweight and immediate
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
@@ -44,20 +39,22 @@ struct ChallengeCardView: View {
         let updatedChallenge = challenge.afterCheckIn()
         self.challenge = updatedChallenge
         
-        // Call the check-in action
+        // Call the check-in action immediately - this will trigger the sheet
         onCheckIn()
         
-        // Reset animation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                scale = 1.0
-            }
-            isPerformingCheckIn = false
+        // Reset state after a very short delay
+        DispatchQueue.main.async {
+            self.isPerformingCheckIn = false
         }
     }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Define common conditional variables at the top
+            let isNewChallenge = challenge.lastCheckInDate == nil && challenge.streakCount == 0
+            let isExpiredWithHistory = challenge.hasStreakExpired && challenge.lastCheckInDate != nil
+            let hasStreak = challenge.streakCount > 0
+            
             // Title and Streak
             HStack {
                 Text(challenge.title)
@@ -141,32 +138,58 @@ struct ChallengeCardView: View {
             }
             .padding(.top, 4)
             
-            // Check-in Button
+            // Check-in button or status
             if (!challenge.isCompletedToday && !isCheckedIn) && !challenge.isCompleted {
-                Button(action: handleCheckIn) {
+                // Special cases:
+                // 1. New or restarted challenges: lastCheckInDate is nil AND streakCount is 0
+                // 2. Expired streaks with previous check-ins: hasStreakExpired is true AND lastCheckInDate is not nil
+                if isExpiredWithHistory && !isNewChallenge {
+                    // Show warning for expired streak (only for non-new challenges with history)
                     HStack {
-                        Text("Check In")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
                         
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white)
+                        Text("Streak Expired")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                            gradient: Gradient(colors: [Color.orange.opacity(0.2), Color.orange.opacity(0.1)]),
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 14))
-                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
                     )
+                } else {
+                    // Show check-in button for new challenges, restarted challenges, or active streaks
+                    Button(action: handleCheckIn) {
+                        HStack {
+                            Text("Check In")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                            
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+                        )
+                    }
+                    .buttonStyle(AppScaleButtonStyle())
+                    .disabled(isPerformingCheckIn)
                 }
-                .buttonStyle(AppScaleButtonStyle())
-                .disabled(isPerformingCheckIn)
             } else if challenge.isCompleted {
                 HStack {
                     Image(systemName: "trophy.fill")
@@ -207,8 +230,8 @@ struct ChallengeCardView: View {
                 )
             }
             
-            // Streak warning if expired
-            if challenge.hasStreakExpired && challenge.streakCount > 0 && !challenge.isCompleted {
+            // Streak warning if expired - only show for challenges with actual history
+            if isExpiredWithHistory && hasStreak && !challenge.isCompleted {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
@@ -258,6 +281,21 @@ struct ChallengeCardView: View {
         .onChange(of: challenge) { newChallenge in
             // Update the isCheckedIn state when challenge changes
             isCheckedIn = newChallenge.isCompletedToday
+        }
+        // Use onReceive to listen for notifications in a SwiftUI-friendly way
+        .onReceive(NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)) { notification in
+            // Check if this is a restart notification for this specific challenge
+            if let restartedId = notification.userInfo?["restartedChallengeId"] as? UUID,
+               restartedId == challenge.id {
+                // Force refresh this view with the latest challenge data
+                print("🔔 ChallengeCardView received restart notification for challenge: \(restartedId)")
+                
+                // Get the latest version of the challenge from the store
+                if let updatedChallenge = ChallengeStore.shared.getChallenge(id: restartedId) {
+                    // Update the local state with the latest challenge data
+                    updateChallenge(updatedChallenge)
+                }
+            }
         }
     }
     

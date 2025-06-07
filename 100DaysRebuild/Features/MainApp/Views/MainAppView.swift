@@ -152,7 +152,15 @@ struct MainAppView: View {
                     }
                     // Navigate to add challenge view - don't wrap in animation
                     router.changeTab(to: 0) // Use changeTab instead of direct assignment
-                    // Show the new challenge view (in implementation would add logic to show proper sheet)
+                    
+                    // Post a notification to show the NewChallengeView
+                    // This will be observed by ChallengesView
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ShowNewChallengeView"),
+                            object: nil
+                        )
+                    }
                 }
                 
                 ActionSheetItem(

@@ -16,9 +16,10 @@ struct SimpleCheckInSheet: View {
     @FocusState private var isJournalFocused: Bool
     
     @State private var photoItem: PhotosPickerItem?
-    @State private var selectedImage: UIImage?
+    @State private var selectedImages: [UIImage] = []
     @State private var showingPhotoOptions = false
     @State private var showingCamera = false
+    @State private var showingPhotoLibrary = false
     @State private var showUpgradePrompt = false
     @State private var showingSuccessAnimation = false
     @State private var isLoadingImage = false
@@ -32,12 +33,13 @@ struct SimpleCheckInSheet: View {
     }
     
     private var photosRemaining: Int {
-        photoLimit - (selectedImage != nil ? 1 : 0)
+        photoLimit - selectedImages.count
     }
     
     // Check if user has provided required input to enable check-in
     private var hasRequiredInput: Bool {
-        !journalText.isEmpty || selectedImage != nil
+        // Always return true to make journal and photo optional
+        return true
     }
     
     // MARK: - Initialization
@@ -53,26 +55,49 @@ struct SimpleCheckInSheet: View {
         self.onCheckIn = onCheckIn
         self.onDismiss = onDismiss
         
-        // Pre-initialize for faster loading
+        // Pre-initialize all states to avoid computations during view rendering
         _isLoadingImage = State(initialValue: false)
+        _journalText = State(initialValue: "")
+        _photoItem = State(initialValue: nil)
+        _selectedImages = State(initialValue: [])
+        _showingPhotoOptions = State(initialValue: false)
+        _showingCamera = State(initialValue: false)
+        _showingPhotoLibrary = State(initialValue: false)
+        _showUpgradePrompt = State(initialValue: false)
+        _showingSuccessAnimation = State(initialValue: false)
     }
     
     // MARK: - Body
     
     var body: some View {
         ZStack {
-            // Blurred background overlay
+            // Blurred background overlay - removing blur for better performance
             Color.black.opacity(0.4)
-                .blur(radius: 1)
                 .ignoresSafeArea()
                 .onTapGesture {
+                    dismissKeyboard()
                     onDismiss()
                 }
             
             // Main floating card
             VStack(spacing: AppSpacing.m) {
-                // Header
-                headerSection
+                // Header with done button and close button
+                HStack {
+                    headerSection
+                    
+                    Spacer()
+                    
+                    // X button to close the sheet
+                    Button(action: {
+                        dismissKeyboard()
+                        onDismiss()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.theme.subtext)
+                    }
+                    .buttonStyle(AppScaleButtonStyle())
+                }
                 
                 // Journal
                 journalSection
@@ -90,19 +115,15 @@ struct SimpleCheckInSheet: View {
                     RoundedRectangle(cornerRadius: 20)
                         .fill(Color.theme.background)
                     
-                    // Glowing border effect
+                    // Simplified border without blur for better performance
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(Color.theme.accent, lineWidth: 1.5)
-                        .blur(radius: 3)
-                        .opacity(0.7)
-                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: UUID())
                 }
             )
             .frame(maxWidth: UIScreen.main.bounds.width * 0.85)
             .frame(maxHeight: UIScreen.main.bounds.height * 0.5)
-            .shadow(color: Color.theme.accent.opacity(0.2), radius: 15, x: 0, y: 0)
             
-            // Success animation overlay
+            // Success animation overlay - simplified
             if showingSuccessAnimation {
                 Color.black.opacity(0.5)
                     .ignoresSafeArea()
@@ -117,30 +138,37 @@ struct SimpleCheckInSheet: View {
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                 }
-                .transition(.scale.combined(with: .opacity))
             }
         }
+        // Add camera presentation sheet
         .sheet(isPresented: $showingCamera) {
-            CameraImagePicker(selectedImage: $selectedImage)
-        }
-        .onAppear {
-            // Ensure the UI is ready immediately by pre-rendering key components
-            DispatchQueue.main.async {
-                // Immediately set focus to journal text field to indicate interactivity
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    isJournalFocused = true
+            CameraImagePicker(selectedImages: .init(get: { self.selectedImages }, set: { newImages in
+                if let images = newImages, !images.isEmpty {
+                    self.selectedImages = images
                 }
-                
-                // Prepare haptic feedback engine in advance
-                let _ = UIImpactFeedbackGenerator(style: .medium)
-            }
+            }))
         }
+        // Use separate state variable for photo library picker
+        .photosPicker(isPresented: $showingPhotoLibrary, selection: $photoItem, matching: .images, photoLibrary: .shared())
+        .onAppear {
+            print("Sheet onAppear at \(Date())")
+            
+            // Don't focus initially to avoid keyboard automatically appearing
+            // The user can tap on the text field when they're ready to type
+            isJournalFocused = false
+        }
+    }
+    
+    // MARK: - Helper Functions
+    
+    private func dismissKeyboard() {
+        isJournalFocused = false
     }
     
     // MARK: - View Components
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
             Text("Day \(dayNumber) of 100")
                 .font(.system(size: 18, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.accent)
@@ -195,6 +223,14 @@ struct SimpleCheckInSheet: View {
                     .opacity(journalText.isEmpty ? 0.25 : 1)
                     .cornerRadius(8)
                     .scrollContentBackground(.hidden)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") {
+                                dismissKeyboard()
+                            }
+                        }
+                    }
             }
             .padding(AppSpacing.s)
             .background(
@@ -221,26 +257,36 @@ struct SimpleCheckInSheet: View {
                     .foregroundColor(.theme.subtext)
             }
             
-            if let selectedImage = selectedImage {
-                ZStack(alignment: .topTrailing) {
-                    Image(uiImage: selectedImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 120)
-                        .cornerRadius(12)
-                    
-                    Button {
-                        self.selectedImage = nil
-                        self.photoItem = nil
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.theme.accent)
-                            .background(Circle().fill(Color.white))
+            // Display selected images
+            if !selectedImages.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(0..<selectedImages.count, id: \.self) { index in
+                            ZStack(alignment: .topTrailing) {
+                                Image(uiImage: selectedImages[index])
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(height: 120)
+                                    .cornerRadius(12)
+                                
+                                Button {
+                                    // Remove this specific image
+                                    selectedImages.remove(at: index)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.theme.accent)
+                                        .background(Circle().fill(Color.white))
+                                }
+                                .padding(AppSpacing.xs)
+                            }
+                        }
                     }
-                    .padding(AppSpacing.xs)
+                    .padding(.vertical, 4)
                 }
-            } else if isLoadingImage {
+            }
+            
+            if isLoadingImage {
                 // Show loading indicator when image is loading
                 HStack {
                     Spacer()
@@ -253,18 +299,22 @@ struct SimpleCheckInSheet: View {
                 .frame(maxWidth: .infinity)
                 .background(Color.theme.surface.opacity(0.5))
                 .cornerRadius(12)
-            } else {
+            }
+            
+            // Add Photo button - only show if photos remaining
+            if photosRemaining > 0 {
                 Button {
-                    if photosRemaining > 0 {
-                        showingPhotoOptions = true
-                    } else {
-                        showUpgradePrompt = true
-                    }
+                    // Show photo options using proper SwiftUI confirmationDialog
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
+                    
+                    // Show the confirmation dialog
+                    showingPhotoOptions = true
                 } label: {
                     HStack {
                         Image(systemName: "photo")
                             .font(.system(size: 16))
-                        Text("Choose Photo")
+                        Text("Add Photo")
                             .font(.subheadline)
                     }
                     .foregroundColor(.theme.accent)
@@ -278,15 +328,40 @@ struct SimpleCheckInSheet: View {
                 }
                 .confirmationDialog("Add Photo", isPresented: $showingPhotoOptions) {
                     Button("Take Photo") {
-                        showingCamera = true
+                        // Use a slight delay to avoid animation conflicts
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            self.showingCamera = true
+                        }
                     }
                     
-                    PhotosPicker(
-                        selection: $photoItem,
-                        matching: .images
-                    ) {
-                        Text("Choose from Library")
+                    Button("Choose from Library") {
+                        // Use a slight delay to avoid animation conflicts
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            // Create a new PhotosPicker presentation using the dedicated state variable
+                            self.photoItem = nil  // Reset any previous selection
+                            self.showingPhotoLibrary = true // Use separate state variable
+                        }
                     }
+                }
+            } else if !subscriptionService.isProUser && selectedImages.count >= 1 {
+                // Upgrade prompt for non-Pro users who hit the limit
+                Button {
+                    showUpgradePrompt = true
+                } label: {
+                    HStack {
+                        Image(systemName: "crown")
+                            .font(.system(size: 16))
+                        Text("Upgrade to Add More Photos")
+                            .font(.subheadline)
+                    }
+                    .foregroundColor(.yellow)
+                    .padding(.vertical, AppSpacing.s)
+                    .padding(.horizontal, AppSpacing.m)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.yellow, lineWidth: 1)
+                    )
                 }
                 .alert("Upgrade to Pro", isPresented: $showUpgradePrompt) {
                     Button("Not Now", role: .cancel) { }
@@ -298,40 +373,36 @@ struct SimpleCheckInSheet: View {
                 }
             }
         }
+        // Add PhotosPicker as a view modifier for better reliability
         .onChange(of: photoItem) { newValue in
             if newValue != nil {
                 isLoadingImage = true
                 
-                // Use Task.detached to ensure this runs in the background with high priority
-                Task.detached(priority: .userInitiated) {
-                    if let photoItem = newValue {
-                        do {
-                            // Load transferable data directly
-                            let data = try await photoItem.loadTransferable(type: Data.self)
+                // Process the image selection with better error handling
+                Task {
+                    do {
+                        if let photoItem = newValue, 
+                           let imageData = try? await photoItem.loadTransferable(type: Data.self),
+                           let image = UIImage(data: imageData) {
                             
-                            if let data = data, let image = UIImage(data: data) {
-                                // Process on background thread before updating UI
-                                let processedImage = await processImage(image)
-                                
-                                // Update UI on main thread
-                                await MainActor.run {
-                                    selectedImage = processedImage
-                                    isLoadingImage = false
-                                }
-                            } else {
-                                await MainActor.run {
-                                    isLoadingImage = false
-                                }
-                            }
-                        } catch {
-                            print("Error loading image: \(error.localizedDescription)")
+                            // Process on background thread before updating UI
+                            let processedImage = await processImage(image)
+                            
+                            // Update UI on main thread
                             await MainActor.run {
-                                isLoadingImage = false
+                                self.selectedImages.append(processedImage)
+                                self.isLoadingImage = false
+                            }
+                        } else {
+                            print("Failed to load image from photo library")
+                            await MainActor.run {
+                                self.isLoadingImage = false
                             }
                         }
-                    } else {
+                    } catch {
+                        print("Error loading image: \(error.localizedDescription)")
                         await MainActor.run {
-                            isLoadingImage = false
+                            self.isLoadingImage = false
                         }
                     }
                 }
@@ -374,6 +445,8 @@ struct SimpleCheckInSheet: View {
     
     private var checkInButtonSection: some View {
         Button {
+            // Dismiss keyboard before handling check-in
+            dismissKeyboard()
             handleCheckIn()
         } label: {
             Text("Complete Check-In")
@@ -399,27 +472,33 @@ struct SimpleCheckInSheet: View {
     // MARK: - Helper Methods
     
     private func handleCheckIn() {
+        // Don't allow check-in without valid input
+        guard hasRequiredInput else { return }
+        
+        // Provide immediate haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
         
-        // Show success animation
-        withAnimation(.spring()) {
-            showingSuccessAnimation = true
-        }
-        
-        // Delay to show animation before dismissing
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            // Only complete the check-in if user has provided required input
-            if self.hasRequiredInput {
-                onCheckIn(journalText, selectedImage)
-            }
-        }
+        // Call onCheckIn immediately with current values - using first image for backward compatibility
+        onCheckIn(self.journalText, selectedImages.first)
     }
 }
 
 // MARK: - Camera Image Picker
 struct CameraImagePicker: UIViewControllerRepresentable {
+    // Binding to modify selected image
     @Binding var selectedImage: UIImage?
+    @Binding var selectedImages: [UIImage]?
+    
+    init(selectedImage: Binding<UIImage?>) {
+        self._selectedImage = selectedImage
+        self._selectedImages = .constant(nil)
+    }
+    
+    init(selectedImages: Binding<[UIImage]?>) {
+        self._selectedImages = selectedImages
+        self._selectedImage = .constant(nil)
+    }
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -443,7 +522,12 @@ struct CameraImagePicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                parent.selectedImage = image
+                // Update the appropriate binding
+                if parent.selectedImage != nil {
+                    parent.selectedImage = image
+                } else if parent.selectedImages != nil {
+                    parent.selectedImages?.append(image)
+                }
             }
             picker.dismiss(animated: true)
         }

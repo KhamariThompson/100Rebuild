@@ -29,6 +29,7 @@ struct NewChallengeView: View {
     // Environment
     @EnvironmentObject private var subscriptionService: SubscriptionService
     @EnvironmentObject private var themeManager: ThemeManager
+    @EnvironmentObject private var userSession: UserSession
     
     // Icon choices
     private let iconOptions = [

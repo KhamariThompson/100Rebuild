@@ -2,6 +2,23 @@
 
 All notable changes to the 100Days app will be documented in this file.
 
+## [1.0.5] - 2024-05-20
+
+### Fixed
+
+- Fixed subscription migration for users transitioning from anonymous to identified accounts
+- Enhanced user identification with RevenueCat to prevent subscription loss
+- Updated deprecated RevenueCat API calls for better StoreKit 2 compatibility
+- Fixed compilation errors in social features
+- Improved error handling in subscription-related views
+- Fixed significant delay in SimpleCheckInSheet presentation by replacing SwiftUI sheets with direct overlay modals
+- Optimized SimpleCheckInSheet performance and prewarming to ensure instant appearance
+- Improved ConsistencyHeatmap visibility by simplifying to white/gray cells for better readability
+- Fixed inconsistent completion percentage display in ProgressView to match global stats
+- Enhanced challenge selector UI in MainTabView with a more modern and sleek design
+- Added keyboard dismissal controls to SimpleCheckInSheet for better user experience
+- Added X icon to SimpleCheckInSheet for easy modal dismissal
+
 ## [1.0.4] - 2024-05-17
 
 ### Fixed

@@ -173,17 +173,23 @@ class BadgeService: ObservableObject {
         guard let userId = Auth.auth().currentUser?.uid else { return }
         
         do {
+            // Find the badge to get its required value
+            guard let badge = badges.first(where: { $0.id == badgeId }) else {
+                print("Error: Badge with ID \(badgeId) not found")
+                return
+            }
+            
             let badgeRef = firestore
                 .collection("users")
                 .document(userId)
                 .collection("badges")
                 .document(badgeId)
             
-            // Update Firestore
+            // Update Firestore with correct progress value (not a timestamp)
             try await badgeRef.setData([
                 "id": badgeId,
                 "unlockedAt": FieldValue.serverTimestamp(),
-                "currentProgress": FieldValue.serverTimestamp() // This will be the required value
+                "currentProgress": badge.requiredValue // Use the actual required value, not a timestamp
             ], merge: true)
             
             // Update local data
@@ -194,8 +200,12 @@ class BadgeService: ObservableObject {
                     updatedBadge.currentProgress = updatedBadge.requiredValue
                     self.badges[index] = updatedBadge
                     
+                    print("Badge unlocked: \(updatedBadge.name) with progress \(updatedBadge.currentProgress)/\(updatedBadge.requiredValue)")
+                    
                     // Notify about update
                     NotificationCenter.default.post(name: Self.badgesDidUpdateNotification, object: nil)
+                    // Also notify about the specific badge being unlocked
+                    NotificationCenter.default.post(name: Self.badgeUnlockedNotification, object: updatedBadge)
                 }
             }
         } catch {
@@ -398,13 +408,15 @@ class BadgeService: ObservableObject {
                     continue
                 }
                 
-                // Check if the badge should be unlocked
+                // Calculate current progress based on badge type
+                var currentProgress = 0
                 var shouldUnlock = false
                 
                 switch badge.id {
                 case "day_one_warrior", "five_day_spark", "firestarter", "momentum_machine", "unstoppable", "hundred_club":
-                    // Streak and consistency badges
-                    shouldUnlock = userStats.currentStreak >= badge.requiredValue
+                    // Streak and consistency badges - progress is current streak
+                    currentProgress = userStats.currentStreak
+                    shouldUnlock = currentProgress >= badge.requiredValue
                     
                 case "try_again_champ", "comeback_kid", "no_excuses":
                     // These need custom logic specific to each badge
@@ -412,34 +424,41 @@ class BadgeService: ObservableObject {
                     
                 case "silent_streaker":
                     // Check if user has been consistent without posting
-                    shouldUnlock = userStats.currentStreak >= badge.requiredValue
+                    currentProgress = userStats.currentStreak
+                    shouldUnlock = currentProgress >= badge.requiredValue
                     
                 case "snap_savant":
                     // Count check-ins with photos
-                    let checkInsWithPhotos = checkInRecords.filter { $0.photoURL != nil }.count
-                    shouldUnlock = checkInsWithPhotos >= badge.requiredValue
+                    currentProgress = checkInRecords.filter { $0.photoURL != nil }.count
+                    shouldUnlock = currentProgress >= badge.requiredValue
                     
                 case "reflection_master":
                     // Count check-ins with notes
-                    let checkInsWithNotes = checkInRecords.filter { $0.note != nil && !($0.note?.isEmpty ?? true) }.count
-                    shouldUnlock = checkInsWithNotes >= badge.requiredValue
+                    currentProgress = checkInRecords.filter { $0.note != nil && !($0.note?.isEmpty ?? true) }.count
+                    shouldUnlock = currentProgress >= badge.requiredValue
                     
                 case "share_the_win":
                     // This would need specific tracking of shares
-                            continue
+                    continue
+                    
+                case "ten_days_strong", "twenty_five_percent", "halfway_hero", "final_stretch", "completionist":
+                    // Milestone badges - progress is total days completed across all challenges
+                    let totalDaysCompleted = challenges.reduce(0) { $0 + $1.daysCompleted }
+                    currentProgress = totalDaysCompleted
+                    shouldUnlock = currentProgress >= badge.requiredValue
                     
                 default:
-                    // Similar logic to perfect week but for 30 days
+                    // Calculate days completed in last 30 days
                     let calendar = Calendar.current
                     let today = Date()
-                    var daysCompleted = 0
+                    currentProgress = 0
                     
                     for i in 0..<30 {
                         guard let date = calendar.date(byAdding: .day, value: -i, to: today) else {
                             continue
                         }
                         
-                        // Check if any challenge was completed on this date by checking lastCheckInDate
+                        // Check if any challenge was completed on this date
                         var wasCompletedOnDate = false
                         for challenge in challenges {
                             if let lastCheckIn = challenge.lastCheckInDate {
@@ -461,18 +480,25 @@ class BadgeService: ObservableObject {
                         }
                         
                         if wasCompletedOnDate {
-                            daysCompleted += 1
+                            currentProgress += 1
                         }
                     }
                     
-                    shouldUnlock = daysCompleted >= 25 // Allow for a few missed days
+                    shouldUnlock = currentProgress >= badge.requiredValue
                 }
+                
+                // Always update progress even if not unlocking
+                await updateBadgeProgress(badgeId: badge.id, progress: currentProgress)
                 
                 // If badge should be unlocked, unlock it
                 if shouldUnlock {
-                    await unlockBadge(badge: badge, userId: userId)
+                    await unlockBadge(badgeId: badge.id)
                 }
             }
+            
+            // Force a refresh of badges to update the UI
+            await loadBadges()
+            
         } catch {
             print("Error evaluating badges: \(error.localizedDescription)")
         }

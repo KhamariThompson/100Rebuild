@@ -9,6 +9,7 @@ import FirebaseFirestore
 import Foundation
 import RevenueCat
 import GoogleMobileAds
+import StoreKit
 
 // Replace the import with a direct implementation of OfflineBanner
 // @_exported import struct App.OfflineBanner
@@ -38,6 +39,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
     // Add a static flag to track when Firebase has been configured
     static var firebaseConfigured = false
+    static var revenueCatConfigured = false
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -130,38 +132,69 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract RevenueCat configuration to a separate method
     private func configureRevenueCat() {
-        // Set to .debug in both Debug and Release for now to troubleshoot issues
-        Purchases.logLevel = .debug
-        
-        // Check for sandbox receipt
-        #if DEBUG
-        print("🔐 RevenueCat: Checking for sandbox receipt...")
-        // Add this code to check if we're using a sandbox receipt
-        if Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt" {
-            print("�� RevenueCat: ⚠️ App is using a sandbox receipt")
-        } else {
-            print("🔐 RevenueCat: App is using a production receipt")
+        // Skip if already configured
+        guard !AppDelegate.revenueCatConfigured else {
+            #if DEBUG
+            print("🔐 RevenueCat: Already configured, skipping initialization")
+            #endif
+            return
         }
+        
+        // Get the current Firebase user ID if available
+        let currentUserId = Auth.auth().currentUser?.uid
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Initial configuration with Firebase UID: \(currentUserId ?? "none")")
         #endif
         
-        // Verify the API key is correct for the environment
-        let apiKey = "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
-        print("🔐 RevenueCat: Configuring with API key: \(apiKey)")
+        // Configure RevenueCat with proper production settings
+        #if DEBUG
+        Purchases.logLevel = .debug // More verbose logging in debug builds
+        #else
+        Purchases.logLevel = .error // Only log errors in production
+        #endif
         
         Purchases.configure(
-            with: Configuration.Builder(withAPIKey: apiKey)
-                .with(appUserID: nil)
+            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+                .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
                 .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
                 .with(userDefaults: UserDefaults.standard)
                 .with(usesStoreKit2IfAvailable: true)
                 .build()
         )
         
-        // Add the current class as a delegate to receive updates
+        // Set the delegate immediately
         Purchases.shared.delegate = SubscriptionService.shared
         
-        print("🔐 RevenueCat: Configured with key: \(apiKey)")
-        print("🔐 RevenueCat: Initial appUserID: \(Purchases.shared.appUserID)")
+        // Mark as configured to ensure it only happens once
+        AppDelegate.revenueCatConfigured = true
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
+        #endif
+        
+        // Check and log the current environment
+        let storeEnvironment: String
+        if #available(iOS 15.0, *) {
+            // StoreKit 2 is available on iOS 15+
+            storeEnvironment = "StoreKit 2"
+        } else {
+            storeEnvironment = "StoreKit 1"
+        }
+        print("🔐 RevenueCat: Current store environment: \(storeEnvironment)")
+        
+        // If user is logged in, attempt to migrate any anonymous subscriptions
+        if let currentUserId = currentUserId {
+            Task {
+                print("🔐 RevenueCat: Checking for anonymous subscription to migrate during app launch")
+                let migrationResult = await SubscriptionService.shared.migrateAnonymousSubscription()
+                print("🔐 RevenueCat: Initial migration check result: \(migrationResult ? "Transferred subscription" : "No migration needed")")
+                
+                // After migration check, make sure to identify the user and update subscription status
+                await SubscriptionService.shared.identifyCurrentUser()
+            }
+        }
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {

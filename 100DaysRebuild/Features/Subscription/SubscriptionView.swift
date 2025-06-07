@@ -3,6 +3,7 @@ import SwiftUI
 struct SubscriptionView: View {
     @StateObject private var viewModel = SubscriptionViewModel()
     @Environment(\.dismiss) private var dismiss
+    @State private var showMigrationInfo = false
     
     var body: some View {
         NavigationView {
@@ -17,8 +18,22 @@ struct SubscriptionView: View {
                     // Purchase Button
                     purchaseButtonView
                     
-                    // Restore Purchases
-                    restorePurchasesButton
+                    // Restore and Migration
+                    subscriptionActionsView
+                    
+                    // Migration Result
+                    if viewModel.migrationCompleted {
+                        migrationResultView
+                    }
+                    
+                    // Migration Info Button
+                    Button {
+                        showMigrationInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.theme.accent)
+                    }
+                    .padding(.top, -16)
                 }
             }
             .navigationBarItems(trailing: Button("Close") {
@@ -28,6 +43,11 @@ struct SubscriptionView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(viewModel.errorMessage)
+            }
+            .alert("About Subscription Migration", isPresented: $showMigrationInfo) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("If you purchased a subscription before logging in, use this feature to transfer it to your account. This ensures your subscription is properly linked to your user profile in our system.")
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
@@ -85,14 +105,35 @@ struct SubscriptionView: View {
         .padding(.horizontal)
     }
     
-    private var restorePurchasesButton: some View {
-        Button("Restore Purchases") {
-            Task {
-                await viewModel.restorePurchases()
+    private var subscriptionActionsView: some View {
+        HStack(spacing: 20) {
+            // Restore Purchases Button
+            Button("Restore Purchases") {
+                Task {
+                    await viewModel.restorePurchases()
+                }
             }
+            .font(.subheadline)
+            .foregroundColor(.theme.accent)
+            
+            // Migration Button
+            Button("Migrate Subscription") {
+                Task {
+                    await viewModel.migrateAnonymousSubscription()
+                }
+            }
+            .font(.subheadline)
+            .foregroundColor(.theme.accent)
+            .disabled(viewModel.migrationInProgress)
         }
-        .font(.subheadline)
-        .foregroundColor(.theme.accent)
+    }
+    
+    private var migrationResultView: some View {
+        Text(viewModel.migrationResult)
+            .font(.caption)
+            .foregroundColor(viewModel.migrationResult.contains("Successfully") ? .green : .secondary)
+            .padding(.horizontal)
+            .padding(.top, -20)
     }
 }
 

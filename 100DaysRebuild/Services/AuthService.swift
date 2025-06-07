@@ -332,6 +332,10 @@ class AuthService {
                 // Continue with Firebase sign out even if RevenueCat fails
             }
             
+            // Reset the SubscriptionService to clear all subscription state
+            await SubscriptionService.shared.reset()
+            print("AuthService: Reset SubscriptionService state")
+            
             // 2. Sign out from Firebase
             try Auth.auth().signOut()
             print("AuthService: Successfully signed out from Firebase")
@@ -364,7 +368,7 @@ class AuthService {
                 
                 // Check if this specific user has Pro entitlement
                 let activeEntitlements = loginResult.customerInfo.entitlements.active
-                let hasPro = activeEntitlements["pro"]?.isActive ?? false
+                let hasPro = activeEntitlements["Pro"]?.isActive ?? false
                 
                 print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
                 
@@ -381,7 +385,7 @@ class AuthService {
                 
                 // Check if this specific user has Pro entitlement
                 let activeEntitlements = customerInfo.entitlements.active
-                let hasPro = activeEntitlements["pro"]?.isActive ?? false
+                let hasPro = activeEntitlements["Pro"]?.isActive ?? false
                 
                 print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
                 

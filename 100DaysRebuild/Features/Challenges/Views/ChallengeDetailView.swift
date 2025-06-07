@@ -8,6 +8,7 @@ struct ChallengeDetailView: View {
     @State private var showHistoryView = false
     @State private var showTimerSession = false
     @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject private var subscriptionService: SubscriptionService
     
     var body: some View {
         ScrollView {
@@ -148,16 +149,27 @@ struct ChallengeDetailView: View {
                 challenge: challenge,
                 dayNumber: challenge.daysCompleted + 1,
                 onCheckIn: { note, image in
+                    // Fire and forget - start task but dismiss sheet immediately
                     Task {
                         await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                        // Load challenges after completion
                         await viewModel.loadChallenges()
                     }
+                    // Dismiss immediately without waiting for task completion
                     showCheckInSheet = false
                 },
                 onDismiss: {
                     showCheckInSheet = false
                 }
             )
+            .environmentObject(subscriptionService)
+            .transition(.opacity)
+        }
+        .onAppear {
+            // Load user data when view appears
+            Task {
+                await viewModel.loadChallenges()
+            }
         }
         .sheet(isPresented: $showEditSheet) {
             EditChallengeSheet(viewModel: viewModel, challenge: challenge)

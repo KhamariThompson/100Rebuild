@@ -381,6 +381,14 @@ class ProgressDashboardViewModel: ObservableObject {
     @Published var journeyCards: [JourneyCard] = []
     @Published var recentPhotosNotes: [(photo: URL?, note: String, dayNumber: Int, date: Date)] = []
     
+    // Challenge statistics
+    @Published var totalChallenges: Int = 0
+    @Published var completedChallenges: Int = 0
+    @Published var totalCompletedChallenges: Int = 0
+    @Published var activeChallenges: Int = 0
+    @Published var completionPercentage: Double = 0.0
+    @Published var currentStreak: Int = 0
+    
     // New advanced analytics properties for Pro users
     @Published var weeklyCheckInRate: Double = 0.0  // 0.0 to 1.0
     @Published var monthlyCheckInRate: Double = 0.0 // 0.0 to 1.0
@@ -582,125 +590,49 @@ class ProgressDashboardViewModel: ObservableObject {
     }
     
     // Update loadData method to use debouncing
+    @MainActor
     func loadData(forceRefresh: Bool = false) async {
         if isLoading && !forceRefresh {
+            print("ProgressDashboardViewModel: Already loading data, skipping")
             return
         }
         
-        // Cancel any previous loading task
-        cancelTasks()
+        // Cancel any existing task to avoid race conditions
+        loadTask?.cancel()
         
-        // Use debounced refresh for non-forced refreshes
-        if !forceRefresh {
-            debouncedRefresh()
-            return
-        }
-        
-        loadTask = Task { [weak self] in
-            guard let self = self else { return }
-            
-            // Performance tracking
-            let startTime = CFAbsoluteTimeGetCurrent()
-            
+        loadTask = Task {
             do {
-                await MainActor.run {
-                    self.isLoading = true
-                    self.errorMessage = nil
-                    print("ProgressDashboardViewModel - Starting data load")
+                isLoading = true
+                
+                // First load all user challenges to get the data we need
+                try await loadUserChallenges()
+                
+                // Then load user stats which will be used for progress calculations
+                try await loadUserStats()
+                
+                // Additional data for UI components
+                try await fetchAdditionalData()
+                
+                // Set hasData to true if we have fetched data
+                if !Task.isCancelled {
+                    hasData = true
+                    errorMessage = nil
+                    isInitialLoad = false
                 }
                 
-                // Create a separate timeout task with more reasonable timeout (4 seconds)
-                let timeoutTask = Task {
-                    do {
-                        try await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds timeout (reduced from 6)
-                        if !Task.isCancelled && self.isLoading {
-                            print("ProgressDashboardViewModel - Loading timed out after 4 seconds")
-                            await MainActor.run {
-                                // Don't completely fail if we already have data - just keep old data
-                                if !self.hasData {
-                                    self.errorMessage = "Loading timed out. Pull down to refresh."
-                                }
-                                self.isLoading = false
-                                self.isInitialLoad = false
-                            }
-                        }
-                    } catch {
-                        // Task was cancelled, no action needed
-                    }
-                }
-                
-                // Ensure we clean up the timeout task when finished
-                defer {
-                    timeoutTask.cancel()
-                    // Log performance metrics
-                    let endTime = CFAbsoluteTimeGetCurrent()
-                    let elapsedTime = endTime - startTime
-                    print("ProgressDashboardViewModel - Data load took \(String(format: "%.2f", elapsedTime))s")
-                }
-                
-                // First, sync with UserStatsService to ensure consistent state
-                print("ProgressDashboardViewModel - Fetching stats from UserStatsService")
-                try Task.checkCancellation()
-                await userStatsService.refreshUserStats()
-                
-                // First, prepare early visual feedback by generating sample data
-                if self.isInitialLoad && !self.hasData {
-                    let quickSampleData = self.generateSampleData()
-                    
-                    // Check for cancellation before updating UI
-                    try Task.checkCancellation()
-                    
-                    // Update UI with sample data first for better UX
-                    await MainActor.run {
-                        // Only update if we don't already have data
-                        if !self.hasData {
-                            // Set minimal data for initial layout
-                            self.journeyCards = quickSampleData.journeyCards
-                            self.earnedBadges = quickSampleData.earnedBadges
-                            
-                            // Mark as having some data but keep loading state
-                            self.hasData = true
-                            print("ProgressDashboardViewModel - Initial layout data ready")
-                        }
-                    }
-                }
-                
-                // Then, fetch additional view-specific data
-                try Task.checkCancellation()
-                try await self.fetchAdditionalData()
-                
-                // Check for cancellation before final UI update
-                try Task.checkCancellation()
-                
-                // Final update with complete data
-                await MainActor.run {
-                    // Complete loading state
-                    self.isLoading = false
-                    self.isInitialLoad = false
-                    self.errorMessage = nil
-                    print("ProgressDashboardViewModel - Data load complete")
-                }
-            } catch is CancellationError {
-                // Safe handling of task cancellation
-                print("ProgressDashboardViewModel - Task was cancelled")
-                await MainActor.run {
-                    // CRITICAL: Always reset loading state when cancelled
-                    self.isLoading = false
-                }
-                return
+                print("ProgressDashboardViewModel: Data loading completed")
             } catch {
-                print("ProgressDashboardViewModel - Error loading data: \(error.localizedDescription)")
-                
-                // Handle error on main thread
-                await MainActor.run {
-                    // Only show error if we don't have any data
-                    if !self.hasData {
-                        self.errorMessage = self.formatErrorMessage(error)
-                    }
-                    self.isLoading = false
-                    self.isInitialLoad = false
+                if !Task.isCancelled {
+                    print("ProgressDashboardViewModel: Error loading data: \(error.localizedDescription)")
+                    errorMessage = "Could not load progress data: \(error.localizedDescription)"
                 }
             }
+            
+            if !Task.isCancelled {
+                isLoading = false
+            }
+            
+            loadTask = nil
         }
     }
     
@@ -999,21 +931,9 @@ class ProgressDashboardViewModel: ObservableObject {
     }
     
     // Computed properties that get data from the centralized UserStatsService
-    var totalChallenges: Int { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.totalChallenges 
-    }
-    var currentStreak: Int { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.currentStreak 
-    }
     var longestStreak: Int { 
         MainActor.assertIsolated()
         return userStatsService.userStats.longestStreak 
-    }
-    var completionPercentage: Double { 
-        MainActor.assertIsolated()
-        return userStatsService.userStats.overallCompletionPercentage 
     }
     var lastCheckInDate: Date? { 
         MainActor.assertIsolated()
@@ -1146,6 +1066,10 @@ class ProgressDashboardViewModel: ObservableObject {
         // Calculate rates
         let weeklyRate = weekDaysCount > 0 ? Double(weekCheckIns) / Double(weekDaysCount) : 0.0
         let monthlyRate = monthDaysCount > 0 ? Double(monthCheckIns) / Double(monthDaysCount) : 0.0
+        let totalRate = yearDaysCount > 0 ? Double(yearCheckIns) / Double(yearDaysCount) : 0.0
+        
+        // Synchronize with global user stats data
+        await synchronizeWithGlobalStats()
         
         // Find best month
         var bestMonthNumber = 1
@@ -1184,6 +1108,7 @@ class ProgressDashboardViewModel: ObservableObject {
         await MainActor.run {
             self.weeklyCheckInRate = weeklyRate
             self.monthlyCheckInRate = monthlyRate
+            self.totalCheckInRate = totalRate
             self.activeDaysThisYear = yearCheckIns
             self.averageCheckInTime = averageTimeString
             
@@ -1192,6 +1117,99 @@ class ProgressDashboardViewModel: ObservableObject {
                     month: monthName,
                     consistency: Int(bestConsistency * 100)
                 )
+            }
+        }
+    }
+    
+    // New method to ensure analytics are synchronized with global user statistics
+    private func synchronizeWithGlobalStats() async {
+        await MainActor.run {
+            // Get stats from the services
+            let stats = userStatsService.userStats
+            let challenges = challengeStore.challenges
+            
+            // Update our view model with the service data
+            self.totalChallenges = stats.totalChallenges
+            self.currentStreak = stats.currentStreak
+            
+            // Since longestStreak is a computed property that reads from userStatsService,
+            // we don't need to update it directly
+            
+            // Calculate active challenges
+            let activeChallenges = challenges.filter { !$0.isArchived }
+            self.activeChallenges = activeChallenges.count
+            
+            // Update completed challenges
+            self.completedChallenges = stats.completedChallenges
+            self.totalCompletedChallenges = stats.completedChallenges
+            
+            // Update the completion percentage based on latest data
+            let totalCount = self.totalChallenges > 0 ? self.totalChallenges : 100
+            self.completionPercentage = Double(self.totalCompletedChallenges) / Double(totalCount)
+        }
+    }
+    
+    // Add the necessary methods for loading data
+    private func loadUserChallenges() async throws {
+        // Use the challenge store to load challenges
+        await challengeStore.refreshChallenges()
+        
+        // Get the challenges from the store
+        let challenges = challengeStore.challenges
+        
+        // Process challenges for ProgressViewModel
+        await MainActor.run {
+            self.totalChallenges = challenges.count
+            
+            // Only count non-archived challenges for active challenges
+            let activeChallenges = challenges.filter { !$0.isArchived }
+            self.activeChallenges = activeChallenges.count
+            
+            // Update completion percentage
+            if self.totalChallenges > 0 {
+                self.completionPercentage = Double(self.totalCompletedChallenges) / Double(self.totalChallenges)
+            } else {
+                self.completionPercentage = 0.0
+            }
+        }
+    }
+    
+    // Load user stats directly from UserStatsService
+    private func loadUserStats() async throws {
+        // First, get the stats from the service
+        let stats = userStatsService.userStats
+        
+        await MainActor.run {
+            // Basic challenge statistics
+            self.totalChallenges = stats.totalChallenges
+            self.completedChallenges = stats.completedChallenges
+            
+            // Calculate active challenges directly from challengeStore
+            let activeChallenges = challengeStore.challenges.filter { !$0.isArchived }
+            self.activeChallenges = activeChallenges.count
+            
+            self.currentStreak = stats.currentStreak
+            
+            // Calculate overall completion percentage across all challenges
+            if stats.totalChallenges > 0 {
+                // Calculate total completed days across all challenges
+                let totalDaysCompleted = challengeStore.challenges.reduce(0) { $0 + $1.daysCompleted }
+                
+                // Total possible days (100 days per challenge)
+                let totalPossibleDays = stats.totalChallenges * 100
+                
+                // Calculate percentage
+                if totalPossibleDays > 0 {
+                    self.totalCompletedChallenges = totalDaysCompleted
+                    self.completionPercentage = Double(totalDaysCompleted) / Double(totalPossibleDays)
+                    print("Progress stats updated: \(totalDaysCompleted) days completed out of \(totalPossibleDays) possible days (\(self.completionPercentage * 100)%)")
+                } else {
+                    self.totalCompletedChallenges = 0
+                    self.completionPercentage = 0.0
+                }
+            } else {
+                self.totalCompletedChallenges = 0
+                self.completionPercentage = 0.0
             }
         }
     }
@@ -1212,5 +1230,29 @@ class ProgressDashboardViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+    
+    // Add a public method to refresh analytics data specifically for Pro users
+    @MainActor
+    func refreshAnalyticsData() async {
+        print("ProgressDashboardViewModel: Refreshing analytics data for Pro users")
+        
+        do {
+            // Generate check-in data for the consistency calendar directly from challenges
+            let checkInData = generateCheckInMapFromChallenges()
+            
+            // Update the date intensity map
+            self.dateIntensityMap = checkInData
+            
+            // Calculate advanced analytics
+            await calculateAdvancedAnalytics()
+            
+            // Synchronize with global stats
+            await synchronizeWithGlobalStats()
+            
+            print("ProgressDashboardViewModel: Analytics data refresh completed")
+        } catch {
+            print("ProgressDashboardViewModel: Error refreshing analytics data: \(error.localizedDescription)")
+        }
     }
 } 

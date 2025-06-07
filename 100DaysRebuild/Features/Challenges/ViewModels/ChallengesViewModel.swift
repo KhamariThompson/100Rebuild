@@ -24,6 +24,15 @@ class ChallengesViewModel: ObservableObject {
     @Published var showUpgradePrompt = false
     @Published var isOffline = false
     
+    // New properties for expired challenges
+    @Published var expiredChallenges: [Challenge] = []
+    @Published var showExpiredChallengeAlert = false
+    @Published var currentExpiredChallenge: Challenge?
+    
+    // Add toast state for user feedback
+    @Published var showSuccessToast = false
+    @Published var successMessage = ""
+    
     // New properties for greeting and last check-in
     @Published var userName: String = ""
     @Published var userFirstName: String = ""
@@ -94,6 +103,30 @@ class ChallengesViewModel: ObservableObject {
             name: NSNotification.Name("PreparingForSignOut"),
             object: nil
         )
+        
+        // Observe app becoming active to check for expired challenges
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        
+        // Listen for notification to check for expired challenges
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCheckExpiredChallengesNotification),
+            name: NSNotification.Name("CheckForExpiredChallenges"),
+            object: nil
+        )
+        
+        // Listen for notification to create a new challenge from other views
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCreateNewChallengeNotification),
+            name: NSNotification.Name("CreateNewChallenge"),
+            object: nil
+        )
     }
     
     deinit {
@@ -134,6 +167,34 @@ class ChallengesViewModel: ObservableObject {
             
             // Clear subscriptions
             subscriptions.removeAll()
+        }
+    }
+    
+    @objc private func handleAppBecomeActive() {
+        // Check for expired challenges when app becomes active
+        Task {
+            await checkForExpiredChallenges()
+        }
+    }
+    
+    @objc private func handleCheckExpiredChallengesNotification() {
+        // Check for expired challenges when notification is received
+        Task {
+            await checkForExpiredChallenges()
+        }
+    }
+    
+    @objc private func handleCreateNewChallengeNotification(_ notification: Notification) {
+        // Extract challenge info from notification
+        guard let userInfo = notification.userInfo,
+              let title = userInfo["title"] as? String,
+              let isTimed = userInfo["isTimed"] as? Bool else {
+            return
+        }
+        
+        // Create the challenge
+        Task {
+            await createChallenge(title: title, isTimed: isTimed)
         }
     }
     
@@ -190,11 +251,25 @@ class ChallengesViewModel: ObservableObject {
             return 
         }
         
-        isLoading = true
+        // First check if we already have challenges in memory
+        if !challengeStore.challenges.isEmpty {
+            // Use existing challenges immediately for instant UI response
+            challenges = challengeStore.challenges.filter { !$0.isArchived }
+            updateLastCheckInDate()
+            isLoading = false
+            isInitialLoad = false
+        } else {
+            // Mark as loading only if we don't have cached data
+            isLoading = true
+        }
+        
         error = nil
         
-        // Use the centralized store to load challenges
-        await challengeStore.refreshChallenges()
+        // Use a separate task for network operations to keep UI responsive
+        Task {
+            // This will trigger cache load immediately before network
+            await challengeStore.refreshChallenges()
+        }
     }
     
     func createChallenge(title: String, isTimed: Bool = false) async {
@@ -204,6 +279,12 @@ class ChallengesViewModel: ObservableObject {
             return 
         }
         
+        print("Creating challenge: \(title)")
+        
+        // Immediately update the UI to hide the sheet before any async operations
+        self.isShowingNewChallenge = false
+        
+        // Then proceed with the rest of the creation process
         isLoading = true
         error = nil
         
@@ -211,17 +292,29 @@ class ChallengesViewModel: ObservableObject {
             // Use the challenge service to create challenge - it handles permissions and limits
             try await challengeService.createChallenge(title: title, userId: userId)
             
+            // Ensure UI updates happen on the main thread
+            await MainActor.run {
+                print("Challenge created successfully")
             isLoading = false
             challengeTitle = ""
-            isShowingNewChallenge = false
+                
+                // Explicitly post notification for UI refresh
+                NotificationCenter.default.post(
+                    name: ChallengeStore.challengesDidUpdateNotification,
+                    object: nil
+                )
+            }
             
             // Refresh challenges after creation
             await loadChallenges()
         } catch {
+            await MainActor.run {
+                print("Failed to create challenge: \(error.localizedDescription)")
             isLoading = false
             self.error = error.localizedDescription
             self.showError = true
             self.errorMessage = "Failed to create challenge: \(error.localizedDescription)"
+            }
         }
     }
     
@@ -355,77 +448,71 @@ class ChallengesViewModel: ObservableObject {
                 throw NSError(domain: "CheckInError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
             }
             
-            // 1. Perform the basic check-in using the CheckInService to update challenge metadata
-            try await CheckInService.shared.checkIn(for: challenge.id.uuidString)
-            
-            // 2. Prepare standardized check-in data structure to support future consistency heatmap
-            let date = Date()
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd"
-            let dateString = dateFormatter.string(from: date)
-            
-            // Get a reference to Firestore
-            let firestore = Firestore.firestore()
-            
-            // Create a reference to the structured check-in document
-            let checkInRef = firestore
-                .collection("users").document(userId)
-                .collection("checkIns").document(dateString)
-            
-            // Base check-in data
-            var checkInData: [String: Any] = [
-                "date": date,
-                "dayNumber": challenge.daysCompleted + 1,
-                "challengeId": challenge.id.uuidString,
-                "challengeTitle": challenge.title,
-                "timestamp": FieldValue.serverTimestamp()
-            ]
-            
-            // 3. Add journal note if provided
-            if !note.isEmpty {
-                checkInData["note"] = note
-            }
-            
-            // 4. Handle image upload if provided
-            if let image = image {
-                // Create a storage reference with a standardized path
-                let storageRef = Storage.storage().reference()
-                let photoId = UUID().uuidString
-                let photoRef = storageRef.child("users/\(userId)/checkIns/\(dateString)/\(photoId).jpg")
-                
-                // Compress the image for better performance
-                guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-                    throw NSError(domain: "CheckInError", code: 400, userInfo: [
-                        NSLocalizedDescriptionKey: "Failed to process image"
-                    ])
+            // Call CheckInService but don't await it
+            // This creates a fire-and-forget background task
+            Task.detached {
+                do {
+                    // Basic check-in - fast path for core update
+                    try await CheckInService.shared.checkIn(for: challenge.id.uuidString)
+                    
+                    // Handle the photo and note in the background
+                    if let image = image {
+                        // Upload image directly using Firebase Storage
+                        let storage = Storage.storage()
+                        let storageRef = storage.reference()
+                        let imagePath = "check-ins/\(challenge.id)/\(Date().timeIntervalSince1970).jpg"
+                        let imageRef = storageRef.child(imagePath)
+                        
+                        // Compress the image
+                        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                            print("Failed to compress image for upload")
+                            return
+                        }
+                        
+                        // Upload the image
+                        let metadata = StorageMetadata()
+                        metadata.contentType = "image/jpeg"
+                        
+                        _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
+                    }
+                    
+                    if !note.isEmpty {
+                        // Save the note in the background
+                        let checkInsRef = Firestore.firestore()
+                            .collection("users").document(userId)
+                            .collection("challenges").document(challenge.id.uuidString)
+                            .collection("checkIns")
+                        
+                        let today = Calendar.current.startOfDay(for: Date())
+                        let todayQuery = checkInsRef.whereField("date", isGreaterThanOrEqualTo: today)
+                            .whereField("date", isLessThan: Calendar.current.date(byAdding: .day, value: 1, to: today)!)
+                            .limit(to: 1)
+                        
+                        let snapshot = try await todayQuery.getDocuments()
+                        if let doc = snapshot.documents.first {
+                            try await doc.reference.updateData(["note": note])
+                        }
+                    }
+                    
+                    // Update user stats in the background
+                    // Remove these calls since they're not necessary and UserStatsService doesn't have these methods
+                    // try? await UserStatsService.shared.incrementDailyStreak(userId: userId)
+                    // try? await UserStatsService.shared.incrementTotalCheckIns(userId: userId)
+                    
+                    print("Background check-in complete for \(challenge.id)")
+                } catch {
+                    print("Background check-in failed: \(error)")
                 }
-                
-                // Upload the image
-                let metadata = StorageMetadata()
-                metadata.contentType = "image/jpeg"
-                
-                let _ = try await photoRef.putDataAsync(imageData, metadata: metadata)
-                
-                // Get download URL
-                let downloadURL = try await photoRef.downloadURL()
-                
-                // Add photo URL to check-in data
-                checkInData["photoURL"] = downloadURL.absoluteString
             }
             
-            // 5. Save structured check-in data
-            try await checkInRef.setData(checkInData, merge: true)
-            
-            // 6. Update the local challenges data
-            await loadChallenges()
-            
-            // 7. Refresh user stats to ensure they're up to date
-            await refreshUserStats()
-            
+            // Return success immediately to update UI quickly
             isLoading = false
             return .success(())
+            
         } catch {
             isLoading = false
+            showError = true
+            errorMessage = "Failed to check in: \(error.localizedDescription)"
             return .failure(error)
         }
     }
@@ -442,7 +529,7 @@ class ChallengesViewModel: ObservableObject {
             }
             
             // Update UserStatsService to ensure consistency across the app
-            await UserStatsService.shared.refreshUserStats()
+            // await UserStatsService.shared.refreshUserStats()
             
             print("User stats updated successfully")
         } catch {
@@ -545,17 +632,6 @@ class ChallengesViewModel: ObservableObject {
     
     // MARK: - Navigation Methods
     
-    /// Initialize the check-in process for a challenge
-    func initializeCheckIn(for challenge: Challenge) {
-        // This method will be used to set up state and navigate to the check-in view
-        // For example, this might involve setting a selected challenge and showing a sheet
-        NotificationCenter.default.post(
-            name: NSNotification.Name("InitializeCheckIn"),
-            object: nil,
-            userInfo: ["challenge": challenge]
-        )
-    }
-    
     /// Prepare to edit a challenge
     func prepareToEditChallenge(_ challenge: Challenge) {
         // This method will be used to set up state and navigate to the edit challenge view
@@ -564,5 +640,205 @@ class ChallengesViewModel: ObservableObject {
             object: nil,
             userInfo: ["challenge": challenge]
         )
+    }
+    
+    /// Check for expired challenges and prompt user to restart if needed
+    func checkForExpiredChallenges() async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
+        do {
+            // Use the challenge service to find expired challenges
+            let expired = await challengeService.checkForExpiredChallenges()
+            
+            // Update UI on main thread
+            await MainActor.run {
+                self.expiredChallenges = expired
+                
+                // Show alert for first expired challenge if there are any
+                if !expired.isEmpty {
+                    self.currentExpiredChallenge = expired.first
+                    self.showExpiredChallengeAlert = true
+                }
+            }
+        } catch {
+            print("Error checking for expired challenges: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Handle refresh after challenge restart - used when a restart operation needs to be fully propagated
+    func refreshAfterRestart(restartedChallengeId: UUID? = nil) async {
+        print("🔄 Starting full refresh after challenge restart")
+        
+        if let challengeId = restartedChallengeId {
+            // If we know which challenge was restarted, refresh just that one first
+            print("🔄 Specifically refreshing restarted challenge: \(challengeId)")
+            await challengeStore.refreshChallenge(id: challengeId)
+        }
+        
+        // Refresh all challenges from the store
+        await loadChallenges()
+        
+        // Check for any expired challenges again
+        await checkForExpiredChallenges()
+        
+        // Force UI update for all views observing this model
+        await MainActor.run {
+            objectWillChange.send()
+            
+            // Notify that challenges have changed
+            NotificationCenter.default.post(
+                name: ChallengeStore.challengesDidUpdateNotification,
+                object: nil,
+                userInfo: restartedChallengeId != nil ? ["refreshedChallengeId": restartedChallengeId!] : [:]
+            )
+        }
+        
+        print("✅ Completed refresh after challenge restart")
+    }
+    
+    /// Restart an expired challenge
+    func restartExpiredChallenge(_ challenge: Challenge) async {
+        isLoading = true
+        print("Starting challenge restart process: \(challenge.id)")
+        
+        do {
+            // Use the challenge service to restart the challenge
+            let restartedChallenge = try await challengeService.restartChallenge(challenge)
+            print("Challenge restarted successfully: \(restartedChallenge.id)")
+            
+            // Update UI on main thread
+            await MainActor.run {
+                isLoading = false
+                
+                // Immediately update the challenge in the local challenges array
+                if let index = challenges.firstIndex(where: { $0.id == challenge.id }) {
+                    challenges[index] = restartedChallenge
+                    print("Updated challenge in local array with restarted version")
+                } else {
+                    // If not found (unlikely), add it
+                    challenges.append(restartedChallenge)
+                    print("Added restarted challenge to local array (not found in existing challenges)")
+                }
+                
+                // Remove from expired challenges list
+                expiredChallenges.removeAll { $0.id == challenge.id }
+                
+                if !expiredChallenges.isEmpty {
+                    currentExpiredChallenge = expiredChallenges.first
+                    showExpiredChallengeAlert = true
+                } else {
+                    showExpiredChallengeAlert = false
+                    currentExpiredChallenge = nil
+                }
+                
+                // Show success feedback
+                showSuccessToast = true
+                successMessage = "Challenge restarted successfully!"
+                
+                // Auto-hide the toast after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showSuccessToast = false
+                }
+                
+                // Force refresh all views by posting a notification
+                print("📢 Posting notification for challenge restart from ViewModel")
+                NotificationCenter.default.post(
+                    name: ChallengeStore.challengesDidUpdateNotification,
+                    object: nil,
+                    userInfo: ["restartedChallengeId": challenge.id]
+                )
+                
+                // Force an update to this view model
+                self.objectWillChange.send()
+            }
+            
+            // Use the new dedicated refresh method
+            await refreshAfterRestart(restartedChallengeId: challenge.id)
+            
+        } catch {
+            print("Failed to restart challenge: \(error.localizedDescription)")
+            await MainActor.run {
+                isLoading = false
+                showError = true
+                errorMessage = "Failed to restart challenge: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// Archive an expired challenge
+    func archiveExpiredChallenge(_ challenge: Challenge) async {
+        isLoading = true
+        print("Starting challenge archive process: \(challenge.id)")
+        
+        do {
+            // Use the challenge service to archive the challenge
+            try await challengeService.archiveChallenge(challenge)
+            print("Challenge archived successfully: \(challenge.id)")
+            
+            // Update UI on main thread
+            await MainActor.run {
+                isLoading = false
+                
+                // Remove the challenge from active challenges immediately
+                challenges.removeAll { $0.id == challenge.id }
+                
+                // Remove from expired challenges list
+                if let index = expiredChallenges.firstIndex(where: { $0.id == challenge.id }) {
+                    expiredChallenges.remove(at: index)
+                }
+                
+                // Move to next expired challenge if there are more
+                if !expiredChallenges.isEmpty {
+                    currentExpiredChallenge = expiredChallenges.first
+                    showExpiredChallengeAlert = true
+                } else {
+                    showExpiredChallengeAlert = false
+                    currentExpiredChallenge = nil
+                }
+                
+                // Show success feedback
+                showSuccessToast = true
+                successMessage = "Challenge archived successfully!"
+                
+                // Auto-hide the toast after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.showSuccessToast = false
+                }
+            }
+            
+            // Refresh challenges to update UI
+            await loadChallenges()
+        } catch {
+            print("Failed to archive challenge: \(error.localizedDescription)")
+            await MainActor.run {
+                isLoading = false
+                showError = true
+                errorMessage = "Failed to archive challenge: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// Dismiss the current expired challenge alert and move to the next one if available
+    func dismissExpiredChallengeAlert() {
+        // Remove current expired challenge
+        if let currentChallenge = currentExpiredChallenge,
+           let index = expiredChallenges.firstIndex(where: { $0.id == currentChallenge.id }) {
+            expiredChallenges.remove(at: index)
+        }
+        
+        // Move to next expired challenge if there are more
+        if !expiredChallenges.isEmpty {
+            currentExpiredChallenge = expiredChallenges.first
+            showExpiredChallengeAlert = true
+        } else {
+            showExpiredChallengeAlert = false
+            currentExpiredChallenge = nil
+        }
+    }
+    
+    // Helper to show success message
+    private func showSuccess(message: String) {
+        // This could be expanded to show a toast or other UI feedback
+        print(message)
     }
 } 

@@ -953,6 +953,53 @@ struct SettingsView: View {
                     }
                     .padding(.vertical, 4)
                     
+                    // Streak Expiration Warning
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Streak Expiration Warning")
+                            .font(.headline)
+                            .foregroundColor(Color.theme.text)
+                        
+                        Toggle("Warn me when streak is about to expire", isOn: $notificationService.isStreakExpirationWarningEnabled)
+                            .onChange(of: notificationService.isStreakExpirationWarningEnabled) { newValue in
+                                if newValue {
+                                    Task { try? await scheduleStreakExpirationWarning() }
+                                } else {
+                                    Task { try? await cancelStreakExpirationWarning() }
+                                }
+                            }
+                            .tint(Color.theme.accent)
+                            .disabled(!notificationService.isAuthorized)
+                        
+                        if notificationService.isStreakExpirationWarningEnabled {
+                            HStack {
+                                Text("Warn me")
+                                    .font(.subheadline)
+                                    .foregroundColor(Color.theme.text)
+                                
+                                Picker("", selection: $notificationService.streakExpirationWarningHours) {
+                                    ForEach([1, 2, 3, 4, 6, 8, 12], id: \.self) { hour in
+                                        Text(hour == 1 ? "1 hour" : "\(hour) hours")
+                                            .tag(hour)
+                                    }
+                                }
+                                .pickerStyle(MenuPickerStyle())
+                                .accentColor(Color.theme.accent)
+                                .onChange(of: notificationService.streakExpirationWarningHours) { newValue in
+                                    Task { try? await updateExpirationWarningHours() }
+                                }
+                                
+                                Text("before streak expires")
+                                    .font(.subheadline)
+                                    .foregroundColor(Color.theme.text)
+                            }
+                        }
+                        
+                        Text("Receive a notification when your streak is about to expire at the end of the day")
+                            .font(.subheadline)
+                            .foregroundColor(Color.theme.subtext)
+                    }
+                    .padding(.vertical, 4)
+                    
                     Divider()
                     
                     // Notification Settings
@@ -1259,7 +1306,7 @@ struct SettingsView: View {
     }
     
     private func getAppVersion() -> String {
-        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.4"
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.6"
     }
     
     private func getBuildNumber() -> String {
@@ -1982,6 +2029,63 @@ struct SettingsView: View {
                 isUploadingImage = false
                 errorMessage = "Failed to upload profile image: \(error.localizedDescription)"
                 showingError = true
+            }
+        }
+    }
+    
+    private func scheduleStreakExpirationWarning() async throws {
+        guard notificationService.isAuthorized else {
+            notificationService.isStreakExpirationWarningEnabled = false
+            throw NSError(domain: "App", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notifications are not authorized"])
+        }
+        
+        // Use the NotificationService to schedule the streak expiration warning
+        try await notificationService.scheduleStreakExpirationWarning()
+        
+        // Save to Firestore if user is logged in
+        if let userId = userSession.currentUser?.uid {
+            do {
+                try await Firestore.firestore().collection("users").document(userId).collection("preferences").document("notifications").setData([
+                    "streakExpirationWarningEnabled": true,
+                    "streakExpirationWarningHours": notificationService.streakExpirationWarningHours,
+                    "soundEnabled": isSoundEnabled,
+                    "vibrationEnabled": isVibrationEnabled
+                ], merge: true)
+            } catch {
+                // Log error but don't fail the function - notification will still work locally
+                print("Error saving streak expiration warning settings to Firestore: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func cancelStreakExpirationWarning() async throws {
+        // Cancel the warning in the NotificationService
+        notificationService.cancelStreakExpirationWarning()
+        
+        // Update Firestore if user is logged in
+        if let userId = userSession.currentUser?.uid {
+            do {
+                try await Firestore.firestore().collection("users").document(userId).collection("preferences").document("notifications").setData([
+                    "streakExpirationWarningEnabled": false
+                ], merge: true)
+            } catch {
+                print("Error updating streak expiration warning settings in Firestore: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func updateExpirationWarningHours() async throws {
+        // Update the hours in NotificationService and reschedule if needed
+        try await notificationService.updateStreakExpirationWarningHours(notificationService.streakExpirationWarningHours)
+        
+        // Update Firestore if user is logged in
+        if let userId = userSession.currentUser?.uid {
+            do {
+                try await Firestore.firestore().collection("users").document(userId).collection("preferences").document("notifications").setData([
+                    "streakExpirationWarningHours": notificationService.streakExpirationWarningHours
+                ], merge: true)
+            } catch {
+                print("Error updating streak expiration warning hours in Firestore: \(error.localizedDescription)")
             }
         }
     }

@@ -24,6 +24,9 @@ class ProfileViewModel: ObservableObject {
     @Published var isLoadingImage: Bool = false
     @Published var imageURL: URL?
     
+    // For new challenge creation
+    @Published var challengeTitle: String = ""
+    
     // Camera picker support
     @Published var showCameraPicker: Bool = false
     @Published var showPhotoSourceOptions: Bool = false

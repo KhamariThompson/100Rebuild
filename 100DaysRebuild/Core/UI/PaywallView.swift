@@ -283,17 +283,30 @@ struct PaywallView: View {
         // Regular restore flow
         Task {
             do {
+                print("🔐 PaywallView: Starting restore purchases")
+                
                 // Ensure user is properly identified with RevenueCat first
-                if let currentUser = Auth.auth().currentUser,
-                   Purchases.shared.appUserID != currentUser.uid {
-                    print("🔐 RevenueCat: Re-identifying user before restore attempt")
-                    await subscriptionService.identifyCurrentUser()
+                if let currentUser = Auth.auth().currentUser {
+                    print("🔐 PaywallView: Current Firebase UID: \(currentUser.uid)")
+                    print("🔐 PaywallView: Current RevenueCat ID: \(Purchases.shared.appUserID)")
+                    
+                    if Purchases.shared.appUserID != currentUser.uid {
+                        print("🔐 PaywallView: Re-identifying user before restore attempt")
+                        await subscriptionService.identifyCurrentUser()
+                    }
+                } else {
+                    print("🔐 PaywallView: ⚠️ No Firebase user for restore")
                 }
                 
-                print("🔐 RevenueCat: Starting restore purchases from PaywallView")
+                // Debug receipt status first
+                let receiptStatus = await subscriptionService.debugReceiptStatus()
+                print("🔐 PaywallView: Receipt validation status: \(receiptStatus)")
+                
+                print("🔐 PaywallView: Calling restorePurchases() in SubscriptionService")
                 try await subscriptionService.restorePurchases()
                 
                 // Verify the restore was successful by forcing a refresh
+                print("🔐 PaywallView: Forcing subscription status refresh after restore")
                 await subscriptionService.refreshSubscriptionStatus()
                 
                 isLoading = false
@@ -301,6 +314,7 @@ struct PaywallView: View {
                 // Check if user has active subscription after restoration
                 if subscriptionService.isProUser {
                     // Successful restoration with active subscription
+                    print("🔐 PaywallView: Restore successful - Pro subscription active")
                     dismissPaywall()
                     
                     // Success feedback
@@ -308,63 +322,51 @@ struct PaywallView: View {
                     generator.notificationOccurred(.success)
                 } else {
                     // No subscription found
+                    print("🔐 PaywallView: Restore completed but no active subscription found")
+                    
+                    // If receipt validation passed but Pro access isn't granted, try repair
+                    if receiptStatus {
+                        print("🔐 PaywallView: Receipt looks valid but Pro status not active, attempting repair")
+                        let repairSuccess = await subscriptionService.attemptSubscriptionRepair()
+                        
+                        if repairSuccess {
+                            print("🔐 PaywallView: Repair successful, Pro status activated")
+                            dismissPaywall()
+                            return
+                        } else {
+                            print("🔐 PaywallView: Repair attempt failed")
+                        }
+                    }
+                    
                     showingError = true
                     errorMessage = "No active subscription was found on your account."
                 }
             } catch {
                 isLoading = false
-                showingError = true
+                let nsError = error as NSError
+                print("🔐 PaywallView: Restore failed - domain: \(nsError.domain), code: \(nsError.code)")
+                print("🔐 PaywallView: Error details: \(error.localizedDescription)")
                 
-                // Check if it might be a deleted account case
-                if subscriptionService.isDeletedAccountDetected {
-                    isDeletedAccountCase = true
-                    showAccountRecoveryInfo = true
-                }
-                
-                // Handle specific errors
-                if let subscriptionError = error as? SubscriptionError {
-                    switch subscriptionError {
-                    case .accountMismatch:
-                        if isDeletedAccountCase {
-                            errorMessage = "We detected that you have a valid subscription on this device, but it's tied to a different account that may have been deleted.\n\nFor security reasons, subscriptions cannot be automatically transferred between accounts.\n\nPlease contact our support team with your receipt information so we can assist you in recovering your subscription."
-                        } else {
-                            errorMessage = "This subscription belongs to a different account. Please sign in with the original account that purchased Pro."
-                        }
-                    case .notSignedIntoAppStore:
-                        errorMessage = "Please sign in to your App Store account to restore purchases."
-                    case .restoreFailed:
-                        errorMessage = "Could not restore your previous purchase. Please try again later."
-                    case .timeout:
-                        errorMessage = "The restore operation timed out. Please check your internet connection and try again."
-                    case .networkOffline:
-                        errorMessage = "You appear to be offline. Please check your internet connection and try again."
-                    case .networkError:
-                        errorMessage = "There was a network error. Please check your connection and try again."
-                    case .purchasePending:
-                        errorMessage = "Your purchase is pending approval. It will be available once approved."
-                    case .receiptInUse:
-                        errorMessage = "This receipt is already in use with a different account."
-                    case .productNotFound:
-                        errorMessage = "The subscription product could not be found. Please try again later."
-                    case .verificationFailed:
-                        errorMessage = "Purchase verification failed. Please contact support if this persists."
-                    case .userCancelled:
-                        errorMessage = "The restore operation was cancelled."
-                    case .purchaseFailed:
-                        errorMessage = "There was an error with your previous purchase. Please contact support."
-                    case .unknown:
-                        errorMessage = "An error occurred while restoring purchases. Please try again."
-                    case .userNotSignedIn:
-                        errorMessage = "You must be signed in to restore purchases. Please sign in and try again."
+                // Check if it's a deleted account case
+                if let subscriptionError = error as? SubscriptionError, subscriptionError == .accountMismatch {
+                    if subscriptionService.isDeletedAccountDetected {
+                        print("🔐 PaywallView: Deleted account case detected")
+                        isDeletedAccountCase = true
+                        showAccountRecoveryInfo = true
+                    } else {
+                        showingError = true
+                        errorMessage = "This subscription belongs to a different account. Please sign in with the original account."
                     }
                 } else {
-                    // Generic error message
-                    errorMessage = "Could not restore purchases: \(error.localizedDescription)"
+                    // General error case
+                    showingError = true
+                    errorMessage = "Failed to restore: \(error.localizedDescription)"
                 }
                 
-                // Error feedback
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.error)
+                // Try to debug receipt issues
+                Task {
+                    _ = await subscriptionService.debugReceiptStatus()
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ struct ChallengesView: View {
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var router: NavigationRouter
     @EnvironmentObject private var userStatsService: UserStatsService
+    @EnvironmentObject private var userSession: UserSession
     @State private var isShowingEditChallenge = false
     @State private var challengeToEdit: Challenge?
     @State private var isShowingCheckInSheet = false
@@ -73,6 +74,76 @@ struct ChallengesView: View {
                         .padding(.bottom, AppSpacing.xl)
                 }
             }
+            
+            // Direct overlay modal for check-in sheet
+            if isShowingCheckInSheet, let challenge = challengeToCheckIn {
+                // Black semi-transparent background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        isShowingCheckInSheet = false
+                    }
+                
+                // Directly show the sheet content
+                SimpleCheckInSheet(
+                    challenge: challenge,
+                    dayNumber: challenge.daysCompleted + 1,
+                    onCheckIn: { note, image in
+                        Task {
+                            await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                        }
+                        isShowingCheckInSheet = false
+                    },
+                    onDismiss: {
+                        isShowingCheckInSheet = false
+                    }
+                )
+                .environmentObject(subscriptionService)
+                .transition(.identity)
+                .zIndex(100)
+            }
+            
+            // Overlay for expired challenge restart prompt
+            if viewModel.showExpiredChallengeAlert, let challenge = viewModel.currentExpiredChallenge {
+                // Black semi-transparent background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        // Don't dismiss on background tap since this is important
+                    }
+                
+                // Show the ChallengeRestartView
+                ChallengeRestartView(
+                    challenge: challenge,
+                    onRestart: {
+                        print("🔄 Restart button tapped for challenge: \(challenge.id)")
+                        Task {
+                            print("🔄 Starting restart task for challenge: \(challenge.id)")
+                            await viewModel.restartExpiredChallenge(challenge)
+                            print("🔄 Completed restart task for challenge: \(challenge.id)")
+                        }
+                    },
+                    onArchive: {
+                        print("📦 Archive button tapped for challenge: \(challenge.id)")
+                        Task {
+                            print("📦 Starting archive task for challenge: \(challenge.id)")
+                            await viewModel.archiveExpiredChallenge(challenge)
+                            print("📦 Completed archive task for challenge: \(challenge.id)")
+                        }
+                    },
+                    onDismiss: {
+                        print("❌ Dismiss button tapped")
+                        viewModel.dismissExpiredChallengeAlert()
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(110) // Higher than other overlays to ensure it's shown on top
+            }
+        }
+        .sheet(isPresented: $isShowingEditChallenge) {
+            if let challenge = challengeToEdit {
+                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
+            }
         }
         .sheet(isPresented: $viewModel.isShowingNewChallenge) {
             NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
@@ -81,26 +152,9 @@ struct ChallengesView: View {
                     await userStatsService.refreshUserStats()
                 }
             }
-        }
-        .sheet(isPresented: $isShowingEditChallenge) {
-            if let challenge = challengeToEdit {
-                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
-            }
-        }
-        .sheet(isPresented: $isShowingCheckInSheet) {
-            if let challenge = challengeToCheckIn {
-                SimpleCheckInSheet(
-                    challenge: challenge,
-                    dayNumber: challenge.daysCompleted + 1,
-                    onCheckIn: { note, image in
-                        performCheckIn(challenge: challenge, note: note, image: image)
-                        isShowingCheckInSheet = false
-                    },
-                    onDismiss: {
-                        isShowingCheckInSheet = false
-                    }
-                )
-            }
+            .environmentObject(subscriptionService)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(userSession)
         }
         .alert(isPresented: $viewModel.showError) {
             Alert(
@@ -109,15 +163,57 @@ struct ChallengesView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .overlay {
+            if viewModel.showSuccessToast {
+                VStack {
+                    Spacer()
+                    
+                    // Success toast
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.white)
+                            .font(.system(size: 20))
+                        
+                        Text(viewModel.successMessage)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.theme.accent)
+                            .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.spring(), value: viewModel.showSuccessToast)
+                .zIndex(200)
+            }
+        }
         .onAppear {
             // Mark tab as changing when this view appears
             if router.selectedTab == 0 {
                 router.tabIsChanging = true
             }
             
+            // Pre-warm SimpleCheckInSheet to avoid first-render delays
+            let _ = SimpleCheckInSheet(
+                challenge: Challenge.mock(title: "", daysCompleted: 0, streakCount: 0),
+                dayNumber: 1,
+                onCheckIn: { _, _ in },
+                onDismiss: {}
+            )
+            
             Task {
                 await viewModel.loadChallenges()
                 await viewModel.loadUserProfile()
+                // Check for expired challenges when the view appears
+                await viewModel.checkForExpiredChallenges()
                 
                 // After data is loaded, mark tab as not changing
                 if router.selectedTab == 0 {
@@ -128,15 +224,9 @@ struct ChallengesView: View {
         .refreshable {
             await viewModel.loadChallenges()
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("InitializeCheckIn"))) { notification in
-            if let userInfo = notification.userInfo,
-               let challenge = userInfo["challenge"] as? Challenge {
-                // Set the challenge to check in first (before showing sheet)
-                self.challengeToCheckIn = challenge
-                
-                // No delay - show immediately
-                self.isShowingCheckInSheet = true
-            }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowNewChallengeView"))) { _ in
+            // Show the new challenge view when notification is received
+            viewModel.isShowingNewChallenge = true
         }
     }
     
@@ -262,10 +352,23 @@ struct ChallengesView: View {
                 LazyVStack(spacing: AppSpacing.m) {
                     ForEach(viewModel.challenges) { challenge in
                         ChallengeCardComponent(challenge: challenge) {
-                            // Only show the check-in sheet if not already completed today
-                            if !challenge.isCompletedToday && !challenge.isCompleted {
-                                self.challengeToCheckIn = challenge
-                                self.isShowingCheckInSheet = true
+                            // Only show the check-in sheet if not already completed today and streak hasn't expired
+                            if !challenge.isCompletedToday && !challenge.isCompleted && 
+                               !(challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0) {
+                                // Use transaction to disable animation when setting state
+                                withTransaction(Transaction(animation: nil)) {
+                                    // Set the challenge and show sheet immediately without any delay
+                                    self.challengeToCheckIn = challenge
+                                    self.isShowingCheckInSheet = true
+                                }
+                                
+                                // Optional print statements for debugging
+                                print("Button tapped at \(Date())")
+                                print("Setting sheet state at \(Date())")
+                            } else if challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0 {
+                                // Show the expired challenge alert instead of check-in sheet
+                                viewModel.currentExpiredChallenge = challenge
+                                viewModel.showExpiredChallengeAlert = true
                             }
                         }
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
@@ -380,8 +483,12 @@ struct ChallengesView: View {
                 .foregroundColor(.theme.subtext)
             
             Button {
-                self.challengeToCheckIn = challenge
-                self.isShowingCheckInSheet = true
+                withTransaction(Transaction(animation: nil)) {
+                    self.challengeToCheckIn = challenge
+                    self.isShowingCheckInSheet = true
+                }
+                print("Button tapped at \(Date())")
+                print("Setting sheet state at \(Date())")
             } label: {
                 Text("Keep the Streak")
                     .font(.system(size: 16, weight: .semibold))
@@ -494,28 +601,6 @@ struct ChallengesView: View {
                 )
                 .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-    }
-    
-    // MARK: - Check In Functionality
-    
-    private func performCheckIn(challenge: Challenge, note: String, image: UIImage?) {
-        Task {
-            let result = await viewModel.checkInToChallenge(challenge, note: note, image: image)
-            
-            switch result {
-            case .success(_):
-                showSuccessToast = true
-                // User stats are now being refreshed in the viewModel's checkInToChallenge method
-                
-                // Dismiss the toast after a delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    showSuccessToast = false
-                }
-            case .failure(let error):
-                checkInError = error.localizedDescription
-                showErrorAlert = true
-            }
-        }
     }
     
     // Helper functions to convert between TimeOfDay enums
@@ -1097,5 +1182,228 @@ struct ChallengesView_Previews: PreviewProvider {
                 .environmentObject(SubscriptionService.shared)
                 .environmentObject(NotificationService.shared)
         }
+    }
+}
+
+// Challenge Restart View for expired challenges
+struct ChallengeRestartView: View {
+    let challenge: Challenge
+    let onRestart: () -> Void
+    let onArchive: () -> Void
+    let onDismiss: () -> Void
+    @State private var isRestartLoading = false
+    @State private var isArchiveLoading = false
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.orange)
+                    .padding(.bottom, 4)
+                
+                Text("Challenge Expired")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                
+                Text("You missed check-ins for \(challenge.title)")
+                    .font(.system(size: 16))
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            
+            // Challenge info
+            VStack(spacing: 16) {
+                // Progress lost
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .font(.system(size: 18))
+                            .foregroundColor(.orange)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Progress at risk")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                        
+                        Text("\(challenge.daysCompleted) days of progress could be reset")
+                            .font(.system(size: 14))
+                            .foregroundColor(.theme.subtext)
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Last check-in
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.blue)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last check-in")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                        
+                        if let lastCheckIn = challenge.lastCheckInDate {
+                            Text(formatLastCheckIn(lastCheckIn))
+                                .font(.system(size: 14))
+                                .foregroundColor(.theme.subtext)
+                        } else {
+                            Text("No previous check-ins recorded")
+                                .font(.system(size: 14))
+                                .foregroundColor(.theme.subtext)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+            )
+            
+            // Options
+            VStack(spacing: 12) {
+                Button(action: {
+                    // Use haptic feedback for better user experience
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // Set loading state to true
+                    isRestartLoading = true
+                    
+                    // Delay slightly to allow UI update before potentially heavy operation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        onRestart()
+                    }
+                }) {
+                    HStack {
+                        if isRestartLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                                .padding(.trailing, 5)
+                        }
+                        
+                        Text("Restart Challenge")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+                    )
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+                .buttonStyle(SpringButtonStyle())
+                
+                Button(action: {
+                    // Use haptic feedback for better user experience
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // Set loading state to true
+                    isArchiveLoading = true
+                    
+                    // Delay slightly to allow UI update before potentially heavy operation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        onArchive()
+                    }
+                }) {
+                    HStack {
+                        if isArchiveLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .primary))
+                                .scaleEffect(0.8)
+                                .padding(.trailing, 5)
+                        }
+                        
+                        Text("Archive Challenge")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.theme.border, lineWidth: 1.5)
+                            .background(Color.theme.surface.cornerRadius(12))
+                    )
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+                .buttonStyle(SpringButtonStyle())
+                
+                Button(action: {
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                    onDismiss()
+                }) {
+                    Text("Decide Later")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.theme.subtext)
+                        .padding(.vertical, 8)
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.theme.background)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    private func formatLastCheckIn(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.day], from: date, to: now)
+        
+        if let days = components.day {
+            if days == 0 {
+                return "Today"
+            } else if days == 1 {
+                return "Yesterday"
+            } else {
+                return "\(days) days ago"
+            }
+        }
+        
+        return "Some time ago"
+    }
+}
+
+// Button style for spring animation effect
+struct SpringButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 } 

@@ -60,6 +60,9 @@ class SubscriptionService: NSObject, ObservableObject {
     // Timer for periodic receipt refresh
     private var receiptRefreshTimer: Timer?
     
+    // Class property near the top with other properties
+    @Published private var needsForcedPurchaseSync: Bool = false
+    
     private override init() {
         // Call super.init() first before using self
         super.init()
@@ -187,20 +190,86 @@ class SubscriptionService: NSObject, ObservableObject {
                     return
                 }
                 
+                // First reset Pro status before logging in with a new user
+                await MainActor.run {
+                    if self.isProUser {
+                        print("🔐 RevenueCat: Resetting Pro status before identifying new user")
+                        self.isProUser = false
+                        self.renewalDate = nil
+                        
+                        // Clear cached data for security
+                        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                    }
+                }
+                
                 // Use Firebase UID as RevenueCat user identifier
                 let loginResult = try await Purchases.shared.logIn(currentUser.uid)
                 
                 // Store the current RevenueCat user ID
                 self.currentRevenueCatUID = currentUser.uid
                 
+                // Check if a transfer occurred (.created = false means a transfer happened)
+                let transferOccurred = !loginResult.created
+                if transferOccurred {
+                    print("🔐 RevenueCat: ✅ Detected subscription transfer during identification!")
+                    print("🔐 RevenueCat: Original AppUserID: \(loginResult.customerInfo.originalAppUserId)")
+                    print("🔐 RevenueCat: This indicates a migration from anonymous → identified user")
+                    
+                    // Post notification about the migration
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("SubscriptionMigrationCompleted"),
+                        object: nil,
+                        userInfo: ["originalAppUserId": loginResult.customerInfo.originalAppUserId]
+                    )
+                }
+                
                 #if DEBUG
                 print("🔐 RevenueCat: User successfully identified with UID: \(currentUser.uid)")
                 print("🔐 RevenueCat: Original AppUserID: \(loginResult.customerInfo.originalAppUserId)")
                 print("🔐 RevenueCat: Current AppUserID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: Transfer occurred: \(transferOccurred)")
                 #endif
                 
+                // Explicitly sync purchases with RevenueCat after login to ensure receipt is associated with correct user
+                print("🔐 RevenueCat: Explicitly syncing purchases after user identification")
+                try await syncPurchasesWithRetry(maxRetries: 3)
+                
+                // Get updated customer info after sync
+                let updatedCustomerInfo = try await Purchases.shared.customerInfo()
+                print("🔐 RevenueCat: After sync - entitlements: \(updatedCustomerInfo.entitlements.active.keys.joined(separator: ", "))")
+                if !updatedCustomerInfo.activeSubscriptions.isEmpty {
+                    print("🔐 RevenueCat: After sync - active subscriptions: \(updatedCustomerInfo.activeSubscriptions.joined(separator: ", "))")
+                }
+                
+                // Verify that the original purchaser matches the current user before granting Pro
+                let originalAppUserId = updatedCustomerInfo.originalAppUserId
+                let validPurchaser = originalAppUserId.isEmpty || originalAppUserId == currentUser.uid
+                
+                if !validPurchaser {
+                    print("🔐 RevenueCat: ⚠️ Original purchaser (\(originalAppUserId)) doesn't match current user (\(currentUser.uid))")
+                    
+                    // If there's a mismatch, ensure Pro is disabled
+                    await MainActor.run {
+                        self.isProUser = false
+                        self.renewalDate = nil
+                        
+                        // Clear cached data for security
+                        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                        
+                        // Notify about subscription status change
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("SubscriptionStatusChanged"),
+                            object: nil,
+                            userInfo: ["isProUser": false]
+                        )
+                    }
+                    return
+                }
+                
                 // Update pro status based on latest customer info for this specific user
-                let activeEntitlements = loginResult.customerInfo.entitlements.active
+                let activeEntitlements = updatedCustomerInfo.entitlements.active
                 let hasPro = activeEntitlements["Pro"]?.isActive ?? false
                 
                 #if DEBUG
@@ -293,9 +362,15 @@ class SubscriptionService: NSObject, ObservableObject {
     }
     
     // Make the method public so it can be called from MainAppViewModel
-    func updateSubscriptionStatus(forceReset: Bool = false) async {
+    func updateSubscriptionStatus(forceReset: Bool = false, forceVerification: Bool = false) async {
         isLoading = true
         error = nil
+        
+        // Debug receipt environment info
+        if let receiptURL = Bundle.main.appStoreReceiptURL {
+            let isSandboxReceipt = receiptURL.lastPathComponent == "sandboxReceipt"
+            print("🔐 RevenueCat: Using \(isSandboxReceipt ? "SANDBOX" : "PRODUCTION") receipt")
+        }
         
         // Get the current Firebase UID for strict validation
         let currentFirebaseUID = Auth.auth().currentUser?.uid
@@ -309,6 +384,10 @@ class SubscriptionService: NSObject, ObservableObject {
                     #endif
                     self.isProUser = false
                     self.renewalDate = nil
+                    
+                    // Clear cached data for security
+                    UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                    UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
                     
                     // Notify about subscription status change
                     NotificationCenter.default.post(
@@ -378,14 +457,76 @@ class SubscriptionService: NSObject, ObservableObject {
         }
         
         do {
+            // If a forced sync is needed (like after a user switch), do it now
+            if needsForcedPurchaseSync || forceVerification {
+                print("🔐 RevenueCat: Forced sync requested during subscription status update")
+                try await syncPurchasesWithRetry(maxRetries: 3)
+                needsForcedPurchaseSync = false // Reset the flag after sync
+                
+                // If we're doing a force verification, also verify original purchaser ID
+                if forceVerification {
+                    print("🔐 RevenueCat: Performing force verification of original purchaser")
+                    let customerInfo = try await Purchases.shared.customerInfo()
+                    
+                    // Check for mismatch between original purchaser and current user
+                    if !customerInfo.originalAppUserId.isEmpty && 
+                       customerInfo.originalAppUserId != currentFirebaseUID {
+                        print("🔐 RevenueCat: Original purchaser mismatch detected during force verification")
+                        print("🔐 RevenueCat: Original: \(customerInfo.originalAppUserId), Current: \(currentFirebaseUID ?? "none")")
+                        
+                        // Reset Pro status if there's a mismatch
+                        await MainActor.run {
+                            if self.isProUser {
+                                self.isProUser = false
+                                self.renewalDate = nil
+                                
+                                // Clear cached data
+                                UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                                UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                                
+                                // Notify about subscription status change
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                                    object: nil,
+                                    userInfo: ["isProUser": false]
+                                )
+                            }
+                        }
+                        // Skip further processing
+                        isLoading = false
+                        return
+                    }
+                }
+            }
+            
             // First check if the current RevenueCat user ID matches the Firebase UID
             let currentAppUserID = Purchases.shared.appUserID
             print("🔐 RevenueCat: Checking subscription status for Firebase UID: \(currentFirebaseUID ?? "none")")
             print("🔐 RevenueCat: Current AppUserID: \(currentAppUserID)")
             
-            // If the IDs don't match, we need to log in with the Firebase UID first
+            // If the IDs don't match, reset Pro status and re-identify user with Firebase UID
             if currentAppUserID != currentFirebaseUID {
                 print("🔐 RevenueCat: AppUserID mismatch. Re-identifying user with Firebase UID")
+                
+                // Reset Pro status immediately when mismatch is detected
+                await MainActor.run {
+                    if self.isProUser {
+                        print("🔐 RevenueCat: Resetting Pro status due to user mismatch")
+                        self.isProUser = false
+                        self.renewalDate = nil
+                        
+                        // Clear cached data for security
+                        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                        
+                        // Notify about subscription status change
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("SubscriptionStatusChanged"),
+                            object: nil,
+                            userInfo: ["isProUser": false]
+                        )
+                    }
+                }
                 
                 // Re-identify with the current Firebase UID
                 if let uid = currentFirebaseUID {
@@ -397,13 +538,35 @@ class SubscriptionService: NSObject, ObservableObject {
                     
                     // Get customer info from the login result
                     let customerInfo = loginResult.customerInfo
-            self.customerInfo = customerInfo
-            
+                    self.customerInfo = customerInfo
+                    
+                    // Validate that the originalAppUserId matches current Firebase UID
+                    let originalAppUserId = customerInfo.originalAppUserId
+                    print("🔐 RevenueCat: Original AppUserID: \(originalAppUserId)")
+                    
+                    let validPurchaser = originalAppUserId == uid
+                    if !validPurchaser {
+                        print("🔐 RevenueCat: ⚠️ Original purchaser (\(originalAppUserId)) doesn't match current user (\(uid))")
+                        
+                        // If originalAppUserId doesn't match, keep Pro disabled
+                        await MainActor.run {
+                            self.isProUser = false
+                            self.renewalDate = nil
+                            
+                            // Clear cached data for security
+                            UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                            UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                        }
+                        
+                        isLoading = false
+                        return
+                    }
+                    
                     // Check active entitlements for this specific Firebase user
-            let activeEntitlements = customerInfo.entitlements.active
+                    let activeEntitlements = customerInfo.entitlements.active
                     let hasPro = activeEntitlements["Pro"]?.isActive ?? false
                     self.renewalDate = activeEntitlements["Pro"]?.expirationDate
-            
+                    
                     print("🔐 RevenueCat: Firebase UID \(uid) has Pro entitlement: \(hasPro)")
                     print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
                     
@@ -441,7 +604,10 @@ class SubscriptionService: NSObject, ObservableObject {
             print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
             
             // Only check entitlements if the current RevenueCat user matches the Firebase user
-            if Purchases.shared.appUserID == currentFirebaseUID {
+            // AND the original purchaser matches the current Firebase user
+            if Purchases.shared.appUserID == currentFirebaseUID && 
+               customerInfo.originalAppUserId == currentFirebaseUID {
+                
                 // Check active entitlements - looking specifically for "Pro" entitlement
                 let activeEntitlements = customerInfo.entitlements.active
                 let hasPro = activeEntitlements["Pro"]?.isActive ?? false
@@ -456,21 +622,26 @@ class SubscriptionService: NSObject, ObservableObject {
                 UserDefaults.standard.set(hasPro, forKey: "cachedProStatus")
                 UserDefaults.standard.set(self.renewalDate, forKey: "cachedExpirationDate")
             
-            // Only update published property if there's a change to avoid UI flicker
+                // Only update published property if there's a change to avoid UI flicker
                 if self.isProUser != hasPro {
                     print("🔐 RevenueCat: Updating Pro status for Firebase UID \(currentFirebaseUID!): \(hasPro)")
                     self.isProUser = hasPro
                     
                     // Notify about subscription status change
-                NotificationCenter.default.post(
-                    name: NSNotification.Name("SubscriptionStatusChanged"),
-                    object: nil,
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("SubscriptionStatusChanged"),
+                        object: nil,
                         userInfo: ["isProUser": hasPro]
                     )
                 }
             } else {
-                // If the IDs don't match, force the user to non-Pro
-                print("🔐 RevenueCat: AppUserID mismatch. Current: \(Purchases.shared.appUserID), Firebase: \(currentFirebaseUID!)")
+                // If the IDs don't match, or original purchaser doesn't match current user,
+                // force the user to non-Pro
+                if customerInfo.originalAppUserId != currentFirebaseUID {
+                    print("🔐 RevenueCat: Original purchaser (\(customerInfo.originalAppUserId)) doesn't match current user (\(currentFirebaseUID!))")
+                } else {
+                    print("🔐 RevenueCat: AppUserID mismatch. Current: \(Purchases.shared.appUserID), Firebase: \(currentFirebaseUID!)")
+                }
                 print("🔐 RevenueCat: Resetting Pro status to false due to user mismatch")
                 
                 // Reset Pro status
@@ -712,6 +883,13 @@ class SubscriptionService: NSObject, ObservableObject {
     }
     
     func purchaseSubscription(plan: SubscriptionPlan) async throws {
+        // Add environment verification at the beginning
+        print("🔐 RevenueCat: Verifying environment for purchase")
+        let receiptURL = Bundle.main.appStoreReceiptURL
+        let isSandboxReceipt = receiptURL?.lastPathComponent == "sandboxReceipt"
+        print("🔐 RevenueCat: Using \(isSandboxReceipt ? "SANDBOX" : "PRODUCTION") receipt")
+        print("🔐 RevenueCat: Current app bundle ID: \(Bundle.main.bundleIdentifier ?? "unknown")")
+        
         guard isPurchasingEnabled else {
             // Skip if purchases are disabled for App Review
             return
@@ -734,6 +912,32 @@ class SubscriptionService: NSObject, ObservableObject {
                 #endif
                 
                 let loginResult = try await Purchases.shared.logIn(currentUser.uid)
+                
+                // Check if a transfer occurred during login
+                let transferOccurred = !loginResult.created
+                if transferOccurred {
+                    print("🔐 RevenueCat: ✅ Subscription transferred during pre-purchase identification")
+                    print("🔐 RevenueCat: Original AppUserID: \(loginResult.customerInfo.originalAppUserId)")
+                    
+                    // Force sync purchases after transfer
+                    try await Purchases.shared.syncPurchases()
+                    print("🔐 RevenueCat: Synced purchases after subscription transfer")
+                    
+                    // Check if user already has Pro after the transfer
+                    let customerInfo = try await Purchases.shared.customerInfo()
+                    let hasProAfterTransfer = customerInfo.entitlements["Pro"]?.isActive ?? false
+                    
+                    if hasProAfterTransfer {
+                        print("🔐 RevenueCat: User already has Pro after subscription transfer")
+                        
+                        // Update subscription status
+                        await updateSubscriptionStatus()
+                        
+                        // If they already have Pro, we don't need to continue with purchase
+                        isLoading = false
+                        return
+                    }
+                }
                 
                 #if DEBUG
                 print("🔐 RevenueCat: User successfully identified with UID: \(currentUser.uid)")
@@ -788,9 +992,19 @@ class SubscriptionService: NSObject, ObservableObject {
                         
                         print("🔐 RevenueCat: Purchase successful - entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
                         
+                        // Explicitly sync purchases with RevenueCat to ensure receipt is properly recorded
+                        print("🔐 RevenueCat: Explicitly syncing purchases with RevenueCat after successful purchase")
+                        try await syncPurchasesWithRetry(maxRetries: 3)
+                        
+                        // Get updated customer info after sync
+                        let updatedCustomerInfo = try await Purchases.shared.customerInfo()
+                        print("🔐 RevenueCat: After sync - entitlements: \(updatedCustomerInfo.entitlements.active.keys.joined(separator: ", "))")
+                        print("🔐 RevenueCat: After sync - active subscriptions: \(updatedCustomerInfo.activeSubscriptions.joined(separator: ", "))")
+                        print("🔐 RevenueCat: After sync - originalAppUserId: \(updatedCustomerInfo.originalAppUserId)")
+                        
                         // Update pro status from result
                         await MainActor.run {
-                            let activeEntitlements = customerInfo.entitlements.active
+                            let activeEntitlements = updatedCustomerInfo.entitlements.active
                             self.isProUser = activeEntitlements["Pro"]?.isActive ?? false
                             self.renewalDate = activeEntitlements["Pro"]?.expirationDate
                             
@@ -908,8 +1122,24 @@ class SubscriptionService: NSObject, ObservableObject {
         
         // First make sure we have our Firebase user ID synced with RevenueCat
         if Purchases.shared.appUserID != currentUser.uid {
-            print("🔐 RevenueCat: AppUserID mismatch during restore. Re-identifying with Firebase UID first")
-            await identifyCurrentUser()
+            print("🔐 RevenueCat: AppUserID mismatch during restore. Attempting migration first")
+            
+            // Try explicit migration before restore
+            let migrationOccurred = await migrateAnonymousSubscription()
+            print("🔐 RevenueCat: Pre-restore migration result: \(migrationOccurred ? "Transferred subscription" : "No migration needed")")
+            
+            // If migration didn't work, re-identify user
+            if !migrationOccurred {
+                print("🔐 RevenueCat: Re-identifying with Firebase UID")
+                await identifyCurrentUser()
+            }
+            
+            // If successful migration gave the user Pro, we can skip the restore
+            if isProUser {
+                print("🔐 RevenueCat: User already has Pro after migration, skipping restore")
+                isLoading = false
+                return
+            }
         }
         
         // Now that we have the correct user ID, try restore
@@ -949,8 +1179,48 @@ class SubscriptionService: NSObject, ObservableObject {
             let customerInfo = try await Purchases.shared.restorePurchases()
             print("🔐 RevenueCat: Restore completed successfully - checking entitlements")
             
+            // Explicitly sync purchases with RevenueCat after restore
+            print("🔐 RevenueCat: Explicitly syncing purchases with RevenueCat after restore")
+            try await syncPurchasesWithRetry(maxRetries: 3)
+            
+            // Get updated customer info after sync
+            let updatedCustomerInfo = try await Purchases.shared.customerInfo()
+            print("🔐 RevenueCat: After sync - entitlements: \(updatedCustomerInfo.entitlements.active.keys.joined(separator: ", "))")
+            print("🔐 RevenueCat: After sync - active subscriptions: \(updatedCustomerInfo.activeSubscriptions.joined(separator: ", "))")
+            print("🔐 RevenueCat: After sync - originalAppUserId: \(updatedCustomerInfo.originalAppUserId)")
+            
             // Check if RevenueCat has active entitlements
-            let hasProEntitlement = customerInfo.entitlements["Pro"]?.isActive ?? false
+            let hasProEntitlement = updatedCustomerInfo.entitlements["Pro"]?.isActive ?? false
+            
+            // Check if the original purchaser matches the current user
+            let originalAppUserId = updatedCustomerInfo.originalAppUserId
+            print("🔐 RevenueCat: Original App User ID: \(originalAppUserId)")
+            print("🔐 RevenueCat: Current Firebase UID: \(currentUser.uid)")
+            
+            let originalPurchaserMatches = originalAppUserId == currentUser.uid
+            if !originalPurchaserMatches && hasProEntitlement {
+                print("🔐 RevenueCat: ⚠️ Original purchaser (\(originalAppUserId)) doesn't match current user (\(currentUser.uid))")
+                print("🔐 RevenueCat: Cannot restore Pro access to a different user account")
+                
+                // Reset Pro status since this user isn't the original purchaser
+                await MainActor.run {
+                    self.isProUser = false
+                    self.renewalDate = nil
+                    
+                    // Clear cached data for security
+                    UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                    UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                    
+                    // Notify that we can't restore
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("SubscriptionStatusChanged"),
+                        object: nil,
+                        userInfo: ["isProUser": false]
+                    )
+                }
+                
+                throw SubscriptionError.accountMismatch
+            }
             
             // If StoreKit shows active but RevenueCat doesn't, we have a sync issue
             if hasActiveStoreKitSubscription && !hasProEntitlement {
@@ -965,7 +1235,7 @@ class SubscriptionService: NSObject, ObservableObject {
                 try await handleRestoredCustomerInfo(updatedCustomerInfo)
             } else {
                 // Normal restore flow
-            try await handleRestoredCustomerInfo(customerInfo)
+                try await handleRestoredCustomerInfo(customerInfo)
             }
         } catch {
             await handleRestoreError(error)
@@ -979,6 +1249,8 @@ class SubscriptionService: NSObject, ObservableObject {
     /// Reset all state to initial values
     @MainActor
     func reset() {
+        print("🔐 RevenueCat: Reset: Starting complete reset of subscription state")
+        
         // Reset all published properties
         isProUser = false
         availableProducts = []
@@ -1000,11 +1272,33 @@ class SubscriptionService: NSObject, ObservableObject {
         didAttemptOfferingsLoad = false
         offeringsRetryCount = 0
         
-        // Clear cached subscriptions in UserDefaults
-        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
-        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+        // Clear ALL cached subscriptions in UserDefaults with namespace isolation
+        let userDefaultsKeys = [
+            "cachedProStatus",
+            "cachedExpirationDate",
+            "offeringsRetryCount",
+            "lastSubscriptionCheck",
+            "hasCompletedSubscriptionMigration",
+            "lastUserIdentified",
+            "lastRevenueCatSync",
+            "subscriptionLastVerified"
+        ]
         
-        print("SubscriptionService - Reset complete")
+        for key in userDefaultsKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        
+        // Force an immediate purchase sync on the next user login
+        needsForcedPurchaseSync = true
+        
+        // Notify the app about subscription status change
+        NotificationCenter.default.post(
+            name: NSNotification.Name("SubscriptionStatusChanged"),
+            object: nil,
+            userInfo: ["isProUser": false]
+        )
+        
+        print("🔐 RevenueCat: Reset: Subscription service reset complete")
     }
     
     private func handleRestoredCustomerInfo(_ customerInfo: CustomerInfo) async throws {
@@ -1018,11 +1312,39 @@ class SubscriptionService: NSObject, ObservableObject {
         let currentFirebaseUID = Auth.auth().currentUser?.uid
         print("🔐 RevenueCat: Current Firebase UID: \(currentFirebaseUID ?? "none")")
         
+        // Validate all required conditions for a valid restore:
+        // 1. We must have a current Firebase user
+        // 2. The original purchaser must match the current Firebase user
+        // 3. The RevenueCat appUserID must match the current Firebase user
+        
+        guard let currentFirebaseUID = currentFirebaseUID else {
+            print("🔐 RevenueCat: No Firebase user found during restore")
+            throw SubscriptionError.userNotSignedIn
+        }
+        
+        // Make sure the RevenueCat ID matches the Firebase ID
+        guard Purchases.shared.appUserID == currentFirebaseUID else {
+            print("🔐 RevenueCat: AppUserID mismatch during restore")
+            print("🔐 RevenueCat: RevenueCat ID: \(Purchases.shared.appUserID)")
+            print("🔐 RevenueCat: Firebase UID: \(currentFirebaseUID)")
+            
+            await MainActor.run {
+                self.isProUser = false
+                self.renewalDate = nil
+                
+                // Clear cached data
+                UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+            }
+            
+            throw SubscriptionError.accountMismatch
+        }
+        
         // Check if the restored purchases were originally made by this Firebase user
         if !customerInfo.originalAppUserId.isEmpty && 
            customerInfo.originalAppUserId != currentFirebaseUID {
             // The purchases were originally made by a different account
-            print("🔐 RevenueCat: Account mismatch! Original: \(customerInfo.originalAppUserId), Current: \(currentFirebaseUID ?? "none")")
+            print("🔐 RevenueCat: Account mismatch! Original: \(customerInfo.originalAppUserId), Current: \(currentFirebaseUID)")
             
             // Check if there are Pro entitlements to be restored
             let hasProEntitlement = customerInfo.entitlements["Pro"]?.isActive ?? false
@@ -1037,6 +1359,10 @@ class SubscriptionService: NSObject, ObservableObject {
                 await MainActor.run {
                     self.isProUser = false
                     self.renewalDate = nil
+                    
+                    // Clear cached data
+                    UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                    UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
                     
                     // Set state for specialized UI
                     self.isDeletedAccountDetected = couldBeDeletedAccount
@@ -1278,8 +1604,8 @@ class SubscriptionService: NSObject, ObservableObject {
             } else {
                 print("🔐 RevenueCat: No active subscription found in StoreKit for this device")
                 return false
-                    }
-                } catch {
+            }
+        } catch {
             print("🔐 RevenueCat: Error checking for deleted account subscription: \(error.localizedDescription)")
             return false
         }
@@ -1311,10 +1637,95 @@ class SubscriptionService: NSObject, ObservableObject {
         }
     }
     
-    // Update to receive notification about deleted account detection
+    // Update to receive notification about deleted account detection and validate subscription status changes
     @objc private func handleSubscriptionStatusChange(_ notification: Notification) {
-        if let isDeletedAccountCase = notification.userInfo?["isDeletedAccountCase"] as? Bool, isDeletedAccountCase {
+        print("🔐 RevenueCat: Handling subscription status change notification")
+        
+        if let isDeletedAccountCase = notification.userInfo?["isDeletedAccountCase"] as? Bool, 
+           isDeletedAccountCase {
             isDeletedAccountDetected = true
+            print("🔐 RevenueCat: Detected deleted account case")
+            return
+        }
+        
+        // Get current Firebase UID
+        let currentFirebaseUID = Auth.auth().currentUser?.uid
+        
+        Task {
+            // If we don't have a user, reset Pro status
+            guard let currentFirebaseUID = currentFirebaseUID else {
+                print("🔐 RevenueCat: No Firebase user found during subscription status change")
+                await MainActor.run {
+                    if self.isProUser {
+                        self.isProUser = false
+                        self.renewalDate = nil
+                        
+                        // Clear cached data
+                        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                    }
+                }
+                return
+            }
+            
+            // Check if RevenueCat ID matches Firebase UID
+            if Purchases.shared.appUserID != currentFirebaseUID {
+                print("🔐 RevenueCat: AppUserID mismatch during subscription status change")
+                print("🔐 RevenueCat: RevenueCat ID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: Firebase UID: \(currentFirebaseUID)")
+                
+                await MainActor.run {
+                    if self.isProUser {
+                        self.isProUser = false
+                        self.renewalDate = nil
+                        
+                        // Clear cached data
+                        UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                        UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                    }
+                }
+                
+                // Re-identify user to fix the mismatch
+                await identifyCurrentUser()
+                return
+            }
+            
+            // Get customer info to validate original purchaser
+            do {
+                let customerInfo = try await Purchases.shared.customerInfo()
+                
+                // Check if the original purchaser matches the current user
+                if !customerInfo.originalAppUserId.isEmpty && 
+                   customerInfo.originalAppUserId != currentFirebaseUID {
+                    
+                    print("🔐 RevenueCat: Original purchaser (\(customerInfo.originalAppUserId)) doesn't match current user (\(currentFirebaseUID))")
+                    
+                    await MainActor.run {
+                        if self.isProUser {
+                            self.isProUser = false
+                            self.renewalDate = nil
+                            
+                            // Clear cached data
+                            UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                            UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                            
+                            // Notify about subscription status change
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("SubscriptionStatusChanged"),
+                                object: nil,
+                                userInfo: ["isProUser": false]
+                            )
+                        }
+                    }
+                    return
+                }
+                
+                // Both RevenueCat ID and original purchaser match - update status
+                await updateSubscriptionStatus()
+                
+            } catch {
+                print("🔐 RevenueCat: Error checking customer info during subscription change: \(error.localizedDescription)")
+            }
         }
     }
     
@@ -1322,15 +1733,39 @@ class SubscriptionService: NSObject, ObservableObject {
     @objc private func handleAppDidBecomeActive() {
         print("🔐 RevenueCat: App became active, verifying subscription status")
         Task {
-            // Check if the current user is properly identified with RevenueCat
-            if let currentFirebaseUID = Auth.auth().currentUser?.uid,
-               Purchases.shared.appUserID != currentFirebaseUID {
-                print("🔐 RevenueCat: User ID mismatch detected on app resume, re-identifying user")
-                await identifyCurrentUser()
+            // First, verify user identity matches
+            if let currentFirebaseUID = Auth.auth().currentUser?.uid {
+                if Purchases.shared.appUserID != currentFirebaseUID {
+                    print("🔐 RevenueCat: User ID mismatch detected on app resume, re-identifying user")
+                    await identifyCurrentUser()
+                } else {
+                    // Even if IDs match, verify the original purchaser ID
+                    let customerInfo = try? await Purchases.shared.customerInfo()
+                    if let originalAppUserId = customerInfo?.originalAppUserId,
+                       !originalAppUserId.isEmpty && originalAppUserId != currentFirebaseUID {
+                        print("🔐 RevenueCat: Original purchaser ID mismatch on app resume")
+                        // Force Pro status to false if original purchaser doesn't match
+                        if self.isProUser {
+                            self.isProUser = false
+                            self.renewalDate = nil
+                            
+                            // Clear cached data
+                            UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                            UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                            
+                            // Notify about subscription status change
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("SubscriptionStatusChanged"),
+                                object: nil,
+                                userInfo: ["isProUser": false]
+                            )
+                        }
+                    }
+                }
             }
             
             // Then update subscription status
-            await updateSubscriptionStatus()
+            await updateSubscriptionStatus(forceVerification: true)
             
             // Log environment
             do {
@@ -1350,7 +1785,7 @@ class SubscriptionService: NSObject, ObservableObject {
                 print("🔐 RevenueCat: Network connection restored, refreshing subscription status")
                 isOfflineMode = false
                 Task {
-                    await updateSubscriptionStatus()
+                    await updateSubscriptionStatus(forceVerification: true)
                 }
             } else {
                 // We're offline, enable offline mode
@@ -1370,8 +1805,281 @@ class SubscriptionService: NSObject, ObservableObject {
             guard let self = self else { return }
             print("🔐 RevenueCat: Performing scheduled receipt refresh")
             Task {
-                await self.updateSubscriptionStatus()
+                await self.updateSubscriptionStatus(forceVerification: true)
             }
+        }
+    }
+    
+    // MARK: - Debug Methods
+    
+    /// Check and debug the App Store receipt
+    func debugReceiptStatus() async -> Bool {
+        print("🔐 RevenueCat: Debugging receipt status")
+        
+        // Check if receipt exists
+        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+            print("🔐 RevenueCat: No receipt URL available")
+            return false
+        }
+        
+        let receiptExists = FileManager.default.fileExists(atPath: receiptURL.path)
+        print("🔐 RevenueCat: Receipt URL: \(receiptURL.path)")
+        print("🔐 RevenueCat: Receipt exists: \(receiptExists)")
+        
+        if receiptExists {
+            // Get receipt file size
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: receiptURL.path),
+               let fileSize = attributes[.size] as? Int {
+                print("🔐 RevenueCat: Receipt file size: \(fileSize) bytes")
+                
+                // If receipt is too small, it might be invalid
+                if fileSize < 1000 {
+                    print("🔐 RevenueCat: ⚠️ Receipt file is suspiciously small (\(fileSize) bytes), might be invalid")
+                }
+            }
+            
+            // Check if it's a sandbox receipt
+            if receiptURL.lastPathComponent == "sandboxReceipt" {
+                print("🔐 RevenueCat: ⚠️ Using sandbox receipt")
+            } else {
+                print("🔐 RevenueCat: Using production receipt")
+            }
+            
+            // Check for receipt validation with RevenueCat
+            do {
+                print("🔐 RevenueCat: Requesting customer info to validate receipt")
+                let customerInfo = try await Purchases.shared.customerInfo()
+                
+                print("🔐 RevenueCat: Receipt validation succeeded")
+                print("🔐 RevenueCat: Original App User ID: \(customerInfo.originalAppUserId)")
+                print("🔐 RevenueCat: Current App User ID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: Active entitlements: \(customerInfo.entitlements.active.keys.joined(separator: ", "))")
+                print("🔐 RevenueCat: Active subscriptions: \(customerInfo.activeSubscriptions.joined(separator: ", "))")
+                
+                // Attempt to force sync with RevenueCat
+                print("🔐 RevenueCat: Attempting to force sync receipt with RevenueCat")
+                try await syncPurchasesWithRetry(maxRetries: 3)
+                
+                // Check customer info again after sync
+                let updatedInfo = try await Purchases.shared.customerInfo()
+                print("🔐 RevenueCat: After sync - Active entitlements: \(updatedInfo.entitlements.active.keys.joined(separator: ", "))")
+                print("🔐 RevenueCat: After sync - Active subscriptions: \(updatedInfo.activeSubscriptions.joined(separator: ", "))")
+                
+                // Check if Pro entitlement is active
+                let hasProEntitlement = updatedInfo.entitlements["Pro"]?.isActive ?? false
+                print("🔐 RevenueCat: Has Pro entitlement: \(hasProEntitlement)")
+                
+                return hasProEntitlement
+            } catch {
+                print("🔐 RevenueCat: ❌ Error validating receipt with RevenueCat: \(error.localizedDescription)")
+                return false
+            }
+        } else {
+            print("🔐 RevenueCat: ❌ Receipt file does not exist at expected location")
+            
+            // Try to refresh the receipt
+            print("🔐 RevenueCat: Attempting to refresh App Store receipt")
+            do {
+                let receiptRefreshRequest = SKReceiptRefreshRequest()
+                try await receiptRefreshRequest.start()
+                print("🔐 RevenueCat: Receipt refresh request completed")
+                
+                // Check if receipt exists after refresh
+                let refreshedReceiptExists = FileManager.default.fileExists(atPath: receiptURL.path)
+                print("🔐 RevenueCat: After refresh - Receipt exists: \(refreshedReceiptExists)")
+                
+                return refreshedReceiptExists
+            } catch {
+                print("🔐 RevenueCat: ❌ Error refreshing receipt: \(error.localizedDescription)")
+                return false
+            }
+        }
+    }
+    
+    /// Attempt to fix common subscription issues
+    func attemptSubscriptionRepair() async -> Bool {
+        print("🔐 RevenueCat: Attempting to repair subscription")
+        
+        // Ensure user is properly identified
+        if let currentUser = Auth.auth().currentUser {
+            print("🔐 RevenueCat: Current Firebase UID: \(currentUser.uid)")
+            print("🔐 RevenueCat: Current RevenueCat ID: \(Purchases.shared.appUserID)")
+            
+            if Purchases.shared.appUserID != currentUser.uid {
+                print("🔐 RevenueCat: Re-identifying user with correct Firebase UID")
+                await identifyCurrentUser()
+            }
+        } else {
+            print("🔐 RevenueCat: ❌ No Firebase user available for repair")
+            return false
+        }
+        
+        // Step 1: Validate receipt
+        let receiptValid = await debugReceiptStatus()
+        if !receiptValid {
+            print("🔐 RevenueCat: ❌ Receipt validation failed")
+        }
+        
+        // Step 2: Force sync with RevenueCat
+        do {
+            print("🔐 RevenueCat: Forcing sync with RevenueCat")
+            try await syncPurchasesWithRetry(maxRetries: 3)
+            print("🔐 RevenueCat: Sync completed")
+        } catch {
+            print("🔐 RevenueCat: ❌ Sync failed: \(error.localizedDescription)")
+        }
+        
+        // Step 3: Update subscription status
+        await updateSubscriptionStatus()
+        
+        // Check if repair was successful
+        let success = self.isProUser
+        print("🔐 RevenueCat: Repair attempt completed. Pro status: \(success)")
+        return success
+    }
+    
+    /// Migrates a subscription from an anonymous user to an identified user
+    /// Call this when a user logs in to ensure their purchases are transferred
+    /// Returns true if a transfer occurred, false otherwise
+    func migrateAnonymousSubscription() async -> Bool {
+        guard let currentUser = Auth.auth().currentUser else {
+            print("🔐 RevenueCat: Cannot migrate subscription - No Firebase user is logged in")
+            return false
+        }
+
+        print("🔐 RevenueCat: Attempting to migrate anonymous subscription to user: \(currentUser.uid)")
+        print("🔐 RevenueCat: Current RevenueCat AppUserID: \(Purchases.shared.appUserID)")
+        
+        // Skip if already properly identified
+        if Purchases.shared.appUserID == currentUser.uid {
+            print("🔐 RevenueCat: User already identified with correct UID, no migration needed")
+            return false
+        }
+        
+        do {
+            // Perform login which will trigger migration if needed
+            let loginResult = try await Purchases.shared.logIn(currentUser.uid)
+            
+            // Store the current RevenueCat user ID
+            self.currentRevenueCatUID = currentUser.uid
+            
+            // Check if a transfer occurred (.created = false means a transfer happened)
+            let transferOccurred = !loginResult.created
+            
+            if transferOccurred {
+                print("🔐 RevenueCat: ✅ Successfully migrated subscription from anonymous user to \(currentUser.uid)")
+                print("🔐 RevenueCat: Original AppUserID: \(loginResult.customerInfo.originalAppUserId)")
+                print("🔐 RevenueCat: Current AppUserID: \(Purchases.shared.appUserID)")
+                
+                // Get all entitlements
+                let entitlements = loginResult.customerInfo.entitlements.active
+                print("🔐 RevenueCat: Migrated entitlements: \(entitlements.keys.joined(separator: ", "))")
+                
+                // Force sync purchases after migration
+                try await Purchases.shared.syncPurchases()
+                print("🔐 RevenueCat: Explicitly synced purchases after migration")
+                
+                // Update subscription status
+                await updateSubscriptionStatus()
+                
+                // Force sync with RevenueCat to ensure receipt is properly associated
+                print("🔐 RevenueCat: Force syncing with RevenueCat after migration")
+                try await syncPurchasesWithRetry(maxRetries: 3)
+                
+                return true
+            } else {
+                print("🔐 RevenueCat: No subscription transfer needed - this is a new user")
+                
+                // Still sync purchases to ensure any App Store receipts are properly associated
+                try await Purchases.shared.syncPurchases()
+                print("🔐 RevenueCat: Synced purchases for new user")
+                
+                // Update subscription status
+                await updateSubscriptionStatus()
+                
+                return false
+            }
+        } catch {
+            print("🔐 RevenueCat: ❌ Migration failed: \(error.localizedDescription)")
+            
+            // Still update subscription status to make sure it reflects current state
+            await updateSubscriptionStatus()
+            
+            return false
+        }
+    }
+    
+    /// Provides detailed diagnostic information about the subscription state
+    /// Useful for support and debugging subscription issues
+    func getSubscriptionDiagnostics() async -> [String: Any] {
+        var diagnostics: [String: Any] = [:]
+        
+        // User identification info
+        diagnostics["firebaseUID"] = Auth.auth().currentUser?.uid ?? "none"
+        diagnostics["currentRevenueCatUserID"] = Purchases.shared.appUserID
+        
+        // Get customer info
+        do {
+            let customerInfo = try await Purchases.shared.customerInfo()
+            diagnostics["originalPurchaserID"] = customerInfo.originalAppUserId
+            diagnostics["activeEntitlements"] = Array(customerInfo.entitlements.active.keys)
+            diagnostics["activeSubscriptions"] = Array(customerInfo.activeSubscriptions)
+            diagnostics["isProUser"] = isProUser
+            
+            // Receipt validation
+            let receiptURL = Bundle.main.appStoreReceiptURL
+            diagnostics["receiptExists"] = receiptURL != nil && FileManager.default.fileExists(atPath: receiptURL!.path)
+            diagnostics["receiptPath"] = receiptURL?.path ?? "none"
+            
+            // Add receipt file size if exists
+            if let receiptURL = receiptURL, 
+               let attributes = try? FileManager.default.attributesOfItem(atPath: receiptURL.path),
+               let fileSize = attributes[.size] as? Int {
+                diagnostics["receiptFileSize"] = fileSize
+            }
+            
+            // Attempt migration status
+            let migrationNeeded = Purchases.shared.appUserID != Auth.auth().currentUser?.uid && 
+                                 Auth.auth().currentUser != nil
+            diagnostics["migrationNeeded"] = migrationNeeded
+            
+            // OS and app version info
+            diagnostics["osVersion"] = UIDevice.current.systemVersion
+            if let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                diagnostics["appVersion"] = appVersion
+            }
+        } catch {
+            diagnostics["error"] = error.localizedDescription
+        }
+        
+        return diagnostics
+    }
+    
+    // Add this new method to SubscriptionService.swift:
+    private func syncPurchasesWithRetry(maxRetries: Int) async throws {
+        var retryCount = 0
+        var lastError: Error?
+        
+        while retryCount < maxRetries {
+            do {
+                try await Purchases.shared.syncPurchases()
+                print("🔐 RevenueCat: Successfully synced purchases with RevenueCat (attempt \(retryCount + 1))")
+                return
+            } catch {
+                lastError = error
+                print("🔐 RevenueCat: Failed to sync purchases (attempt \(retryCount + 1)): \(error.localizedDescription)")
+                retryCount += 1
+                
+                if retryCount < maxRetries {
+                    // Exponential backoff: 1s, 2s, 4s
+                    let delay = TimeInterval(pow(2.0, Double(retryCount - 1)))
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+            }
+        }
+        
+        if let lastError = lastError {
+            throw lastError
         }
     }
 }
@@ -1379,70 +2087,77 @@ class SubscriptionService: NSObject, ObservableObject {
 // MARK: - PurchasesDelegate
 extension SubscriptionService: PurchasesDelegate {
     func purchases(_ purchases: Purchases, receivedUpdatedCustomerInfo customerInfo: CustomerInfo) {
-        Task { @MainActor in
-            print("🔐 RevenueCat delegate: Received updated customer info")
-            print("🔐 RevenueCat delegate: Current appUserID: \(Purchases.shared.appUserID)")
-            print("🔐 RevenueCat delegate: Current Firebase UID: \(Auth.auth().currentUser?.uid ?? "none")")
-            print("🔐 RevenueCat delegate: All entitlements: \(customerInfo.entitlements.all.keys)")
-            print("🔐 RevenueCat delegate: Active entitlements: \(customerInfo.entitlements.active.keys)")
-            
-        self.customerInfo = customerInfo
-            
-            // Check for potential refund or cancellation
-            if let proEntitlement = customerInfo.entitlements["Pro"], 
-               proEntitlement.isActive == false && self.isProUser == true {
-                print("🔐 RevenueCat delegate: Detected potential refund or cancellation")
-                logPossibleRefund()
+        print("🔐 RevenueCat: Received updated CustomerInfo notification from RevenueCat")
+        
+        // Verify that the current Firebase user ID matches the RevenueCat ID
+        let currentFirebaseUID = Auth.auth().currentUser?.uid
+        
+        // Create a detached task to handle async operations
+        Task.detached {
+            await self.handleCustomerInfoUpdate(customerInfo: customerInfo, currentFirebaseUID: currentFirebaseUID)
+        }
+    }
+    
+    // New helper method to handle async operations for customer info updates
+    private func handleCustomerInfoUpdate(customerInfo: CustomerInfo, currentFirebaseUID: String?) async {
+        // Make sure we're on the main thread for any UI updates
+        await MainActor.run {
+            // Check if we have a current Firebase user
+            guard let currentFirebaseUID = currentFirebaseUID else {
+                print("🔐 RevenueCat: No Firebase user available, ignoring CustomerInfo update")
+                return
             }
             
-            // Only apply entitlements if the current RevenueCat user matches the Firebase user
-            if let currentFirebaseUID = Auth.auth().currentUser?.uid, 
-               Purchases.shared.appUserID == currentFirebaseUID {
+            // Check if RevenueCat ID matches Firebase UID
+            if Purchases.shared.appUserID != currentFirebaseUID {
+                print("🔐 RevenueCat: AppUserID mismatch during subscription status change")
+                print("🔐 RevenueCat: RevenueCat ID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: Firebase UID: \(currentFirebaseUID)")
                 
-                // Update pro status based on latest customer info
-                let activeEntitlements = customerInfo.entitlements.active
-                let hasPro = activeEntitlements["Pro"]?.isActive ?? false
-                
-                print("🔐 RevenueCat delegate: Firebase UID \(currentFirebaseUID) has Pro entitlement: \(hasPro)")
-                
-                // Check for expiration date and potential renewal issues
-                checkSubscriptionExpirationStatus(customerInfo: customerInfo)
-                
-                // Cache the subscription status for offline use
-                UserDefaults.standard.set(hasPro, forKey: "cachedProStatus")
-                UserDefaults.standard.set(self.renewalDate, forKey: "cachedExpirationDate")
-                
-                // Update subscription status
-                if self.isProUser != hasPro {
-                    print("🔐 RevenueCat delegate: Updated Pro status: \(hasPro)")
-                    self.isProUser = hasPro
-                    self.renewalDate = activeEntitlements["Pro"]?.expirationDate
-                    
-                    // Post notification about status change
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("SubscriptionStatusChanged"),
-                        object: nil,
-                        userInfo: ["isProUser": hasPro]
-                    )
-                }
-            } else {
-                // If there's a mismatch, force the user to non-Pro
-                print("🔐 RevenueCat delegate: AppUserID mismatch - not applying Pro entitlements")
                 if self.isProUser {
                     self.isProUser = false
                     self.renewalDate = nil
                     
-                    // Clear cached data for security
+                    // Clear cached data
+                    UserDefaults.standard.removeObject(forKey: "cachedProStatus")
+                    UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
+                }
+                
+                // Create a new task for the async operation
+                Task {
+                    // Re-identify user to fix the mismatch
+                    await self.identifyCurrentUser()
+                }
+                return
+            }
+            
+            // Also check if the original purchaser matches the current user
+            if !customerInfo.originalAppUserId.isEmpty && 
+               customerInfo.originalAppUserId != currentFirebaseUID {
+                
+                print("🔐 RevenueCat: Original purchaser (\(customerInfo.originalAppUserId)) doesn't match current user (\(currentFirebaseUID))")
+                
+                if self.isProUser {
+                    self.isProUser = false
+                    self.renewalDate = nil
+                    
+                    // Clear cached data
                     UserDefaults.standard.removeObject(forKey: "cachedProStatus")
                     UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
                     
-                    // Post notification about status change
+                    // Notify about subscription status change
                     NotificationCenter.default.post(
                         name: NSNotification.Name("SubscriptionStatusChanged"),
                         object: nil,
                         userInfo: ["isProUser": false]
                     )
                 }
+                return
+            }
+            
+            // Both RevenueCat ID and original purchaser match - update status
+            Task {
+                await self.updateSubscriptionStatus(forceVerification: true)
             }
         }
     }

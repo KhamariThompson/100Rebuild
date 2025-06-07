@@ -45,14 +45,27 @@ struct UsernameSetupView: View {
                         .cornerRadius(CalAIDesignTokens.buttonRadius)
                         .overlay(
                             RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                                .stroke(Color.theme.border.opacity(0.3), lineWidth: 1)
+                                .stroke(
+                                    viewModel.isValid ? Color.theme.accent : 
+                                    (viewModel.error != nil ? Color.theme.error : Color.theme.border.opacity(0.3)),
+                                    lineWidth: 1
+                                )
                         )
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                         .focused($isUsernameFocused)
                         .submitLabel(.done)
                         .onChange(of: viewModel.username) { newValue in
-                            if !newValue.isEmpty {
+                            // Immediately filter out invalid characters
+                            let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                            if filtered != newValue {
+                                DispatchQueue.main.async {
+                                    viewModel.username = filtered
+                                }
+                                return
+                            }
+                            
+                            if !filtered.isEmpty {
                                 viewModel.validateUsername()
                             }
                         }
@@ -66,11 +79,33 @@ struct UsernameSetupView: View {
                         }
                     
                     if let error = viewModel.error {
-                        Text(error)
-                            .font(.system(size: 13))
-                            .foregroundColor(Color.theme.error)
-                            .padding(.top, 4)
-                            .padding(.horizontal, 4)
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color.theme.error)
+                            
+                            Text(error)
+                                .font(.system(size: 13))
+                                .foregroundColor(Color.theme.error)
+                        }
+                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: error)
+                    } else if viewModel.isValid {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(Color.theme.success)
+                            
+                            Text("Username available!")
+                                .font(.system(size: 13))
+                                .foregroundColor(Color.theme.success)
+                        }
+                        .padding(.top, 4)
+                        .padding(.horizontal, 4)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: viewModel.isValid)
                     }
                 }
                 .padding(.horizontal, 24)

@@ -192,11 +192,18 @@ class ChallengeService: ObservableObject {
     }
     
     func archiveChallenge(_ challenge: Challenge) async throws {
+        print("⏱️ Starting archive process for challenge: \(challenge.id)")
+        
         var updatedChallenge = challenge
         updatedChallenge.isArchived = true
+        updatedChallenge.lastModified = Date() // Update the last modified date
+        
+        print("⏱️ Prepared updated challenge with isArchived=true: \(updatedChallenge.id)")
         
         // Save the updated challenge through the store
         try await challengeStore.saveChallenge(updatedChallenge)
+        
+        print("✅ Successfully archived challenge: \(updatedChallenge.id)")
     }
     
     // MARK: - Streak Management
@@ -219,6 +226,66 @@ class ChallengeService: ObservableObject {
         for challenge in challenges {
             try await resetStreakIfMissed(for: challenge)
         }
+    }
+    
+    /// Check for challenges that have expired and need to be restarted
+    /// Returns any challenges that have expired and the user should be asked about restarting
+    func checkForExpiredChallenges() async -> [Challenge] {
+        // Get active challenges that haven't been checked into in more than a day
+        let expiredChallenges = challengeStore.getActiveChallenges().filter { challenge in
+            // Only include challenges that:
+            // 1. Have an expired streak (haven't checked in for more than a day)
+            // 2. Have made progress (at least some days completed)
+            // 3. Are not completed (not reached 100 days)
+            return challenge.hasStreakExpired && 
+                   challenge.daysCompleted > 0 && 
+                   !challenge.isCompleted
+        }
+        
+        return expiredChallenges
+    }
+    
+    /// Restart an expired challenge
+    func restartChallenge(_ challenge: Challenge) async throws -> Challenge {
+        print("🔄 Starting challenge restart process for challenge ID: \(challenge.id)")
+        
+        // Create a new Challenge instance with updated values instead of modifying properties
+        let restartedChallenge = Challenge(
+            id: challenge.id,
+            title: challenge.title,
+            startDate: Date(), // Use current date as the new start date
+            lastCheckInDate: nil,
+            streakCount: 0,
+            daysCompleted: 0,
+            isCompletedToday: false,
+            isArchived: challenge.isArchived,
+            ownerId: challenge.ownerId,
+            lastModified: Date(),
+            isTimed: challenge.isTimed
+        )
+        
+        print("📝 Created restarted challenge object with fresh values")
+        
+        // Save the restarted challenge
+        try await challengeStore.saveChallenge(restartedChallenge)
+        print("✅ Saved restarted challenge to database")
+        
+        // Force a refresh of all challenges to ensure UI updates
+        await challengeStore.refreshChallenges()
+        print("🔄 Forced refresh of all challenges after restart")
+        
+        // Post notification to explicitly inform all observers that this challenge was restarted
+        // This is crucial for updating the UI components like ChallengeCardComponent
+        DispatchQueue.main.async {
+            print("📢 Posting challengesDidUpdateNotification after challenge restart")
+            NotificationCenter.default.post(
+                name: ChallengeStore.challengesDidUpdateNotification,
+                object: nil,
+                userInfo: ["restartedChallengeId": challenge.id]
+            )
+        }
+        
+        return restartedChallenge
     }
     
     /// Fetch all challenges for a user - renamed to avoid conflict

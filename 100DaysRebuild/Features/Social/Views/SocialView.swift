@@ -1,6 +1,7 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import Foundation
 
 struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
@@ -8,8 +9,11 @@ struct SocialView: View {
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var subscriptionService: SubscriptionService
     @State private var scrollOffset: CGFloat = 0
     @State private var showUsernameSetup = false
+    @State private var showNewChallengeModal = false
+    @State private var challengeTitle: String = ""
     
     // Animation states
     @State private var heroAppeared = false
@@ -104,6 +108,19 @@ struct SocialView: View {
             UsernameSetupView()
                 .environmentObject(userSession)
         }
+        .sheet(isPresented: $showNewChallengeModal) {
+            NewChallengeView(isPresented: $showNewChallengeModal, challengeTitle: $challengeTitle) { title, isTimed in
+                Task {
+                    // Handle challenge creation
+                    // This is a placeholder since the social challenges feature is not fully implemented
+                    challengeTitle = ""
+                    showNewChallengeModal = false
+                }
+            }
+            .environmentObject(userSession)
+            .environmentObject(subscriptionService)
+            .environmentObject(ThemeManager.shared)
+        }
         .onAppear {
             // Staggered animations
             withAnimation(.easeOut(duration: 0.6)) {
@@ -191,22 +208,46 @@ struct SocialView: View {
     // 3. Feature Teaser Section
     private var featureTeaseSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Coming Soon")
-                .font(AppTypography.title3())
-                .fontWeight(.bold)
-                .foregroundColor(.theme.text)
-                .padding(.horizontal, AppSpacing.xs)
+            HStack {
+                Text("Coming Soon")
+                    .font(AppTypography.title3())
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+                
+                Spacer()
+                
+                // Test button to directly show modal (for debugging)
+                Button(action: {
+                    showNewChallengeModal = true
+                }) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(.theme.accent)
+                }
+            }
+            .padding(.horizontal, AppSpacing.xs)
             
             // Horizontal scroll of feature cards with improved layout
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: AppSpacing.m) {
-                    ForEach(featureCards) { card in
-                        FeatureTeaseCard(
-                            title: card.title,
-                            description: card.description,
-                            iconName: card.iconName
-                        )
-                        .frame(width: 180, height: 200)
+                    ForEach(Array(featureCards.enumerated()), id: \.offset) { index, card in
+                        Button {
+                            // Show new challenge modal when Group Challenges card is tapped
+                            if index == 0 { // Group Challenges is the first card
+                                showNewChallengeModal = true
+                            }
+                            
+                            // Haptic feedback
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                        } label: {
+                            FeatureTeaseCard(
+                                title: card.title,
+                                description: card.description,
+                                iconName: card.iconName
+                            )
+                            .frame(width: 180, height: 200)
+                        }
                     }
                 }
                 .padding(.horizontal, AppSpacing.m)
@@ -542,11 +583,12 @@ struct SocialView: View {
 
 // MARK: - Supporting Views and Models
 
-// Username Input View for username setup
+// Username Input View for username setup with improved stability
 struct UsernameInputView: View {
     @ObservedObject var viewModel: SocialViewModel
     @FocusState private var isUsernameFocused: Bool
     @State private var localUsername: String = ""
+    @State private var isFirstAppear = true
     @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
@@ -571,43 +613,86 @@ struct UsernameInputView: View {
                 .focused($isUsernameFocused)
                 .autocapitalization(.none)
                 .disableAutocorrection(true)
-                .onChange(of: localUsername) { _ in 
-                    // Only update viewModel when needed (debounce in ViewModel)
-                    viewModel.validateUsername(username: localUsername)
+                .onChange(of: localUsername) { newValue in
+                    // Filter out invalid characters immediately
+                    let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                    if filtered != newValue {
+                        localUsername = filtered
+                        return
+                    }
+                    
+                    // Only update viewModel when needed
+                    viewModel.validateUsername(username: filtered)
                 }
             
-            // Validation message
+            // Validation message with improved styling
             if !viewModel.validationMessage.isEmpty {
-                Text(viewModel.validationMessage)
-                    .font(.caption)
-                    .foregroundColor(viewModel.validationMessageColor)
+                HStack {
+                    // Show different icons based on validation state
+                    if viewModel.isCheckingUsername {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else if viewModel.validationMessage == "Username available!" {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    } else if viewModel.usernameStatus == .invalid || 
+                              (viewModel.usernameStatus.hasError) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.red)
+                    }
+                    
+                    Text(viewModel.validationMessage)
+                        .font(.caption)
+                        .foregroundColor(viewModel.validationMessageColor)
+                }
+                .padding(.top, 4)
+                .animation(.easeInOut(duration: 0.2), value: viewModel.validationMessage)
             }
             
-            // Claim button
+            // Claim button with improved state management
             Button {
                 Task {
                     await viewModel.claimUsername()
                 }
             } label: {
-                Text("Claim Username")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(colorScheme == .dark ? .black : .white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .background(viewModel.canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.3))
-                    .cornerRadius(10)
+                HStack {
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .tint(colorScheme == .dark ? .black : .white)
+                            .scaleEffect(0.8)
+                            .padding(.trailing, 4)
+                    }
+                    
+                    Text("Claim Username")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(viewModel.canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.3))
+                .cornerRadius(10)
             }
-            .disabled(!viewModel.canClaimUsername)
+            .disabled(!viewModel.canClaimUsername || viewModel.isLoading)
             .padding(.top, 8)
         }
         .padding()
         .onAppear {
-            // Initialize local username from view model
-            localUsername = viewModel.username
-            
-            // Auto-focus the username field with a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                isUsernameFocused = true
+            // Only auto-focus and set up initial values on first appear
+            if isFirstAppear {
+                // Initialize local username from view model if it exists
+                localUsername = viewModel.username
+                
+                // Auto-focus the username field with a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isUsernameFocused = true
+                    isFirstAppear = false
+                }
+            }
+        }
+        .onChange(of: viewModel.username) { newValue in
+            // Keep local username in sync with viewModel when changed externally
+            if newValue != localUsername {
+                localUsername = newValue
             }
         }
     }

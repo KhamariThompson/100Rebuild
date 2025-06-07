@@ -87,19 +87,24 @@ class ChallengeStore: ObservableObject {
         // Cancel any existing task
         loadTask?.cancel()
         
-        isLoading = true
+        // First load from cache for immediate response
+        let hasCachedData = loadChallengesFromCache()
+        
+        // Set loading state only if we don't have cached data
+        if !hasCachedData {
+            isLoading = true
+        }
+        
         error = nil
         
-        // First load from cache for immediate response
-        loadChallengesFromCache()
-        
-        // Return if offline but we have cached data
+        // Return early if offline but we have cached data
         if networkMonitor.isConnected == false {
             isLoading = false
             updateMetrics()
             return
         }
         
+        // Use separate task for network operations to keep UI responsive
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             
@@ -153,24 +158,42 @@ class ChallengeStore: ObservableObject {
     
     /// Save a challenge (create or update)
     func saveChallenge(_ challenge: Challenge) async throws {
+        print("🔄 Starting saveChallenge for: \(challenge.id), title: \(challenge.title), isArchived: \(challenge.isArchived)")
+        
         guard let userId = userSession.currentUser?.uid else {
+            print("❌ ERROR: User not authenticated when saving challenge")
             throw ChallengeError.userNotAuthenticated
         }
         
-        // Update to Firestore
-        let challengeRef = firestore
-            .collection("users")
-            .document(userId)
-            .collection("challenges")
-            .document(challenge.id.uuidString)
+        print("👤 User authenticated: \(userId)")
         
-        try await challengeRef.setData(challenge.asDictionary())
-        
-        // Update local challenges array
-        await updateLocalChallenges(challenge)
-        
-        // Notify observers
-        NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
+        do {
+            // Update to Firestore
+            let challengeRef = firestore
+                .collection("users")
+                .document(userId)
+                .collection("challenges")
+                .document(challenge.id.uuidString)
+            
+            let challengeData = challenge.asDictionary()
+            print("📝 Challenge data prepared for Firestore")
+            
+            try await challengeRef.setData(challengeData)
+            print("✅ Challenge saved to Firestore successfully: \(challenge.id)")
+            
+            // Update local challenges array
+            await updateLocalChallenges(challenge)
+            print("📱 Local challenges updated with: \(challenge.id)")
+            
+            // Notify observers
+            NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
+            print("📢 Notification sent for challenge update")
+            
+            return
+        } catch {
+            print("❌ ERROR saving challenge: \(error.localizedDescription)")
+            throw error
+        }
     }
     
     /// Delete a challenge
@@ -229,7 +252,19 @@ class ChallengeStore: ObservableObject {
     
     /// Get active challenges (not archived)
     func getActiveChallenges() -> [Challenge] {
-        challenges.filter { !$0.isArchived }
+        let activeOnes = challenges.filter { !$0.isArchived }
+        print("ChallengeStore: getActiveChallenges found \(activeOnes.count) active challenges")
+        
+        if activeOnes.isEmpty {
+            print("ChallengeStore: Warning - No active challenges found!")
+        } else {
+            // Print first 3 challenges for debugging
+            for (index, challenge) in activeOnes.prefix(3).enumerated() {
+                print("ChallengeStore: Active challenge #\(index+1): \(challenge.title), ID: \(challenge.id)")
+            }
+        }
+        
+        return activeOnes
     }
     
     /// Get archived challenges
@@ -295,6 +330,51 @@ class ChallengeStore: ObservableObject {
         
         // Post notification to update UI
         NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
+    }
+    
+    /// Refresh a specific challenge by ID
+    func refreshChallenge(id: UUID) async {
+        guard let userId = userSession.currentUser?.uid else { return }
+        
+        do {
+            print("🔄 Starting refresh for specific challenge: \(id)")
+            
+            // Fetch the challenge from Firestore
+            let challengeRef = firestore
+                .collection("users")
+                .document(userId)
+                .collection("challenges")
+                .document(id.uuidString)
+            
+            let document = try await challengeRef.getDocument()
+            
+            if document.exists, let data = document.data() {
+                // Convert to Challenge
+                do {
+                    let refreshedChallenge = try document.data(as: Challenge.self)
+                    print("✅ Successfully fetched challenge \(id) from Firestore")
+                    
+                    // Update in the local array
+                    await updateLocalChallenges(refreshedChallenge)
+                    
+                    // Post notification with specifics about which challenge was updated
+                    await MainActor.run {
+                        print("📢 Posting notification that challenge \(id) was refreshed")
+                        NotificationCenter.default.post(
+                            name: Self.challengesDidUpdateNotification, 
+                            object: nil,
+                            userInfo: ["refreshedChallengeId": id]
+                        )
+                    }
+                } catch {
+                    print("❌ Error parsing challenge: \(error.localizedDescription)")
+                }
+            } else {
+                print("⚠️ Challenge \(id) not found in Firestore")
+            }
+        } catch {
+            print("❌ Error refreshing challenge \(id): \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Private Methods
@@ -365,8 +445,8 @@ class ChallengeStore: ObservableObject {
     }
     
     /// Load challenges from local cache
-    private func loadChallengesFromCache() {
-        guard let data = UserDefaults.standard.data(forKey: localChallengesKey) else { return }
+    private func loadChallengesFromCache() -> Bool {
+        guard let data = UserDefaults.standard.data(forKey: localChallengesKey) else { return false }
         
         do {
             let decodedChallenges = try JSONDecoder().decode([Challenge].self, from: data)
@@ -379,10 +459,12 @@ class ChallengeStore: ObservableObject {
                     }
                     updateMetrics()
                 }
+                return true
             }
         } catch {
             print("Error loading challenges from cache: \(error)")
         }
+        return false
     }
     
     /// Save challenges to local cache

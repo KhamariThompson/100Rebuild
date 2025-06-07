@@ -257,9 +257,23 @@ struct ProfileView: View {
                 .padding()
         }
         .sheet(isPresented: $isShowingNewChallenge) {
-            Text("New Challenge")
-                .font(.title)
-                .padding()
+            NewChallengeView(isPresented: $isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
+                Task {
+                    // Create challenge using ChallengesViewModel
+                    // We'll send a notification to have the ChallengesViewModel handle this
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("CreateNewChallenge"),
+                        object: nil,
+                        userInfo: ["title": title, "isTimed": isTimed]
+                    )
+                    
+                    // Close the sheet
+                    isShowingNewChallenge = false
+                }
+            }
+            .environmentObject(userSession)
+            .environmentObject(subscriptionService)
+            .environmentObject(ThemeManager.shared)
         }
         .sheet(isPresented: $isShowingUsernamePrompt) {
             UsernamePromptView(username: $viewModel.newUsername, onSave: {

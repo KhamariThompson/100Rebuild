@@ -190,16 +190,33 @@ struct ProgressView: View {
             print("ProgressView - Manual refresh triggered")
             await refreshData()
         }
-        .onAppear {
-            if !hasLoadedOnce {
-                print("ProgressView - Initial load")
+        .onChange(of: subscriptionService.isProUser) { isPro in
+            // Refresh data when user upgrades to Pro to ensure analytics are accurate
+            if isPro {
                 Task {
+                    print("ProgressView - User upgraded to Pro, refreshing analytics")
                     await refreshData()
-                    hasLoadedOnce = true
                 }
             }
-            setupSignOutListener()
-            setupAuthStateListener()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: BadgeService.badgesDidUpdateNotification)) { _ in
+            // Force refresh when badges are updated
+            Task {
+                print("ProgressView - Badges were updated, refreshing data")
+                await refreshData()
+            }
+        }
+        .onAppear {
+            // Load data when view appears if we haven't loaded recently
+            if shouldRefresh() {
+                Task {
+                    print("ProgressView - onAppear, loading data")
+                    await refreshData()
+                }
+            }
+            
+            // Mark as having loaded once to avoid showing loading spinner again
+            hasLoadedOnce = viewModel.hasData
         }
         .onChange(of: userStatsService.userStats) { newValue in
             if hasLoadedOnce {
@@ -212,7 +229,6 @@ struct ProgressView: View {
         .onDisappear {
             print("ProgressView - onDisappear")
             cancelCurrentTask()
-            removeSignOutListener()
         }
         .sheet(item: $selectedBadge) { badge in
             BadgeDetailView(badge: badge)
@@ -244,6 +260,15 @@ struct ProgressView: View {
                     await refreshData()
                 }
             }
+        }
+        .sheet(isPresented: $subscriptionService.showPaywall, onDismiss: {
+            // Check subscription status when paywall is dismissed
+            Task {
+                await subscriptionService.refreshSubscriptionStatus()
+            }
+        }) {
+            PaywallView()
+                .environmentObject(subscriptionService)
         }
     }
     
@@ -299,9 +324,9 @@ struct ProgressView: View {
                 }
                 .frame(maxWidth: .infinity)
                 
-                // Percent complete
+                // Percent complete - use global completion percentage from userStatsService
                 VStack(alignment: .center, spacing: 4) {
-                    Text("\(Int(viewModel.completionPercentage * 100))%")
+                    Text("\(Int(userStatsService.userStats.overallCompletionPercentage * 100))%")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(Color.theme.text)
                     Text("Complete")
@@ -324,7 +349,7 @@ struct ProgressView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, AppSpacing.s)
             
-            // Optional radial ring progress chart
+            // Optional radial ring progress chart - update to use global completion percentage
             ZStack {
                 // Background ring
                 Circle()
@@ -334,15 +359,15 @@ struct ProgressView: View {
                 
                 // Progress ring
                 Circle()
-                    .trim(from: 0.0, to: CGFloat(min(viewModel.completionPercentage, 1.0)))
+                    .trim(from: 0.0, to: CGFloat(min(userStatsService.userStats.overallCompletionPercentage, 1.0)))
                     .stroke(style: StrokeStyle(lineWidth: 16, lineCap: .round, lineJoin: .round))
                     .foregroundColor(Color.theme.accent)
                     .rotationEffect(Angle(degrees: 270.0))
-                    .animation(.easeInOut(duration: 1.0), value: viewModel.completionPercentage)
+                    .animation(.easeInOut(duration: 1.0), value: userStatsService.userStats.overallCompletionPercentage)
                 
                 // Center content
                 VStack(spacing: 0) {
-                    Text("\(Int(viewModel.completionPercentage * 100))%")
+                    Text("\(Int(userStatsService.userStats.overallCompletionPercentage * 100))%")
                         .font(.system(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(Color.theme.text)
                     
@@ -730,6 +755,24 @@ struct ProgressView: View {
                 
                 Spacer()
                 
+                // Refresh button for Pro users
+                if subscriptionService.isProUser {
+                    Button(action: {
+                        // Refresh analytics data
+                        let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+                        feedbackGenerator.impactOccurred()
+                        
+                        Task {
+                            await viewModel.refreshAnalyticsData()
+                        }
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 16))
+                            .foregroundColor(.theme.accent)
+                    }
+                    .padding(.trailing, 8)
+                }
+                
                 // PRO badge for subscribers
                 if subscriptionService.isProUser {
                     Text("PRO")
@@ -788,6 +831,17 @@ struct ProgressView: View {
                             value: "\(viewModel.activeDaysThisYear)",
                             icon: "checkmark.circle.fill",
                             color: .theme.accent
+                        )
+                    }
+                    
+                    // Overall check-in rate - row 3
+                    HStack(spacing: AppSpacing.m) {
+                        // Overall rate
+                        metricCard(
+                            title: "Overall Consistency",
+                            value: "\(Int(viewModel.totalCheckInRate * 100))%",
+                            icon: "chart.pie.fill",
+                            color: .purple
                         )
                     }
                     
@@ -980,12 +1034,12 @@ struct ProgressView: View {
                         .padding(.bottom, AppSpacing.xs)
                         
                         Button(action: {
-                            // Show upgrade prompt
-                            viewModel.showProUpgradeSheet = true
+                            // Show the real paywall instead of upgrade sheet
+                            subscriptionService.showPaywall = true
                         }) {
                             Text("Upgrade to Pro")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(colorScheme == .dark ? .black : .white)
                                 .padding(.vertical, 12)
                                 .padding(.horizontal, 32)
                                 .background(
@@ -1217,53 +1271,6 @@ struct ProgressView: View {
         isRefreshing = false
     }
 
-    // Add a notification listener for sign-out preparation
-    private func setupSignOutListener() {
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("PreparingForSignOut"),
-            object: nil,
-            queue: .main
-        ) { _ in
-            print("ProgressView - Received sign-out notification, cleaning up")
-            self.cancelCurrentTask()
-        }
-    }
-
-    // Add a notification listener for auth state changes
-    private func setupAuthStateListener() {
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("AuthStateChanged"),
-            object: nil,
-            queue: .main
-        ) { _ in
-            if let userId = Auth.auth().currentUser?.uid {
-                print("ProgressView - Auth state changed, user logged in: \(userId)")
-                Task {
-                    // Reset the loading state first
-                    hasLoadedOnce = false
-                    // Refresh data
-                    await refreshData()
-                    hasLoadedOnce = true
-                }
-            }
-        }
-    }
-
-    // Remove the observer when the view disappears
-    private func removeSignOutListener() {
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSNotification.Name("PreparingForSignOut"),
-            object: nil
-        )
-        
-        NotificationCenter.default.removeObserver(
-            self,
-            name: NSNotification.Name("AuthStateChanged"),
-            object: nil
-        )
-    }
-    
     // Loading view with progress indicator
     private var loadingView: some View {
         VStack(spacing: 20) {
@@ -1381,10 +1388,20 @@ struct ProgressView: View {
 struct ProgressAnalyticsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var viewModel: ProgressDashboardViewModel
+    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @State private var isRefreshing = false
     
     var body: some View {
         NavigationView {
             ScrollView {
+                // Pull to refresh functionality
+                PullToRefresh(isRefreshing: $isRefreshing) {
+                    Task {
+                        isRefreshing = true
+                        await viewModel.refreshAnalyticsData()
+                        isRefreshing = false
+                    }
+                }
                 VStack(spacing: 24) {
                     // Progress Summary Card
                     VStack(alignment: .leading, spacing: 16) {
@@ -1454,6 +1471,15 @@ struct ProgressAnalyticsView: View {
                 .frame(height: 44)
                 .background(Color.clear)
             }
+        }
+        .sheet(isPresented: $subscriptionService.showPaywall, onDismiss: {
+            // Check subscription status when paywall is dismissed
+            Task {
+                await subscriptionService.refreshSubscriptionStatus()
+            }
+        }) {
+            PaywallView()
+                .environmentObject(subscriptionService)
         }
     }
 }

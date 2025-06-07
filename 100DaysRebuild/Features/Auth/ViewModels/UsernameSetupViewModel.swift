@@ -33,11 +33,11 @@ class UsernameSetupViewModel: ObservableObject {
             return
         }
         
-        // Create a new debounced task
+        // Create a new debounced task with increased debounce time
         validationTask = Task {
             do {
-                // Add debounce delay to prevent rapid UI updates
-                try await Task.sleep(nanoseconds: 600_000_000) // 600ms debounce
+                // Longer debounce delay to prevent UI flickering
+                try await Task.sleep(nanoseconds: 800_000_000) // 800ms debounce
                 
                 if !Task.isCancelled {
                     // Check availability after typing stops

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import FirebaseAuth
 
 @MainActor
 class MainAppViewModel: ObservableObject {
@@ -15,6 +16,7 @@ class MainAppViewModel: ObservableObject {
     init() {
         setupCleanup()
         setupSubscriptionMonitoring()
+        setupAppLifecycleHandling()
     }
     
     deinit {
@@ -49,6 +51,39 @@ class MainAppViewModel: ObservableObject {
     }
     
     // MARK: - Private Methods
+    
+    private func setupAppLifecycleHandling() {
+        // Listen for app becoming active to check for expired challenges
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task {
+                    await self?.checkForExpiredChallenges()
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    /// Check for expired challenges when the app becomes active
+    private func checkForExpiredChallenges() async {
+        guard Auth.auth().currentUser != nil else { return }
+        
+        // Use ChallengeService to check for expired challenges
+        do {
+            // Get expired challenges
+            let expiredChallenges = await ChallengeService.shared.checkForExpiredChallenges()
+            
+            // If there are expired challenges, post a notification for the ChallengesViewModel to handle
+            if !expiredChallenges.isEmpty {
+                // Post notification so the ChallengesViewModel can handle showing the alert
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("CheckForExpiredChallenges"),
+                    object: nil
+                )
+            }
+        } catch {
+            print("Error checking for expired challenges: \(error.localizedDescription)")
+        }
+    }
     
     private func setupSubscriptionMonitoring() {
         // Monitor the subscription service's showPaywall property
@@ -101,7 +136,14 @@ class MainAppViewModel: ObservableObject {
                 print("🔐 RevenueCat: MainAppViewModel - App became active, verifying subscription status")
                 Task {
                     // Force refresh subscription status
-                    await SubscriptionService.shared.updateSubscriptionStatus(forceReset: false)
+                    await SubscriptionService.shared.updateSubscriptionStatus()
+                    
+                    // Attempt to migrate subscription from anonymous user if needed
+                    if Auth.auth().currentUser != nil {
+                        print("🔐 RevenueCat: MainAppViewModel - Checking for anonymous subscription to migrate")
+                        let migrationOccurred = await SubscriptionService.shared.migrateAnonymousSubscription()
+                        print("🔐 RevenueCat: MainAppViewModel - Migration result: \(migrationOccurred ? "Transferred subscription" : "No migration needed")")
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -114,6 +156,23 @@ class MainAppViewModel: ObservableObject {
                 Task {
                     // Verify subscription status when auth state changes
                     await SubscriptionService.shared.identifyCurrentUser()
+                    
+                    // Also attempt migration after auth state changes (e.g., user logs in)
+                    if Auth.auth().currentUser != nil {
+                        print("🔐 RevenueCat: MainAppViewModel - Auth state changed, checking for subscription migration")
+                        _ = await SubscriptionService.shared.migrateAnonymousSubscription()
+                    }
+                }
+            }
+            .store(in: &cancellables)
+            
+        // Listen for successful subscription migrations
+        NotificationCenter.default.publisher(for: NSNotification.Name("SubscriptionMigrationCompleted"))
+            .sink { [weak self] notification in
+                guard let _ = self else { return }
+                if let originalUserId = notification.userInfo?["originalAppUserId"] as? String {
+                    print("🔐 RevenueCat: MainAppViewModel - Subscription successfully migrated from user: \(originalUserId)")
+                    // Could add UI feedback here if desired
                 }
             }
             .store(in: &cancellables)
