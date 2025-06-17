@@ -3,6 +3,7 @@ import FirebaseAuth
 import FirebaseFirestore
 import Network
 import Firebase
+import RevenueCat
 
 enum AuthState {
     case loading
@@ -15,11 +16,12 @@ enum AuthState {
 class UserSession: ObservableObject {
     static let shared = UserSession()
     
-    @Published private(set) var authState: AuthState = .loading
-    @Published private(set) var isAuthenticated = false
+    @Published var authState: AuthState = .loading
+    @Published var isAuthenticated = false
     @Published private(set) var hasCompletedOnboarding = false
-    @Published private(set) var currentUser: FirebaseAuth.User?
+    @Published var currentUser: FirebaseAuth.User?
     @Published private(set) var username: String?
+    @Published private(set) var displayName: String?
     @Published private(set) var photoURL: URL?
     @Published var isNetworkAvailable = true
     @Published var errorMessage: String?
@@ -48,23 +50,26 @@ class UserSession: ObservableObject {
     }
     
     deinit {
+        print("⚠️ UserSession deinit started")
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
+            stateListener = nil
         }
         networkMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
+        print("✅ UserSession cleanup completed")
     }
     
     private func setupNetworkMonitoring() {
-        networkMonitor.pathUpdateHandler = { [weak self] path in
+        weak var weakSelf = self
+        networkMonitor.pathUpdateHandler = { path in
             let isConnected = path.status == .satisfied
-            Task { @MainActor in
-                self?.isNetworkAvailable = isConnected
+            Task { @MainActor [weak weakSelf] in
+                guard let self = weakSelf else { return }
+                self.isNetworkAvailable = isConnected
                 
-                // If network becomes available and we're in an error state,
-                // attempt to refresh the auth state
-                if isConnected, case .error = self?.authState {
-                    self?.refreshAuthState()
+                if isConnected, case .error = self.authState {
+                    self.refreshAuthState()
                 }
             }
         }
@@ -105,6 +110,7 @@ class UserSession: ObservableObject {
             currentUser = nil
             isAuthenticated = false
             username = nil
+            displayName = nil
             photoURL = nil
             lastSignInTime = nil
         }
@@ -119,11 +125,15 @@ class UserSession: ObservableObject {
         // Check for existing listener and remove it
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
+            stateListener = nil
         }
         
-        stateListener = auth.addStateDidChangeListener { [weak self] _, user in
-            Task { @MainActor in
-                guard let self = self else { return }
+        // Create a weak reference to self for the listener
+        weak var weakSelf = self
+        
+        stateListener = auth.addStateDidChangeListener { _, user in
+            Task { @MainActor [weak weakSelf] in
+                guard let self = weakSelf else { return }
                 
                 if let user = user {
                     print("UserSession: User authenticated - \(user.uid)")
@@ -138,11 +148,12 @@ class UserSession: ObservableObject {
                     self.currentUser = nil
                     self.isAuthenticated = false
                     self.username = nil
+                    self.displayName = nil
                     self.photoURL = nil
                     self.lastSignInTime = nil
                 }
                 
-                // Notify listeners about auth state change
+                // Notify listeners about auth state change using weak reference
                 self.authStateDidChangeHandler?()
                 
                 // Post notification for SubscriptionService
@@ -177,7 +188,8 @@ class UserSession: ObservableObject {
                     
                     if let data = document.data() {
                         self.username = data["username"] as? String
-                        self.hasCompletedOnboarding = self.username != nil
+                        self.displayName = data["displayName"] as? String
+                        self.hasCompletedOnboarding = data["hasCompletedOnboarding"] as? Bool ?? false
                         
                         if let username = self.username {
                             print("UserSession: Loaded cached profile with username: \(username)")
@@ -186,7 +198,6 @@ class UserSession: ObservableObject {
                             // Even in offline mode, we can set a local username to improve UX
                             let tempUsername = "User\(String(userId.prefix(4)))"
                             self.username = tempUsername
-                            self.hasCompletedOnboarding = true
                             print("UserSession: Using temporary username \(tempUsername) until online")
                         }
                         
@@ -219,7 +230,12 @@ class UserSession: ObservableObject {
             if document.exists, let data = document.data() {
                 print("UserSession: Profile document exists")
                 self.username = data["username"] as? String
-                self.hasCompletedOnboarding = self.username != nil
+                self.displayName = data["displayName"] as? String
+                
+                // Add debug logging for hasCompletedOnboarding
+                let hasCompletedValue = data["hasCompletedOnboarding"] as? Bool ?? false
+                print("DEBUG: Loading hasCompletedOnboarding from Firestore: \(hasCompletedValue)")
+                self.hasCompletedOnboarding = hasCompletedValue
                 
                 if let photoURLString = data["photoURL"] as? String,
                    let url = URL(string: photoURLString) {
@@ -239,6 +255,7 @@ class UserSession: ObservableObject {
                 // Document doesn't exist - this is normal for new users
                 print("UserSession: No profile document exists for user \(userId), creating one")
                 self.username = nil
+                self.displayName = nil
                 self.photoURL = nil
                 self.hasCompletedOnboarding = false
                 
@@ -248,11 +265,10 @@ class UserSession: ObservableObject {
         } catch {
             print("UserSession: Error loading user profile - \(error.localizedDescription)")
             // Log detailed error info for debugging
-            if let nsError = error as NSError? {
-                print("UserSession: Error domain: \(nsError.domain), code: \(nsError.code)")
-                if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-                    print("UserSession: Underlying error: \(underlyingError.localizedDescription)")
-                }
+            let nsError = error as NSError
+            print("UserSession: Error domain: \(nsError.domain), code: \(nsError.code)")
+            if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+                print("UserSession: Underlying error: \(underlyingError.localizedDescription)")
             }
             
             self.errorMessage = "Error loading profile: \(error.localizedDescription)"
@@ -278,14 +294,9 @@ class UserSession: ObservableObject {
             .getDocument()
         
         if !document.exists {
-            // Generate a random username for new users
-            let randomSuffix = String(Int.random(in: 1000...9999))
-            let defaultUsername = "User\(randomSuffix)"
-            
             // Create a Sendable struct for the data to avoid [AnyHashable : Any] Sendable warning
             struct UserProfileData: Sendable {
                 let userId: String
-                let username: String
                 let joinedDate: Date
                 let completedChallenges: Int
                 let currentStreak: Int
@@ -295,7 +306,6 @@ class UserSession: ObservableObject {
             // Create the data using the Sendable struct
             let profileData = UserProfileData(
                 userId: userId,
-                username: defaultUsername,
                 joinedDate: Date(),
                 completedChallenges: 0,
                 currentStreak: 0,
@@ -307,7 +317,6 @@ class UserSession: ObservableObject {
                 // Convert struct to dictionary here
                 let data: [String: Any] = [
                     "userId": profileData.userId,
-                    "username": profileData.username,
                     "createdAt": FieldValue.serverTimestamp(),
                     "joinedDate": profileData.joinedDate,
                     "completedChallenges": profileData.completedChallenges,
@@ -319,59 +328,25 @@ class UserSession: ObservableObject {
                     .collection("users")
                     .document(profileData.userId)
                     .setData(data)
-                
-                // Create the username reservation
-                try await Firestore.firestore()
-                    .collection("usernames")
-                    .document(profileData.username)
-                    .setData(["userId": profileData.userId])
             }.value
             
-            // Set the username locally
+            // No username is set at this point
             await MainActor.run {
-                self.username = defaultUsername
-                self.hasCompletedOnboarding = true
+                self.username = nil
+                self.hasCompletedOnboarding = false
             }
             
-            print("UserSession: Created default profile document with username \(defaultUsername) for user \(userId)")
+            print("UserSession: Created default profile document without username for user \(userId)")
         } else if document.exists && document.data()?["username"] == nil {
-            // Document exists but username is missing - add one
-            let randomSuffix = String(Int.random(in: 1000...9999))
-            let defaultUsername = "User\(randomSuffix)"
+            // Document exists but username is missing - do not add one automatically
+            // User will set their username in the Social view
             
-            // Create a separate struct for this case too
-            struct UsernameUpdateData: Sendable {
-                let userId: String
-                let username: String
-            }
-            
-            let updateData = UsernameUpdateData(
-                userId: userId,
-                username: defaultUsername
-            )
-            
-            // Update using the same Task.detached pattern
-            try await Task.detached {
-                // Update the document with a username
-                try await Firestore.firestore()
-                    .collection("users")
-                    .document(updateData.userId)
-                    .updateData(["username": updateData.username])
-                
-                // Create a reservation for the username
-                try await Firestore.firestore()
-                    .collection("usernames")
-                    .document(updateData.username)
-                    .setData(["userId": updateData.userId])
-            }.value
-            
-            // Set the username locally
             await MainActor.run {
-                self.username = defaultUsername
-                self.hasCompletedOnboarding = true
+                self.username = nil
+                self.hasCompletedOnboarding = false
             }
             
-            print("UserSession: Added missing username \(defaultUsername) to existing user \(userId)")
+            print("UserSession: Profile exists but username is nil, user will set it in Social view")
         }
     }
     
@@ -471,65 +446,82 @@ class UserSession: ObservableObject {
     func signOutWithoutThrowing() async {
         print("DEBUG: UserSession: Starting sign out process")
         
-        do {
-            // Remove existing auth state listener first
-            if let listener = stateListener {
-                auth.removeStateDidChangeListener(listener)
-                stateListener = nil
-            }
-            
-            // Try to sign out using Firebase Auth
-            try auth.signOut()
-            
-            // Reset local state immediately
-            await MainActor.run {
-                authState = .signedOut
-                currentUser = nil
-                isAuthenticated = false
-                username = nil
-                photoURL = nil
-                hasCompletedOnboarding = false
-                errorMessage = nil
-                lastSignInTime = nil
-            }
-            
-            // Force post a notification about auth state change
+        // 1. Notify all components to prepare for sign-out and clean up any pending operations
+        await MainActor.run {
             NotificationCenter.default.post(
-                name: NSNotification.Name("AuthStateChanged"),
+                name: NSNotification.Name("PreparingForSignOut"),
                 object: nil
             )
-            
-            // Set up a new auth state listener
-            setupAuthStateListener()
-            
-            print("DEBUG: UserSession: Successfully signed out user")
-        } catch {
-            print("DEBUG: UserSession: Error during sign out - \(error.localizedDescription)")
-            
-            // Even if Firebase sign out fails, reset local state
-            await MainActor.run {
-                authState = .signedOut
-                currentUser = nil
-                isAuthenticated = false
-                username = nil
-                photoURL = nil
-                hasCompletedOnboarding = false
-                errorMessage = nil
-                lastSignInTime = nil
-            }
-            
-            // Force post a notification about auth state change
-            NotificationCenter.default.post(
-                name: NSNotification.Name("AuthStateChanged"),
-                object: nil
-            )
-            
-            // Set up a new auth state listener
-            setupAuthStateListener()
         }
+        
+        // 2. Specifically prepare ProgressDashboardViewModel for sign-out
+        await MainActor.run {
+            ProgressDashboardViewModel.shared.prepareForSignOut()
+        }
+        
+        // 3. Add a small delay to allow views to complete their cleanup
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        
+        // 4. Remove auth state listener
+        if let listener = stateListener {
+            auth.removeStateDidChangeListener(listener)
+            stateListener = nil
+            print("DEBUG: UserSession: Removed auth state listener")
+        }
+        
+        // 5. Sign out from RevenueCat first
+        do {
+            try await Purchases.shared.logOut()
+            print("DEBUG: UserSession: Successfully signed out from RevenueCat")
+        } catch {
+            print("DEBUG: UserSession: RevenueCat sign out error - \(error.localizedDescription)")
+        }
+        
+        // 6. Reset SubscriptionService completely
+        await SubscriptionService.shared.reset()
+        print("DEBUG: UserSession: Reset SubscriptionService state")
+        
+        // 7. Perform Firebase sign-out
+        do {
+            try auth.signOut()
+            print("DEBUG: UserSession: Successfully signed out from Firebase Auth")
+        } catch {
+            print("DEBUG: UserSession: Firebase sign out error - \(error.localizedDescription)")
+        }
+        
+        // 8. Reset all state
+        await MainActor.run {
+            authState = .signedOut
+            currentUser = nil
+            isAuthenticated = false
+            username = nil
+            displayName = nil
+            photoURL = nil
+            hasCompletedOnboarding = false
+            errorMessage = nil
+            lastSignInTime = nil
+        }
+        
+        // 9. Set up new auth state listener
+        setupAuthStateListener()
+        
+        // 10. Finally, trigger navigation
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: NSNotification.Name("ForceNavigateToWelcome"),
+                object: nil
+            )
+        }
+        
+        print("DEBUG: UserSession: Sign out process completed")
     }
     
     func updateUsername(_ newUsername: String) async throws {
+        guard !newUsername.isEmpty else {
+            throw NSError(domain: "UserSession", code: 106, 
+                         userInfo: [NSLocalizedDescriptionKey: "Username cannot be empty."])
+        }
+        
         guard isNetworkAvailable else {
             throw NSError(domain: "UserSession", code: 100, 
                          userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network settings."])
@@ -577,7 +569,9 @@ class UserSession: ObservableObject {
                 // Check if the username belongs to this user
                 if let ownerId = usernameDoc.data()?["userId"] as? String, ownerId == userId {
                     // Username already belongs to this user, so we can skip the update
-                    self.username = newUsername.lowercased()
+                    await MainActor.run {
+                        self.username = newUsername.lowercased()
+                    }
                     return
                 }
                 
@@ -586,10 +580,7 @@ class UserSession: ObservableObject {
             }
             
             // Get current username for reservation update
-            guard let currentUsername = userDoc.data()?["username"] as? String else {
-                throw NSError(domain: "UserSession", code: 105,
-                             userInfo: [NSLocalizedDescriptionKey: "Couldn't retrieve current username."])
-            }
+            var currentUsername = userDoc.data()?["username"] as? String
             
             // Run transaction to update username and reservation atomically
             try await firestore.runTransaction { [self] transaction, errorPointer in
@@ -600,9 +591,11 @@ class UserSession: ObservableObject {
                     "lastUsernameChangeAt": FieldValue.serverTimestamp()
                 ], forDocument: userRef)
                 
-                // Delete old username reservation
-                let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
-                transaction.deleteDocument(oldUsernameRef)
+                // Delete old username reservation if it exists
+                if let currentUsername = currentUsername, !currentUsername.isEmpty {
+                    let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
+                    transaction.deleteDocument(oldUsernameRef)
+                }
                 
                 // Create new username reservation
                 let newUsernameRef = firestore.collection("usernames").document(newUsername.lowercased())
@@ -612,8 +605,17 @@ class UserSession: ObservableObject {
             }
             
             // Update local state
-            self.username = newUsername.lowercased()
-            self.hasCompletedOnboarding = true
+            await MainActor.run {
+                self.username = newUsername.lowercased()
+                self.hasCompletedOnboarding = true
+                
+                // Notify any observers that the username has been updated
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("UserProfileUpdated"),
+                    object: nil,
+                    userInfo: ["username": newUsername.lowercased()]
+                )
+            }
             
         } catch {
             errorMessage = "Error updating username: \(error.localizedDescription)"
@@ -676,17 +678,105 @@ class UserSession: ObservableObject {
                          userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
         }
         
+        // Create a timeout task
+        let timeoutTask = Task {
+            try await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            throw NSError(domain: "UserSession", code: 102,
+                         userInfo: [NSLocalizedDescriptionKey: "Account deletion timed out. Please try again later."])
+        }
+        
         do {
+            // Check if user was recently authenticated
+            let lastAuthTime = user.metadata.lastSignInDate ?? Date(timeIntervalSince1970: 0)
+            let timeSinceAuth = Date().timeIntervalSince(lastAuthTime)
+            
+            // If it's been more than 30 minutes since authentication, require reauthentication
+            if timeSinceAuth > 1800 {
+                throw NSError(domain: "UserSession", code: 103,
+                             userInfo: [NSLocalizedDescriptionKey: "For security reasons, you need to sign in again before deleting your account."])
+            }
+            
             // 1. Delete all user data from Firestore first
+            print("Starting user data deletion for userId: \(userId)")
             try await FirebaseService.shared.deleteUserData(userId: userId)
+            print("Successfully deleted user data from Firestore")
             
-            // 2. Delete the actual Firebase Auth account
+            // 2. Unlink from RevenueCat if needed
+            try? await Purchases.shared.logOut()
+            print("Logged out from RevenueCat")
+            
+            // 3. Clear cached content
+            try? await URLCache.shared.removeAllCachedResponses()
+            print("Cleared URL cache")
+            
+            // 4. Delete the actual Firebase Auth account
             try await user.delete()
+            print("Successfully deleted Firebase Auth account")
             
-            // 3. Clean up local state - Auth state listener will handle this
+            // 5. Reset local state
+            await MainActor.run {
+                // Remove auth state listener first to prevent race conditions
+                if let listener = self.stateListener {
+                    auth.removeStateDidChangeListener(listener)
+                    self.stateListener = nil
+                }
+                
+                // Reset important state properties
+                self.authState = .signedOut
+                self.currentUser = nil
+                self.isAuthenticated = false
+                self.username = nil
+                self.displayName = nil
+                self.photoURL = nil
+                self.hasCompletedOnboarding = false
+                self.errorMessage = nil
+                self.lastSignInTime = nil
+            }
+            
+            // Post notification for app-wide state reset
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserAccountDeleted"),
+                object: nil
+            )
+            
+            // Cancel the timeout task
+            timeoutTask.cancel()
+            
+            // Add a small delay to allow state updates to propagate
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // 6. Reinitialize auth state listener for future sign-ins
+            setupAuthStateListener()
+            
+            return
         } catch {
-            authState = .error(error)
-            errorMessage = "Error deleting account: \(error.localizedDescription)"
+            // Cancel the timeout task
+            timeoutTask.cancel()
+            
+            // Log the specific error
+            print("Error during account deletion: \(error.localizedDescription)")
+            
+            // Set error state but don't reset other properties
+            await MainActor.run {
+                self.authState = .error(error)
+                self.errorMessage = "Error deleting account: \(error.localizedDescription)"
+            }
+            
+            // Re-throw with enhanced context if needed
+            let nsError = error as NSError
+            if nsError.domain == AuthErrorDomain {
+                switch nsError.code {
+                case AuthErrorCode.requiresRecentLogin.rawValue:
+                    throw NSError(domain: "UserSession", code: 104,
+                                userInfo: [NSLocalizedDescriptionKey: "For security reasons, you need to sign in again before deleting your account."])
+                case AuthErrorCode.networkError.rawValue:
+                    throw NSError(domain: "UserSession", code: 105,
+                                userInfo: [NSLocalizedDescriptionKey: "Network error. Please check your connection and try again."])
+                default:
+                    break
+                }
+            }
+            
             throw error
         }
     }
@@ -827,19 +917,64 @@ class UserSession: ObservableObject {
     
     /// Completes the onboarding process for the user
     func completeOnboarding() async {
-        guard let userId = currentUser?.uid else { return }
+        guard let userId = currentUser?.uid else {
+            print("DEBUG: completeOnboarding - No user ID available")
+            return
+        }
+        
+        print("DEBUG: completeOnboarding - Starting for user \(userId)")
         
         do {
-            // Update Firestore to mark onboarding as completed
+            print("DEBUG: completeOnboarding - Updating Firestore to mark onboarding as completed")
+            // Update Firestore to mark onboarding as completed and save the display name
             try await firestore.collection("users").document(userId).updateData([
-                "hasCompletedOnboarding": true
+                "hasCompletedOnboarding": true,
+                "displayName": self.displayName ?? self.username ?? "" // Use displayName if available, or username as fallback
             ])
             
+            print("DEBUG: completeOnboarding - Firestore update successful")
+            
             // Update local state
-            self.hasCompletedOnboarding = true
+            await MainActor.run {
+                self.hasCompletedOnboarding = true
+                print("DEBUG: completeOnboarding - Local hasCompletedOnboarding set to true")
+            }
+            
+            // Post notification that user profile was updated
+            NotificationCenter.default.post(name: NSNotification.Name("UserProfileUpdated"), object: nil)
+            print("DEBUG: completeOnboarding - Sent UserProfileUpdated notification")
+            
         } catch {
-            print("Error completing onboarding: \(error.localizedDescription)")
+            print("DEBUG: Error completing onboarding: \(error.localizedDescription)")
             self.errorMessage = "Failed to complete onboarding: \(error.localizedDescription)"
+        }
+    }
+    
+    /// Update the user's display name - separate from username
+    func updateDisplayName(_ newDisplayName: String) async throws {
+        guard let userId = currentUser?.uid else {
+            throw NSError(domain: "UserSession", code: 101, 
+                         userInfo: [NSLocalizedDescriptionKey: "No user is signed in."])
+        }
+        
+        do {
+            // Update Firestore with new display name
+            try await firestore
+                .collection("users")
+                .document(userId)
+                .updateData(["displayName": newDisplayName])
+            
+            // Update local state
+            self.displayName = newDisplayName
+            
+            // Post notification that user profile was updated
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserProfileUpdated"),
+                object: nil
+            )
+        } catch {
+            errorMessage = "Error updating display name: \(error.localizedDescription)"
+            throw error
         }
     }
 } 

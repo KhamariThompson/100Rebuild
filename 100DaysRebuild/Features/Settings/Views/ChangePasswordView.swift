@@ -38,7 +38,7 @@ struct ChangePasswordView: View {
                             .textContentType(.newPassword)
                             .autocapitalization(.none)
                             .submitLabel(.next)
-                            .onChange(of: newPassword) { _, newValue in
+                            .onChange(of: newPassword) { newValue in
                                 validatePassword()
                             }
                         
@@ -46,7 +46,7 @@ struct ChangePasswordView: View {
                             .textContentType(.newPassword)
                             .autocapitalization(.none)
                             .submitLabel(.done)
-                            .onChange(of: confirmPassword) { _, newValue in
+                            .onChange(of: confirmPassword) { newValue in
                                 validatePassword()
                             }
                         

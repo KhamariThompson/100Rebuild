@@ -30,10 +30,10 @@ struct ShareCardCustomizerView: View {
         self.challenge = challenge
     }
     
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // Preview of the share card
+    // MARK: - View Components
+    
+    // Card preview component
+    private var cardPreviewSection: some View {
                 VStack {
                     if let preview = previewImage {
                         Image(uiImage: preview)
@@ -52,11 +52,10 @@ struct ShareCardCustomizerView: View {
                 }
                 .frame(height: UIScreen.main.bounds.height * 0.5)
                 .padding(.top)
-                
-                // Customization options
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Layout style selection
+    }
+    
+    // Layout style selection component
+    private var layoutStyleSection: some View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Layout Style")
                                 .font(.headline)
@@ -69,8 +68,8 @@ struct ShareCardCustomizerView: View {
                             }
                             .pickerStyle(SegmentedPickerStyle())
                             .accessibilityLabel("Select layout style")
-                            .onChange(of: selectedTab) { oldValue, newValue in
-                                switch newValue {
+            .onChange(of: selectedTab) { value in
+                switch value {
                                 case 0:
                                     viewModel.setCardLayout(.modern)
                                 case 1:
@@ -84,8 +83,10 @@ struct ShareCardCustomizerView: View {
                             }
                         }
                         .padding(.horizontal)
+    }
                         
-                        // Background style selection
+    // Background style selection component
+    private var backgroundStyleSection: some View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Background Style")
                                 .font(.headline)
@@ -112,6 +113,14 @@ struct ShareCardCustomizerView: View {
                         }
                         .padding(.top, 8)
                         .padding(.horizontal)
+    }
+    
+    // Customization options container
+    private var customizationSection: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                layoutStyleSection
+                backgroundStyleSection
                     }
                     .padding(.vertical, 20)
                 }
@@ -120,8 +129,10 @@ struct ShareCardCustomizerView: View {
                         .fill(Color.theme.surface)
                         .shadow(color: Color.black.opacity(0.05), radius: 6, x: 0, y: -3)
                 )
+    }
                 
-                // Share button
+    // Share button component
+    private var shareButton: some View {
                 Button(action: {
                     shareCurrentDesign()
                 }) {
@@ -143,22 +154,10 @@ struct ShareCardCustomizerView: View {
                 }
                 .accessibilityLabel("Share your milestone")
             }
-            .navigationTitle("Customize Share Card")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        isPresented = false
-                    }
-                    .accessibilityLabel("Done customizing share card")
-                }
-            }
-            .sheet(isPresented: $showingShareSheet) {
-                if let image = shareImage {
-                    ShareSheet(items: [image])
-                }
-            }
-            .fullScreenCover(isPresented: $showPreviewFullScreen) {
+    
+    // Full-screen preview component
+    private var fullScreenPreview: some View {
+        Group {
                 if let preview = previewImage {
                     ZStack {
                         Color.black.ignoresSafeArea()
@@ -207,6 +206,33 @@ struct ShareCardCustomizerView: View {
                     }
                     .statusBar(hidden: true)
                 }
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                cardPreviewSection
+                customizationSection
+                shareButton
+            }
+            .navigationTitle("Customize Share Card")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        isPresented = false
+                    }
+                    .accessibilityLabel("Done customizing share card")
+                }
+            }
+            .sheet(isPresented: $showingShareSheet) {
+                if let image = shareImage {
+                    ShareSheet(items: [image])
+                }
+            }
+            .fullScreenCover(isPresented: $showPreviewFullScreen) {
+                fullScreenPreview
             }
             .onAppear {
                 initializeView()

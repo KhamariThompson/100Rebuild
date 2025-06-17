@@ -20,6 +20,7 @@ enum FirebaseError: Error, LocalizedError {
     case cooldownPeriod(hoursRemaining: Int)
     case usernameAlreadyExists
     case notAuthenticated
+    case invalidArgument
     
     var errorDescription: String? {
         switch self {
@@ -45,6 +46,8 @@ enum FirebaseError: Error, LocalizedError {
             return "Username already exists"
         case .notAuthenticated:
             return "You must be signed in to perform this action"
+        case .invalidArgument:
+            return "Invalid argument"
         }
     }
 }
@@ -839,5 +842,42 @@ class FirebaseService {
         // Skip setting cache settings - these should only be set in AppDelegate
         // before any Firestore operations
         print("setCacheSettings: Settings should only be modified in AppDelegate before Firestore is initialized")
+    }
+    
+    /// Updates the user's display name in their profile
+    func updateDisplayName(_ displayName: String, userId: String) async throws {
+        // Perform basic validation
+        guard !displayName.isEmpty else {
+            throw FirebaseError.invalidArgument
+        }
+        
+        guard let firestore = firestore else {
+            throw FirebaseError.notConfigured
+        }
+        
+        guard isNetworkAvailable else {
+            throw FirebaseError.networkOffline
+        }
+        
+        do {
+            // Update the user document with the new display name
+            try await firestore
+                .collection(CollectionPath.users)
+                .document(userId)
+                .updateData([
+                    "displayName": displayName,
+                    "lastModified": FieldValue.serverTimestamp()
+                ])
+            
+            print("Successfully updated display name to: \(displayName)")
+            
+            // Post notification for app-wide state updates
+            await MainActor.run {
+                NotificationCenter.default.post(name: NSNotification.Name("UserProfileUpdated"), object: nil)
+            }
+        } catch {
+            print("Error updating display name: \(error.localizedDescription)")
+            throw FirebaseError.firestoreError(error)
+        }
     }
 } 

@@ -104,6 +104,10 @@ public class ThemeManager: ObservableObject {
     public func effectiveColorScheme(defaultScheme: ColorScheme = .light) -> ColorScheme? {
         return currentTheme.toColorScheme(defaultScheme: defaultScheme)
     }
+    
+    deinit {
+        print("✅ Singleton released: \(Self.self)")
+    }
 }
 
 // MARK: - SwiftUI Environment Extensions
@@ -194,9 +198,9 @@ struct AppThemeModifier: ViewModifier {
                     lastTheme = themeManager.currentTheme
                 }
             }
-            .onChange(of: themeManager.currentTheme) { oldValue, newValue in
+            .onChange(of: themeManager.currentTheme) { newValue in
                 // Only apply animation if this isn't the first appearance
-                if lastTheme != nil && oldValue != newValue {
+                if lastTheme != nil && lastTheme != newValue {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         lastTheme = newValue
                     }

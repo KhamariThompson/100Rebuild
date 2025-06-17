@@ -101,6 +101,12 @@ public extension Color {
 // This was causing a redeclaration error - removed duplicate theme property
 public extension Color {
     // static let theme = AppColors.self - removing duplicate declaration
+    
+    /// A theme-aware foreground color for light backgrounds (like accent-colored buttons)
+    /// Returns black in light mode and white in dark mode
+    static func adaptiveForeground(for colorScheme: ColorScheme) -> Color {
+        return colorScheme == .dark ? .white : .black
+    }
 }
 
 // MARK: - Gradient Extensions

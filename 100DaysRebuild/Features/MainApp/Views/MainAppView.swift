@@ -9,19 +9,26 @@ extension Notification.Name {
 }
 
 struct MainAppView: View {
+    // Keep only essential environment objects
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var notificationService: NotificationService
+    @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
+    @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
-    @EnvironmentObject var progressViewModel: ProgressDashboardViewModel
-    @EnvironmentObject var themeManager: ThemeManager
+    @EnvironmentObject var badgeService: BadgeService
+    
     @Environment(\.colorScheme) private var colorScheme
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
-    @State private var showPaywall = false
     @State private var showAddAction = false
     @State private var safeAreaBottom: CGFloat = 0
+    @State private var isMenuExpanded = false
+    
+    // Use StateObject for view-owned ViewModels
+    @StateObject private var viewModel = MainAppViewModel()
     
     // Accessibility settings
     @AppStorage("isLargeTextEnabled") private var isLargeTextEnabled = false
@@ -37,112 +44,77 @@ struct MainAppView: View {
     
     var body: some View {
         ZStack {
-            // Main tab view - using SwiftUI TabView for the container
+            // Main tab view
             ZStack {
+                // Consistent background
                 Color.theme.background.ignoresSafeArea()
                 
+                // Apply tab transition modifier to entire tab view
                 TabView(selection: $router.selectedTab) {
                     // Challenges Tab
                     ChallengesView()
-                        .environmentObject(router)
                         .tag(0)
+                        .withTabTransition(router: router)
                     
                     // Progress Tab
                     ProgressView()
-                        .environmentObject(router)
                         .tag(1)
+                        .withTabTransition(router: router)
                     
-                    // Social Feed Tab (Disabled for now)
-                    ZStack(alignment: .bottom) {
-                        SocialView()
-                            .environmentObject(router)
-                        
-                        // Remove the Challenge a friend button as it's not implemented yet
-                    }
-                    .tag(2)
+                    // Social Feed Tab
+                    SocialView()
+                        .tag(2)
+                        .withTabTransition(router: router)
                     
                     // Profile Tab
                     ProfileView()
-                        .environmentObject(router)
                         .tag(3)
+                        .withTabTransition(router: router)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-                // Fix: Use easeOut animation for smoother tab transitions
-                .animation(.easeOut(duration: 0.2), value: router.selectedTab)
-                .padding(.bottom, CalAIDesignTokens.tabBarHeight + safeAreaBottom + 10) // Added extra padding
-                .withTabTransition(router: router) // Apply transition effect to prevent flashing
+                .animation(nil, value: router.selectedTab) // Disable TabView's built-in animation
+                .padding(.bottom, CalAIDesignTokens.tabBarHeight + 10)
                 
-                // Only show the custom tab bar
                 VStack {
                     Spacer()
                     customTabBar
                 }
+                
+                // Add subscription warning banner at the top
+                VStack {
+                    if subscriptionService.isProUser {
+                        SubscriptionBanner()
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    Spacer()
+                }
             }
             
-            // Paywall overlay
-            if showPaywall {
-                paywallOverlay
-            }
-            
-            // Show notification permission request for new users
-            if showNotificationSettings {
-                notificationPermissionOverlay
-            }
-            
-            // Add action overlay when showAddAction is true
-            if showAddAction {
-                addActionOverlay
+            // Overlays - only show when not changing tabs to prevent flickering
+            if !router.tabIsChanging {
+                if viewModel.showPaywall {
+                    paywallOverlay
+                }
+                
+                if showNotificationSettings {
+                    notificationPermissionOverlay
+                }
+                
+                if showAddAction {
+                    addActionOverlay
+                }
             }
         }
         .ignoresSafeArea(.keyboard)
         .accentColor(Color.theme.accent)
-        // Prevent unwanted animations but allow tab bar to remain visible
-        .transaction { transaction in
-            // Only disable animations for specific properties
-            if router.tabIsChanging {
-                transaction.animation = nil
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
-            withAnimation {
-                showNotificationSettings = true
-            }
+            viewModel.handleNotificationSettingsRequest()
         }
-        .onAppear {
-            // Calculate safe area for tab bar
-            updateSafeAreaInsets()
-            
-            // Check onboarding status - we show subscription options after a short delay
-            let workItem = DispatchWorkItem {
-                Task {
-                    // Don't show paywall immediately after user authentication
-                    // Only show paywall if user hasn't seen it before AND has been using the app for some time
-                    if !subscriptionService.showPaywall && !subscriptionService.isProUser {
-                        // Check if user just signed in - in that case, don't show paywall yet
-                        let currentTime = Date()
-                        if let signInTime = userSession.lastSignInTime, 
-                           currentTime.timeIntervalSince(signInTime) > 300 { // Only show if user signed in more than 5 minutes ago
-                            withAnimation {
-                                showPaywall = true
-                                subscriptionService.showPaywall = true // Mark as seen
-                            }
-                        }
-                    }
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
-            
-            // Set up tab bar appearance
-            setupTabBarAppearance()
+        .onAppear { [weak viewModel] in
+            viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
-        .onChange(of: UIDevice.current.orientation) { _ in
-            // Update safe area when device rotates
-            updateSafeAreaInsets()
-        }
-        .onReceive(subscriptionService.$showPaywall) { newValue in
-            withAnimation {
-                showPaywall = newValue
-            }
+        .onChange(of: UIDevice.current.orientation) { newValue in
+            viewModel.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
         }
     }
     
@@ -180,7 +152,15 @@ struct MainAppView: View {
                     }
                     // Navigate to add challenge view - don't wrap in animation
                     router.changeTab(to: 0) // Use changeTab instead of direct assignment
-                    // Show the new challenge view (in implementation would add logic to show proper sheet)
+                    
+                    // Post a notification to show the NewChallengeView
+                    // This will be observed by ChallengesView
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ShowNewChallengeView"),
+                            object: nil
+                        )
+                    }
                 }
                 
                 ActionSheetItem(
@@ -208,8 +188,8 @@ struct MainAppView: View {
                     hapticFeedback(.medium)
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         showAddAction = false
-                        // Would show paywall
-                        subscriptionService.showPaywall = true
+                        // Show paywall
+                        viewModel.showPaywallForFeature()
                     }
                 }
                 
@@ -241,17 +221,26 @@ struct MainAppView: View {
     }
     
     private var paywallOverlay: some View {
+        ZStack {
+            // Semi-transparent background
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    // Don't dismiss on background tap to avoid accidental dismissals
+                }
+            
+            // Use the PaywallView with its built-in dismiss functionality
         PaywallView()
-            .environmentObject(themeManager)
-            .withAppTheme() // Apply theme explicitly to the overlay
+                .background(Color.theme.background)
+                .cornerRadius(16)
+                .padding(.horizontal)
+        }
             .transition(.opacity)
             .zIndex(100)
     }
     
     private var notificationPermissionOverlay: some View {
         NotificationSettingsView(isPresented: $showNotificationSettings)
-            .environmentObject(themeManager)
-            .withAppTheme() // Apply theme explicitly to the overlay
             .transition(.opacity)
             .zIndex(101)
     }
@@ -265,19 +254,23 @@ struct MainAppView: View {
             ZStack(alignment: .center) {
                 // Floating action button for creating new challenges
                 Button(action: {
+                    // Show action menu with animation
+                    hapticFeedback(.medium)
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         showAddAction = true
                     }
                 }) {
                     Image(systemName: "plus")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                         .frame(width: 50, height: 50)
                         .background(
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.9)],
+                                        colors: colorScheme == .dark ? 
+                                            [.white, Color.white.opacity(0.9)] : 
+                                            [Color.black, Color.black.opacity(0.9)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -286,7 +279,10 @@ struct MainAppView: View {
                         .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
                         .overlay(
                             Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                .stroke(colorScheme == .dark ? 
+                                    Color.black.opacity(0.3) : 
+                                    Color.white.opacity(0.3), 
+                                    lineWidth: 1.5)
                         )
                 }
                 .offset(y: -30) // Increased offset to make button more visible
@@ -330,13 +326,6 @@ struct MainAppView: View {
                 .background(Color.theme.surface.opacity(0.98))
             }
             .frame(height: CalAIDesignTokens.tabBarHeight)
-            
-            // Extra space that extends to the bottom safe area
-            if safeAreaBottom > 0 {
-                Rectangle()
-                    .fill(Color.theme.surface.opacity(0.98))
-                    .frame(height: safeAreaBottom)
-            }
         }
         .background(Color.theme.surface.opacity(0.98))
         .ignoresSafeArea(edges: .bottom)
@@ -347,10 +336,6 @@ struct MainAppView: View {
     private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         let generator = UIImpactFeedbackGenerator(style: style)
         generator.impactOccurred()
-    }
-    
-    private func setupTabBarAppearance() {
-        // Implementation of setupTabBarAppearance method
     }
     
     // MARK: - Helper Methods
@@ -473,13 +458,10 @@ struct ProfileTabView: View {
 
 struct MainAppView_Previews: PreviewProvider {
     static var previews: some View {
-        lightDarkVariants(title: "Main App") {
-            MainAppView()
-                .environmentObject(UserSession.shared)
-                .environmentObject(SubscriptionService.shared)
-                .environmentObject(NotificationService.shared)
-                .environmentObject(ThemeManager.shared)
-        }
+        MainAppView()
+            .environmentObject(UserSession.shared)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(NavigationRouter())
     }
 }
 

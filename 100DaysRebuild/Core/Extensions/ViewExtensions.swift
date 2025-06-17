@@ -1,6 +1,13 @@
 import SwiftUI
 import UIKit
 import PhotosUI
+import Foundation
+import Combine
+
+// Import for NavigationDebugModifier
+import UIKit.UIResponder
+import UIKit.UITextField
+import UIKit.UITextView
 
 // MARK: - UIApplication Extension to disable input assistants
 extension UIApplication {
@@ -19,14 +26,13 @@ extension UIApplication {
                     }
                 }
             } else {
-                // Fallback for older iOS versions
-                // Warning: Using deprecated UIApplication.windows
-                #if DEBUG
-                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                
-                for window in UIApplication.shared.windows {
-                    disableInputAssistantInView(window)
+                // Fallback for older iOS versions using the same Scene-based lookup
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        for window in windowScene.windows {
+                            disableInputAssistantInView(window)
+                        }
+                    }
                 }
             }
         }
@@ -40,16 +46,21 @@ extension UIApplication {
             
             // Instead of removing constraints, lower their priority
             for constraint in view.constraints {
-                if constraint.identifier == "assistantHeight" || 
-                   (constraint.firstAttribute == .height && constraint.firstItem === view) {
-                    print("Lowering priority for constraint: \(constraint)")
+                // Safely access constraint identifier to avoid EXC_BAD_ACCESS
+                if let identifier = constraint.identifier, 
+                   (identifier == "assistantHeight") {
+                    print("Lowering priority for constraint with identifier: \(identifier)")
+                    constraint.priority = .defaultLow
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    print("Lowering priority for height constraint affecting view")
                     constraint.priority = .defaultLow
                 }
             }
             
             // Specifically fix the constraint conflict from error message
             for constraint in view.superview?.constraints ?? [] {
-                if constraint.identifier == "assistantView.bottom" {
+                // Safely access constraint identifier
+                if let identifier = constraint.identifier, identifier == "assistantView.bottom" {
                     print("Found assistantView.bottom constraint, lowering priority")
                     constraint.priority = .defaultLow + 1
                 }
@@ -61,7 +72,8 @@ extension UIApplication {
                 if NSStringFromClass(type(of: parent)).contains("UIRemoteKeyboardPlaceholderView") {
                     print("Found _UIRemoteKeyboardPlaceholderView, fixing constraints")
                     for constraint in parent.constraints {
-                        if constraint.identifier == "accessoryView.bottom" {
+                        // Safely access constraint identifier
+                        if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
                             print("Found accessoryView.bottom constraint, lowering priority")
                             constraint.priority = .defaultHigh - 1
                         }
@@ -79,7 +91,8 @@ extension UIApplication {
         if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
             print("Found _UIRemoteKeyboardPlaceholderView directly, fixing constraints")
             for constraint in view.constraints {
-                if constraint.identifier == "accessoryView.bottom" {
+                // Safely access constraint identifier
+                if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
                     print("Found accessoryView.bottom constraint, lowering priority")
                     constraint.priority = .defaultHigh - 1
                 }
@@ -107,10 +120,9 @@ extension UIApplication {
                     }
                 }
             } else {
-                #if DEBUG
-                print("Warning: Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                windows = UIApplication.shared.windows
+                windows = UIApplication.shared.connectedScenes
+                    .compactMap { $0 as? UIWindowScene }
+                    .flatMap { $0.windows }
             }
             
             // Search for the specific views mentioned in the error
@@ -125,18 +137,31 @@ extension UIApplication {
         
         // Fix SystemInputAssistantView
         if viewClassName.contains("SystemInputAssistantView") {
-            for constraint in view.constraints where constraint.identifier == "assistantHeight" {
+            let constraintsToModify: [NSLayoutConstraint] = view.constraints.filter { constraint in
+                // Use a safer approach to check the constraint identifier
+                if let identifier = constraint.identifier {
+                    return identifier == "assistantHeight"
+                } else {
+                    // If constraint has no identifier but is a height constraint affecting this view
+                    return constraint.firstAttribute == .height && constraint.firstItem === view
+                }
+            }
+            
+            for constraint in constraintsToModify {
                 constraint.priority = .defaultLow
-                print("Fixed assistantHeight constraint in SystemInputAssistantView")
+                print("Fixed height constraint in SystemInputAssistantView")
             }
             view.setNeedsLayout()
         }
         
         // Fix _UIRemoteKeyboardPlaceholderView
         if viewClassName.contains("UIRemoteKeyboardPlaceholderView") {
-            for constraint in view.constraints where constraint.identifier == "accessoryView.bottom" {
-                constraint.priority = .defaultHigh - 1
-                print("Fixed accessoryView.bottom constraint in _UIRemoteKeyboardPlaceholderView")
+            for constraint in view.constraints {
+                // Safely check identifier to avoid crashes
+                if let identifier = constraint.identifier, identifier == "accessoryView.bottom" {
+                    constraint.priority = .defaultHigh - 1
+                    print("Fixed accessoryView.bottom constraint in _UIRemoteKeyboardPlaceholderView")
+                }
             }
             view.setNeedsLayout()
         }
@@ -146,7 +171,8 @@ extension UIApplication {
             // Look for incoming constraints
             for subview in view.subviews {
                 for constraint in subview.constraints {
-                    if constraint.identifier == "assistantView.bottom" {
+                    // Safely check identifier to avoid crashes
+                    if let identifier = constraint.identifier, identifier == "assistantView.bottom" {
                         constraint.priority = .defaultHigh - 1
                         print("Fixed assistantView.bottom constraint in _UIKBCompatInputView subview")
                     }
@@ -168,6 +194,7 @@ extension View {
     func circularAvatarStyle(size: CGFloat, borderColor: Color = .theme.accent, borderWidth: CGFloat = 2) -> some View {
         return self
             .frame(width: size, height: size)
+            .aspectRatio(contentMode: .fill)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -261,11 +288,17 @@ extension View {
                     showCameraPicker.wrappedValue = true
                 }
                 Button("Photo Library") {
-                    // This will trigger the PhotosPicker
+                    // Trigger PhotosPicker by setting a temporary selection
+                    photosPickerSelection.wrappedValue = nil
                 }
                 Button("Cancel", role: .cancel) {}
             }
-            .photoPickerTrigger(selection: photosPickerSelection)
+            .photosPicker(
+                isPresented: showSourceOptions,
+                selection: photosPickerSelection,
+                matching: .images,
+                photoLibrary: .shared()
+            )
     }
 }
 
@@ -445,34 +478,38 @@ struct AdaptiveKeyboardHandler: ViewModifier {
 // Modifier to ensure text inputs have safe options
 struct SafeTextInputModifier: ViewModifier {
     func body(content: Content) -> some View {
-        content
-            .onChange(of: UIResponder.currentFirstResponder()) { _, newValue in
-                if let textField = newValue as? UITextField {
-                    // Disable predictive options to prevent RTIInputSystemClient errors
-                    textField.autocorrectionType = .no
-                    textField.spellCheckingType = .no
-                    textField.smartQuotesType = .no
-                    textField.smartDashesType = .no
-                    textField.smartInsertDeleteType = .no
+        if #available(iOS 17.0, *) {
+            content
+                .onChange(of: UIResponder.currentFirstResponder()) { _, newValue in
+                    if let textField = newValue as? UITextField {
+                        // Disable predictive options to prevent RTIInputSystemClient errors
+                        textField.autocorrectionType = .no
+                        textField.spellCheckingType = .no
+                        textField.smartQuotesType = .no
+                        textField.smartDashesType = .no
+                        textField.smartInsertDeleteType = .no
+                        
+                        // Disable input assistant
+                        textField.inputAssistantItem.leadingBarButtonGroups = []
+                        textField.inputAssistantItem.trailingBarButtonGroups = []
+                    }
                     
-                    // Disable input assistant
-                    textField.inputAssistantItem.leadingBarButtonGroups = []
-                    textField.inputAssistantItem.trailingBarButtonGroups = []
+                    if let textView = newValue as? UITextView {
+                        // Disable predictive options to prevent RTIInputSystemClient errors
+                        textView.autocorrectionType = .no
+                        textView.spellCheckingType = .no
+                        textView.smartQuotesType = .no
+                        textView.smartDashesType = .no
+                        textView.smartInsertDeleteType = .no
+                        
+                        // Disable input assistant
+                        textView.inputAssistantItem.leadingBarButtonGroups = []
+                        textView.inputAssistantItem.trailingBarButtonGroups = []
+                    }
                 }
-                
-                if let textView = newValue as? UITextView {
-                    // Disable predictive options to prevent RTIInputSystemClient errors
-                    textView.autocorrectionType = .no
-                    textView.spellCheckingType = .no
-                    textView.smartQuotesType = .no
-                    textView.smartDashesType = .no
-                    textView.smartInsertDeleteType = .no
-                    
-                    // Disable input assistant
-                    textView.inputAssistantItem.leadingBarButtonGroups = []
-                    textView.inputAssistantItem.trailingBarButtonGroups = []
-                }
-            }
+        } else {
+            // Fallback on earlier versions
+        }
     }
 }
 
@@ -491,9 +528,38 @@ extension UIResponder {
     }
 }
 
-// NavigationDebounceModifier is defined in AppViewModifiers.swift
+// NOTE: NavigationDebounceModifier and NavigationDebugModifier are defined elsewhere
+// NavigationDebounceModifier is in this file for constraint fixing
+// NavigationDebugModifier is in AppViewModifiers.swift for view appearance logging
 
 // MARK: - Button Styles
 
 // NOTE: ScaleButtonStyle has been moved to Core/DesignSystem/Buttons.swift
 // Please use AppScaleButtonStyle from there instead.
+
+// MARK: - Navigation Constraint Fix Modifier
+/// Helps fix layout constraint warnings when navigating between views
+struct NavigationDebounceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                // Delay just enough to prevent keyboard snapshot warnings
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    // Fix any layout constraint issues
+                    UIApplication.fixConstraintConflict()
+                }
+            }
+    }
+}
+
+extension View {
+    /// Apply navigation constraint fixes to avoid layout warnings
+    func withNavigationFixes() -> some View {
+        self.modifier(NavigationDebounceModifier())
+    }
+    
+    /// Add logging for view appearance/disappearance for debugging
+    func withNavigationDebug() -> some View {
+        self.modifier(NavigationDebugModifier())
+    }
+}

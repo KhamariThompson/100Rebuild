@@ -135,7 +135,9 @@ class AppFixes {
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap { $0.windows }
         } else {
-            return UIApplication.shared.windows
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
     }
     

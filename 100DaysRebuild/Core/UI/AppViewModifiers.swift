@@ -124,31 +124,6 @@ struct FixNavigationLayoutModifier: ViewModifier {
     }
 }
 
-// MARK: - Tab Transition Modifier
-struct TabTransitionModifier: ViewModifier {
-    @ObservedObject var router: NavigationRouter
-    
-    func body(content: Content) -> some View {
-        content
-            .opacity(router.tabIsChanging ? 0 : 1)
-            .blur(radius: router.tabIsChanging ? 5 : 0)
-            .animation(.easeInOut(duration: 0.2), value: router.tabIsChanging)
-            .overlay(
-                // Add loading indicator during transition for better UX
-                ZStack {
-                    if router.tabIsChanging {
-                        Color.theme.background
-                            .opacity(0.5)
-                        
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.theme.accent))
-                    }
-                }
-            )
-    }
-}
-
 // MARK: - Card Shadow Modifier
 struct CardShadowModifier: ViewModifier {
     let shadowRadius: CGFloat
@@ -297,11 +272,6 @@ extension View {
         }
     }
     
-    /// Applies a transition effect during tab changes
-    func withTabTransition(router: NavigationRouter) -> some View {
-        self.modifier(TabTransitionModifier(router: router))
-    }
-    
     /// Applies a standard card shadow
     func cardShadow(radius: CGFloat = 10, opacity: Double = 0.1) -> some View {
         self.modifier(CardShadowModifier(shadowRadius: radius, shadowOpacity: opacity))
@@ -333,18 +303,44 @@ extension View {
 
 // MARK: - Navigation Debug Modifier
 /// A modifier that helps debug navigation issues by printing path changes
-struct NavigationDebounceModifier: ViewModifier {
+struct NavigationDebugModifier: ViewModifier {
+    @State private var signOutObserver: NSObjectProtocol? = nil
+    
     func body(content: Content) -> some View {
         content
             .onAppear {
                 #if DEBUG
                 print("View appeared: \(String(describing: self))")
                 #endif
+                
+                // Register for sign-out notifications
+                signOutObserver = NotificationCenter.default.addObserver(
+                    forName: NSNotification.Name("PreparingForSignOut"),
+                    object: nil,
+                    queue: .main
+                ) { _ in
+                    // Immediate clean-up when sign-out is detected
+                    #if DEBUG
+                    print("View \(String(describing: self)) received sign-out notification")
+                    #endif
+                    
+                    // Clean up any resources that might cause issues during sign-out
+                    DispatchQueue.main.async {
+                        // Fix any layout constraint issues
+                        UIApplication.fixConstraintConflict()
+                    }
+                }
             }
             .onDisappear {
                 #if DEBUG
                 print("View disappeared: \(String(describing: self))")
                 #endif
+                
+                // Remove sign-out observer
+                if let observer = signOutObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    signOutObserver = nil
+                }
             }
     }
 } 

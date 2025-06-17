@@ -6,6 +6,7 @@ import AuthenticationServices
 import UIKit
 import CryptoKit
 import SwiftUI
+import RevenueCat
 
 /// Centralized authentication service to handle all authentication methods
 @MainActor
@@ -26,9 +27,11 @@ class AuthService {
     func signInWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign in with email: \(email)")
-            let _ = try await Auth.auth().signIn(withEmail: email, password: password)
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
             print("AuthService: Sign in successful")
             await userSession.handleAuthSuccess(provider: "password")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
         } catch {
             print("AuthService: Sign in failed - \(error.localizedDescription)")
@@ -41,9 +44,11 @@ class AuthService {
     func signUpWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign up with email: \(email)")
-            let _ = try await Auth.auth().createUser(withEmail: email, password: password)
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("AuthService: Sign up successful")
             await userSession.handleAuthSuccess(provider: "password")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
         } catch {
             print("AuthService: Sign up failed - \(error.localizedDescription)")
@@ -56,13 +61,80 @@ class AuthService {
     func resetPassword(email: String) async -> Bool {
         do {
             print("AuthService: Sending password reset email to: \(email)")
-            try await Auth.auth().sendPasswordReset(withEmail: email)
-            print("AuthService: Password reset email sent successfully")
-            await userSession.handlePasswordResetSuccess(email: email)
-            return true
+            if email.isEmpty {
+                let error = NSError(domain: "AuthService", code: 101, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Email address cannot be empty"])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            if !email.contains("@") || !email.contains(".") {
+                let error = NSError(domain: "AuthService", code: 102, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Please enter a valid email address"])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            // Check network availability
+            guard NetworkMonitor.shared.isConnected else {
+                let error = NSError(domain: "AuthService", code: 103, 
+                                  userInfo: [NSLocalizedDescriptionKey: "No internet connection. Please check your network and try again."])
+                await userSession.handlePasswordResetError(error, email: email)
+                return false
+            }
+            
+            // Set timeout for the operation
+            let resetTask = Task {
+                try await Auth.auth().sendPasswordReset(withEmail: email)
+            }
+            
+            // Create a timeout task
+            let timeoutTask = Task {
+                try await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                resetTask.cancel()
+                throw NSError(domain: "AuthService", code: 104,
+                            userInfo: [NSLocalizedDescriptionKey: "Password reset request timed out. Please try again."])
+            }
+            
+            do {
+                // Wait for reset task to complete
+                try await resetTask.value
+                timeoutTask.cancel()
+                
+                print("AuthService: Password reset email sent successfully")
+                await userSession.handlePasswordResetSuccess(email: email)
+                return true
+            } catch {
+                timeoutTask.cancel()
+                throw error
+            }
         } catch {
-            print("AuthService: Password reset failed - \(error.localizedDescription)")
-            await userSession.handlePasswordResetError(error, email: email)
+            let nsError = error as NSError
+            
+            // Handle specific Firebase Auth errors with user-friendly messages
+            let errorMessage: String
+            if nsError.domain == AuthErrorDomain {
+                switch nsError.code {
+                case AuthErrorCode.userNotFound.rawValue:
+                    errorMessage = "No account exists with this email address."
+                case AuthErrorCode.invalidEmail.rawValue:
+                    errorMessage = "The email address is invalid."
+                case AuthErrorCode.tooManyRequests.rawValue:
+                    errorMessage = "Too many requests. Please try again later."
+                default:
+                    errorMessage = "Failed to send password reset email: \(nsError.localizedDescription)"
+                }
+            } else if nsError.domain == NSURLErrorDomain {
+                errorMessage = "Network error. Please check your connection and try again."
+            } else {
+                errorMessage = "Failed to send password reset email: \(nsError.localizedDescription)"
+            }
+            
+            let customError = NSError(domain: "AuthService", code: nsError.code, 
+                                    userInfo: [NSLocalizedDescriptionKey: errorMessage])
+            
+            print("AuthService: Password reset failed - \(customError.localizedDescription)")
+            await userSession.handlePasswordResetError(customError, email: email)
             return false
         }
     }
@@ -85,54 +157,16 @@ class AuthService {
             
             print("AuthService: Starting Google sign-in flow")
             
-            // IMPROVED: Create a custom UIViewController with proper styling to present the auth flow
-            let authContainerVC = UIViewController()
-            authContainerVC.view.backgroundColor = UIColor(Color.theme.background)
-            authContainerVC.modalPresentationStyle = .fullScreen
-            authContainerVC.modalTransitionStyle = .crossDissolve
-            
-            // Add a loading indicator to show while the auth screen is loading
-            let loadingIndicator = UIActivityIndicatorView(style: .large)
-            loadingIndicator.color = UIColor(Color.theme.accent)
-            loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
-            loadingIndicator.startAnimating()
-            
-            let loadingLabel = UILabel()
-            loadingLabel.text = "Preparing sign-in..."
-            loadingLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-            loadingLabel.textColor = UIColor(Color.theme.text)
-            loadingLabel.translatesAutoresizingMaskIntoConstraints = false
-            
-            authContainerVC.view.addSubview(loadingIndicator)
-            authContainerVC.view.addSubview(loadingLabel)
-            
-            NSLayoutConstraint.activate([
-                loadingIndicator.centerXAnchor.constraint(equalTo: authContainerVC.view.centerXAnchor),
-                loadingIndicator.centerYAnchor.constraint(equalTo: authContainerVC.view.centerYAnchor, constant: -20),
-                loadingLabel.topAnchor.constraint(equalTo: loadingIndicator.bottomAnchor, constant: 16),
-                loadingLabel.centerXAnchor.constraint(equalTo: authContainerVC.view.centerXAnchor)
-            ])
-            
-            // Present our styled container first
-            await MainActor.run {
-                viewController.present(authContainerVC, animated: true)
-            }
+            // Skip creating a container view controller and use the provided one directly
+            // This avoids nested presentation issues
             
             // Configure the proper authentication session
             UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
             
-            // Use async/await with a small delay to ensure proper dismissal of any current views
-            try await Task.sleep(nanoseconds: 300_000_000) // 0.3 second
-            
-            // Now perform the Google sign-in within our container
-            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: authContainerVC)
+            // Now perform the Google sign-in directly with the provided view controller
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
             
             guard let idToken = result.user.idToken?.tokenString else {
-                // Dismiss the auth container on error
-                await MainActor.run {
-                    authContainerVC.dismiss(animated: true)
-                }
-                
                 let error = NSError(domain: "AuthService", code: 2, 
                                   userInfo: [NSLocalizedDescriptionKey: "Missing ID token from Google sign-in"])
                 print("AuthService: \(error.localizedDescription)")
@@ -148,22 +182,12 @@ class AuthService {
             print("AuthService: Authenticating with Firebase using Google credential")
             try await Auth.auth().signIn(with: credential)
             
-            // Dismiss the auth container on success
-            await MainActor.run {
-                authContainerVC.dismiss(animated: true)
-            }
-            
             print("AuthService: Firebase authentication with Google successful")
             await userSession.handleAuthSuccess(provider: "google.com")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: Auth.auth().currentUser!.uid)
             return true
         } catch {
-            // Dismiss the auth container view if it's presented
-            if let rootVC = viewController.presentedViewController {
-                await MainActor.run {
-                    rootVC.dismiss(animated: true)
-                }
-            }
-            
             print("AuthService: Google sign in failed - \(error.localizedDescription)")
             // If error is user cancellation, provide a more specific error message
             if (error as NSError).code == GIDSignInError.canceled.rawValue {
@@ -214,7 +238,7 @@ class AuthService {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         let hashString = hashedData.compactMap {
-            String(format: "%%02x", $0)
+            String(format: "%02x", $0)
         }.joined()
         
         return hashString
@@ -268,6 +292,8 @@ class AuthService {
             // Success, notify UserSession
             print("AuthService: Apple sign-in successful for user: \(firebaseUser.uid)")
             await userSession.handleAuthSuccess(provider: "apple.com")
+            // Identify user with RevenueCat immediately
+            await identifyUserWithRevenueCat(uid: firebaseUser.uid)
             return true
         } catch {
             print("AuthService: Error signing in with Apple: \(error.localizedDescription)")
@@ -286,14 +312,99 @@ class AuthService {
         }
         
         do {
-            print("AuthService: Signing out")
+            print("AuthService: Starting sign out process")
+            
+            // 1. Sign out from RevenueCat first
+            do {
+                print("🔐 RevenueCat: AuthService - Logging out from RevenueCat")
+                try await Purchases.shared.logOut()
+                print("🔐 RevenueCat: AuthService - Successfully signed out from RevenueCat")
+                print("🔐 RevenueCat: AuthService - New anonymous appUserID: \(Purchases.shared.appUserID)")
+                
+                // Notify that Pro status is reset
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": false]
+                )
+            } catch {
+                print("🔐 RevenueCat: AuthService - RevenueCat sign out error - \(error.localizedDescription)")
+                // Continue with Firebase sign out even if RevenueCat fails
+            }
+            
+            // Reset the SubscriptionService to clear all subscription state
+            await SubscriptionService.shared.reset()
+            print("AuthService: Reset SubscriptionService state")
+            
+            // 2. Sign out from Firebase
             try Auth.auth().signOut()
+            print("AuthService: Successfully signed out from Firebase")
+            
+            // 3. Notify UserSession of success
             await userSession.handleSignOutSuccess()
             return true
         } catch {
             print("AuthService: Sign out failed - \(error.localizedDescription)")
             await userSession.handleSignOutError(error)
             return false
+        }
+    }
+    
+    // MARK: - RevenueCat Integration
+    
+    /// Identify the user with RevenueCat using their Firebase UID
+    private func identifyUserWithRevenueCat(uid: String) async {
+        do {
+            print("🔐 RevenueCat: AuthService - Identifying user with RevenueCat: \(uid)")
+            print("🔐 RevenueCat: AuthService - Previous appUserID: \(Purchases.shared.appUserID)")
+            
+            // First ensure the current RevenueCat user ID isn't already the Firebase UID
+            if Purchases.shared.appUserID != uid {
+                // Log in with the Firebase UID to ensure entitlements are specific to this user
+                let loginResult = try await Purchases.shared.logIn(uid)
+                print("🔐 RevenueCat: AuthService - Successfully identified user with RevenueCat")
+                print("🔐 RevenueCat: AuthService - New appUserID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: AuthService - Original appUserID: \(loginResult.customerInfo.originalAppUserId)")
+                
+                // Check if this specific user has Pro entitlement
+                let activeEntitlements = loginResult.customerInfo.entitlements.active
+                let hasPro = activeEntitlements["Pro"]?.isActive ?? false
+                
+                print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
+                
+                // Notify the app about subscription status
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": hasPro]
+                )
+            } else {
+                // If the IDs already match, just refresh subscription status
+                print("🔐 RevenueCat: AuthService - User already identified with same UID: \(uid)")
+                let customerInfo = try await Purchases.shared.customerInfo()
+                
+                // Check if this specific user has Pro entitlement
+                let activeEntitlements = customerInfo.entitlements.active
+                let hasPro = activeEntitlements["Pro"]?.isActive ?? false
+                
+                print("🔐 RevenueCat: AuthService - Firebase UID \(uid) has Pro entitlement: \(hasPro)")
+                
+                // Notify the app about subscription status
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("SubscriptionStatusChanged"),
+                    object: nil,
+                    userInfo: ["isProUser": hasPro]
+                )
+            }
+        } catch {
+            print("🔐 RevenueCat: AuthService - Failed to identify user with RevenueCat: \(error.localizedDescription)")
+            
+            // Ensure this user doesn't have Pro access on error
+            NotificationCenter.default.post(
+                name: NSNotification.Name("SubscriptionStatusChanged"),
+                object: nil,
+                userInfo: ["isProUser": false]
+            )
         }
     }
 }

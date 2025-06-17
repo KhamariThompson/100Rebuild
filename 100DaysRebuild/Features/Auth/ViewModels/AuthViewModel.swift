@@ -396,6 +396,20 @@ class AuthViewModel: ObservableObject {
             return
         }
         
+        // Make sure no view controller is currently presented before proceeding
+        if rootViewController.presentedViewController != nil {
+            // Wait for any presented controller to be dismissed
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds delay
+            
+            // If still presented, dismiss it
+            if let presented = rootViewController.presentedViewController {
+                await MainActor.run {
+                    presented.dismiss(animated: true)
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds delay
+            }
+        }
+        
         isLoading = true
         lastAuthAttemptMode = .googleSignIn
         
@@ -573,7 +587,14 @@ class AuthViewModel: ObservableObject {
     }
     
     func sha256(_ input: String) -> String {
-        return authService.sha256(input)
+        // Directly implement the function here to ensure correctness
+        let inputData = Data(input.utf8)
+        let hashedData = SHA256.hash(data: inputData)
+        let hashString = hashedData.compactMap {
+            String(format: "%02x", $0)  // Fixed from %%02x to %02x
+        }.joined()
+        
+        return hashString
     }
 }
 

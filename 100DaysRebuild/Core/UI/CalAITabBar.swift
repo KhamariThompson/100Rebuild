@@ -4,10 +4,12 @@ import SwiftUI
 public struct CalAITabBar: View {
     @Binding var selectedTab: Int
     let items: [TabItem]
+    var router: NavigationRouter?
     
-    public init(selectedTab: Binding<Int>, items: [TabItem]) {
+    init(selectedTab: Binding<Int>, items: [TabItem], router: NavigationRouter? = nil) {
         self._selectedTab = selectedTab
         self.items = items
+        self.router = router
     }
     
     public var body: some View {
@@ -16,12 +18,7 @@ public struct CalAITabBar: View {
             
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedTab = index
-                        // Add haptic feedback
-                        let generator = UIImpactFeedbackGenerator(style: .light)
-                        generator.impactOccurred()
-                    }
+                    tabSelectionChanged(to: index)
                 }) {
                     VStack(spacing: 4) {
                         Image(systemName: item.icon)
@@ -59,6 +56,31 @@ public struct CalAITabBar: View {
             self.icon = icon
             self.text = text
         }
+    }
+    
+    // Modify the tab selection handling to use a consistent animation and prevent flicker
+    func tabSelectionChanged(to index: Int) {
+        // Guard against unnecessary tab changes
+        guard selectedTab != index else { return }
+        
+        // Provide haptic feedback on tab change
+        hapticFeedback(.light)
+        
+        // Use the NavigationRouter for controlled transitions if available
+        if let router = router {
+            router.changeTab(to: index)
+        } else {
+            // Fallback for direct binding when router is not available
+            withAnimation(Animation.easeInOut(duration: 0.2)) {
+                selectedTab = index
+            }
+        }
+    }
+    
+    // Utility function for haptic feedback
+    private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.impactOccurred()
     }
 }
 
@@ -101,13 +123,17 @@ public struct CalAIFloatingTabBar: View {
             }) {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                     .frame(width: 50, height: 50)
                     .background(
                         Circle()
-                            .fill(Color.theme.accent)
+                            .fill(Color.white)
                     )
                     .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 4)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.black.opacity(0.3), lineWidth: 1.5)
+                    )
             }
             .offset(y: -25) // Position above the tab bar
         }

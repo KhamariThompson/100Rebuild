@@ -1,6 +1,8 @@
 import SwiftUI
 import RevenueCat
 import StoreKit
+import Firebase
+import FirebaseAuth
 
 /// A paywall view that shows Pro subscription benefits and a purchase button
 struct PaywallView: View {
@@ -29,9 +31,11 @@ struct PaywallView: View {
     @State private var activeTab: String = "unlock-potential"
     @State private var currentOfferingIdentifier: String?
     @State private var animateGradient = false
+    @State private var isDeletedAccountCase = false
+    @State private var showAccountRecoveryInfo = false
     
     // RevenueCat integration
-    private let monthlySKU = "100days_premium_monthly"
+    private let monthlySKU = "100days_premium_monthlyv2"
     
     var body: some View {
         ZStack {
@@ -39,7 +43,7 @@ struct PaywallView: View {
             LinearGradient(
                 gradient: Gradient(colors: [
                     Color.theme.background,
-                    Color.theme.accent.opacity(0.08),
+                    Color.theme.accent.opacity(0.1),
                     Color.theme.background
                 ]),
                 startPoint: animateGradient ? .topLeading : .bottomTrailing,
@@ -57,28 +61,28 @@ struct PaywallView: View {
                     Spacer()
                     
                     Button {
-                        dismiss()
+                        dismissPaywall()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundColor(colorScheme == .dark ? .white : Color.theme.subtext)
-                            .padding(16)
+                            .font(.system(size: 28))
+                            .foregroundColor(Color.theme.subtext)
+                            .padding(14)
                             .background(
                                 Circle()
-                                    .fill(Color.theme.surface.opacity(0.7))
+                                    .fill(Color.theme.surface.opacity(0.8))
                                     .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                             )
-                            .contentShape(Circle()) // Increase tap area
+                            .contentShape(Circle())
                     }
-                    .buttonStyle(PlainButtonStyle()) // Use plain style for more reliable tapping
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
+                    .buttonStyle(PlainButtonStyle())
+                    .padding(.top, 10)
+                    .padding(.trailing, 10)
                     .accessibility(label: Text("Close"))
                 }
                 
                 Spacer()
             }
-            .zIndex(99) // Ensure button is above other content
+            .zIndex(99)
             
             ScrollView {
                 VStack(spacing: AppSpacing.l) {
@@ -108,16 +112,16 @@ struct PaywallView: View {
         }
         .navigationTitle("Upgrade to Pro")
         .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true) // Hide the back button to use our custom dismiss button
+        .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Close") {
-                    dismiss()
+                    dismissPaywall()
                 }
             }
         }
-        .alert("Subscription Error", isPresented: $showingError) {
-            Button("OK", role: .cancel) {}
+        .alert(alertTitle, isPresented: $showingError) {
+            alertButtons
         } message: {
             Text(errorMessage)
         }
@@ -147,22 +151,30 @@ struct PaywallView: View {
             isLoading = true
             do {
                 let offerings = try await subscriptionService.getOfferings()
+                #if DEBUG
                 print("Received offerings: \(offerings)")
+                #endif
                 
                 // Look for monthly package
                 if let current = offerings?.current, let monthlyPackage = current.availablePackages.first(where: { $0.identifier == monthlySKU || $0.packageType == .monthly }) {
                     self.monthlyPackage = monthlyPackage
                     self.formattedPrice = monthlyPackage.storeProduct.localizedPriceString
+                    #if DEBUG
                     print("Found monthly package: \(monthlyPackage.identifier) at \(monthlyPackage.storeProduct.localizedPriceString)")
+                    #endif
                 } else {
+                    #if DEBUG
                     print("No monthly package found in available packages")
+                    #endif
                 }
                 
                 if let current = offerings?.current {
                     self.currentOfferingIdentifier = current.identifier
                 }
             } catch {
+                #if DEBUG
                 print("Failed to load offerings: \(error.localizedDescription)")
+                #endif
                 formattedPrice = nil
                 offeringsFailedToLoad = true
             }
@@ -173,27 +185,26 @@ struct PaywallView: View {
     private func purchaseSubscription() {
         isLoading = true
         
-        // Check if we're in a sandbox environment (App Store review)
-        if subscriptionService.isSandboxUser {
-            // Show special message for sandbox users (App Store reviewers)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.isLoading = false
-                self.showingError = true
-                self.errorMessage = "This is a sandbox environment. In the production app, this would initiate a real purchase. For testing purposes, premium features are already enabled."
-            }
-            return
-        }
-        
         // Regular purchase flow
         Task {
             do {
+                // Ensure user is properly identified with RevenueCat first
+                if let currentUser = Auth.auth().currentUser,
+                   Purchases.shared.appUserID != currentUser.uid {
+                    print("🔐 RevenueCat: Re-identifying user before purchase attempt")
+                    await subscriptionService.identifyCurrentUser()
+                }
+                
                 // Attempt to purchase using the service
                 try await subscriptionService.purchaseSubscription(plan: .monthly)
                 
                 isLoading = false
                 
+                // Verify the purchase was successful by refreshing subscription status
+                await subscriptionService.refreshSubscriptionStatus()
+                
                 // Dismiss paywall on successful purchase
-                dismiss()
+                dismissPaywall()
                 
                 // Show success feedback
                 let generator = UINotificationFeedbackGenerator()
@@ -213,8 +224,26 @@ struct PaywallView: View {
                         errorMessage = "Could not restore your previous purchase. Please try again later."
                     case .timeout:
                         errorMessage = "The purchase timed out. Please check your internet connection and try again."
+                    case .networkOffline:
+                        errorMessage = "You appear to be offline. Please check your internet connection and try again."
+                    case .networkError:
+                        errorMessage = "There was a network error. Please check your connection and try again."
+                    case .purchasePending:
+                        errorMessage = "Your purchase is pending approval. It will be available once approved."
+                    case .receiptInUse:
+                        errorMessage = "This receipt is already in use with a different account."
+                    case .productNotFound:
+                        errorMessage = "The subscription product could not be found. Please try again later."
+                    case .verificationFailed:
+                        errorMessage = "Purchase verification failed. Please contact support if this persists."
+                    case .userCancelled:
+                        errorMessage = "The purchase was cancelled."
                     case .unknown:
                         errorMessage = "An unknown error occurred. Please try again later."
+                    case .accountMismatch:
+                        errorMessage = "This subscription belongs to a different account. Please sign in with the original account."
+                    case .userNotSignedIn:
+                        errorMessage = "You must be signed in to make this purchase. Please sign in and try again."
                     }
                 } else {
                     // Generic error message
@@ -228,6 +257,19 @@ struct PaywallView: View {
         }
     }
     
+    // Add a custom dismiss method to ensure both the Environment dismiss and showPaywall property are handled
+    private func dismissPaywall() {
+        // Call the environment dismiss action
+        dismiss()
+        
+        // Also set the subscription service flag to false
+        subscriptionService.showPaywall = false
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+    
     // Helper function to open a URL
     private func openURL(_ url: URL) {
         UIApplication.shared.open(url)
@@ -235,60 +277,127 @@ struct PaywallView: View {
     
     private func restorePurchases() {
         isLoading = true
-        
-        // Check if we're in a sandbox environment (App Store review)
-        if subscriptionService.isSandboxUser {
-            // Show special message for sandbox users (App Store reviewers)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.isLoading = false
-                self.showingError = true
-                self.errorMessage = "This is a sandbox environment. For testing purposes, premium features are already enabled without requiring restoration."
-            }
-            return
-        }
+        isDeletedAccountCase = false
+        showAccountRecoveryInfo = false
         
         // Regular restore flow
         Task {
             do {
+                print("🔐 PaywallView: Starting restore purchases")
+                
+                // Ensure user is properly identified with RevenueCat first
+                if let currentUser = Auth.auth().currentUser {
+                    print("🔐 PaywallView: Current Firebase UID: \(currentUser.uid)")
+                    print("🔐 PaywallView: Current RevenueCat ID: \(Purchases.shared.appUserID)")
+                    
+                    if Purchases.shared.appUserID != currentUser.uid {
+                        print("🔐 PaywallView: Re-identifying user before restore attempt")
+                        await subscriptionService.identifyCurrentUser()
+                    }
+                } else {
+                    print("🔐 PaywallView: ⚠️ No Firebase user for restore")
+                }
+                
+                // Debug receipt status first
+                let receiptStatus = await subscriptionService.debugReceiptStatus()
+                print("🔐 PaywallView: Receipt validation status: \(receiptStatus)")
+                
+                print("🔐 PaywallView: Calling restorePurchases() in SubscriptionService")
                 try await subscriptionService.restorePurchases()
+                
+                // Verify the restore was successful by forcing a refresh
+                print("🔐 PaywallView: Forcing subscription status refresh after restore")
+                await subscriptionService.refreshSubscriptionStatus()
                 
                 isLoading = false
                 
                 // Check if user has active subscription after restoration
                 if subscriptionService.isProUser {
                     // Successful restoration with active subscription
-                    dismiss()
+                    print("🔐 PaywallView: Restore successful - Pro subscription active")
+                    dismissPaywall()
                     
                     // Success feedback
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
                 } else {
                     // No subscription found
+                    print("🔐 PaywallView: Restore completed but no active subscription found")
+                    
+                    // If receipt validation passed but Pro access isn't granted, try repair
+                    if receiptStatus {
+                        print("🔐 PaywallView: Receipt looks valid but Pro status not active, attempting repair")
+                        let repairSuccess = await subscriptionService.attemptSubscriptionRepair()
+                        
+                        if repairSuccess {
+                            print("🔐 PaywallView: Repair successful, Pro status activated")
+                            dismissPaywall()
+                            return
+                        } else {
+                            print("🔐 PaywallView: Repair attempt failed")
+                        }
+                    }
+                    
                     showingError = true
                     errorMessage = "No active subscription was found on your account."
                 }
             } catch {
                 isLoading = false
-                showingError = true
+                let nsError = error as NSError
+                print("🔐 PaywallView: Restore failed - domain: \(nsError.domain), code: \(nsError.code)")
+                print("🔐 PaywallView: Error details: \(error.localizedDescription)")
                 
-                // Handle specific errors
-                if let subscriptionError = error as? SubscriptionError {
-                    switch subscriptionError {
-                    case .notSignedIntoAppStore:
-                        errorMessage = "Please sign in to your App Store account to restore purchases."
-                    case .restoreFailed:
-                        errorMessage = "Could not restore your previous purchase. Please try again later."
-                    default:
-                        errorMessage = "An error occurred while restoring purchases. Please try again."
+                // Check if it's a deleted account case
+                if let subscriptionError = error as? SubscriptionError, subscriptionError == .accountMismatch {
+                    if subscriptionService.isDeletedAccountDetected {
+                        print("🔐 PaywallView: Deleted account case detected")
+                        isDeletedAccountCase = true
+                        showAccountRecoveryInfo = true
+                    } else {
+                        showingError = true
+                        errorMessage = "This subscription belongs to a different account. Please sign in with the original account."
                     }
                 } else {
-                    // Generic error message
-                    errorMessage = "Could not restore purchases: \(error.localizedDescription)"
+                    // General error case
+                    showingError = true
+                    errorMessage = "Failed to restore: \(error.localizedDescription)"
                 }
                 
-                // Error feedback
-                let generator = UINotificationFeedbackGenerator()
-                generator.notificationOccurred(.error)
+                // Try to debug receipt issues
+                Task {
+                    _ = await subscriptionService.debugReceiptStatus()
+                }
+            }
+        }
+    }
+    
+    // MARK: - Alert View Configuration
+    
+    private var alertTitle: String {
+        if isDeletedAccountCase {
+            return "Subscription Recovery"
+        } else {
+            return "Subscription Error"
+        }
+    }
+    
+    private var alertButtons: some View {
+        Group {
+            if isDeletedAccountCase && showAccountRecoveryInfo {
+                Button("Contact Support") {
+                    // Provide your app's support email
+                    if let supportURL = URL(string: "mailto:support@100days.site?subject=Subscription%20Recovery&body=I%20have%20a%20subscription%20tied%20to%20a%20deleted%20account.%20My%20current%20Firebase%20UID%20is%20\(Auth.auth().currentUser?.uid ?? "unknown").") {
+                        UIApplication.shared.open(supportURL)
+                    }
+                    showingError = false
+                }
+                Button("Not Now", role: .cancel) {
+                    showingError = false
+                }
+            } else {
+                Button("OK", role: .cancel) {
+                    showingError = false
+                }
             }
         }
     }
@@ -434,66 +543,80 @@ struct PaywallView: View {
     
     // Attractive price tag banner
     private var priceTagBanner: some View {
-        HStack(spacing: 0) {
-            // Left price tag shape
-            ZStack {
-                Circle()
-                    .fill(Color.theme.accent)
-                    .frame(width: 60, height: 60)
+        VStack(spacing: 12) {
+            Text("Upgrade to PRO for")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(Color.theme.text)
                 
-                Text(price)
-                    .font(AppTypography.title3())
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-            }
-            .zIndex(1)
-            
-            // Right price tag description
-            ZStack {
-                Rectangle()
-                    .fill(Color.theme.accent)
-                    .frame(height: 48)
-                    .cornerRadius(8, corners: [.topRight, .bottomRight])
+            HStack(spacing: 0) {
+                // Left price tag shape
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: 65, height: 65)
+                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 4, x: 0, y: 2)
+                    
+                    Text(price)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                }
+                .zIndex(1)
                 
-                Text("per month")
-                    .font(AppTypography.headline())
-                    .foregroundColor(.white)
-                    .padding(.leading, 30)
+                // Right price tag description
+                ZStack {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.theme.accent.opacity(0.8), Color.theme.accent.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 50)
+                        .cornerRadius(8, corners: [.topRight, .bottomRight])
+                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 4, x: 2, y: 2)
+                    
+                    Text("per month")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                        .padding(.leading, 30)
+                }
+                .padding(.leading, -15)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.leading, -15)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, AppSpacing.l)
-        .padding(.bottom, AppSpacing.s)
+        .padding(.horizontal, AppSpacing.m)
+        .padding(.vertical, AppSpacing.s)
     }
     
     // Header with app icon and title
     private var paywallHeader: some View {
         VStack(spacing: AppSpacing.m) {
-            // Icon with glow effect
-            ZStack {
-                // Background glow effect
-                Circle()
-                    .fill(Color.theme.accent.opacity(0.2))
-                    .frame(width: 110, height: 110)
-                    .blur(radius: 15)
-                
-                // App icon - replacing with actual app icon image
-                Image("AppIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 90, height: 90)
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
-                    .scaleEffect(isAnimating ? 1.0 : 0.8)
-                    .opacity(isAnimating ? 1.0 : 0.0)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isAnimating)
-            }
+            // Pro image with enhanced styling
+            Image("PaywallImages")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 90, height: 90)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                )
+                .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
+                .scaleEffect(isAnimating ? 1.0 : 0.8)
+                .opacity(isAnimating ? 1.0 : 0.0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: isAnimating)
             
             // Title with gradient
-            Text("Unlock Pro")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
+            Text("Unlock 100Days Pro")
+                .font(.system(size: 30, weight: .bold, design: .rounded))
                 .foregroundStyle(LinearGradient(
                     colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)],
                     startPoint: .leading,
@@ -505,7 +628,7 @@ struct PaywallView: View {
             
             // Subtitle
             Text("Elevate your journey with premium features")
-                .font(AppTypography.headline())
+                .font(.system(size: 16, weight: .medium))
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -513,15 +636,16 @@ struct PaywallView: View {
                 .offset(y: isAnimating ? 0 : 10)
                 .animation(.easeOut(duration: 0.4).delay(0.2), value: isAnimating)
         }
-        .padding(.vertical, AppSpacing.l)
+        .padding(.top, AppSpacing.xl)
+        .padding(.bottom, AppSpacing.m)
     }
     
     private var featuresSection: some View {
-        VStack(spacing: AppSpacing.xl) {
+        VStack(spacing: AppSpacing.l) {
             // Enhanced features section with stronger glow effects
-            VStack(alignment: .leading, spacing: AppSpacing.l) {
+            VStack(alignment: .leading, spacing: AppSpacing.m) {
                 Text("Pro Features")
-                    .font(AppTypography.title2().bold())
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundColor(Color.theme.text)
                     .padding(.horizontal, AppSpacing.m)
                 
@@ -533,7 +657,7 @@ struct PaywallView: View {
                         iconName: feature.iconName,
                         category: feature.category
                     )
-                    .padding(.bottom, AppSpacing.s)
+                    .padding(.bottom, AppSpacing.xxs)
                 }
             }
             .padding(AppSpacing.s)
@@ -570,7 +694,7 @@ struct PaywallView: View {
                 category: "🤝 Level Up Together"
             ),
             ProFeatureItem(
-                title: "Extended Friends Network", 
+                title: "Extended Network", 
                 description: "Connect with more than 5 friends to expand your support system.", 
                 iconName: "person.badge.plus",
                 category: "🤝 Level Up Together"
@@ -600,10 +724,10 @@ struct PaywallView: View {
         @Environment(\.colorScheme) private var colorScheme
         
         var body: some View {
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+            VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 // Category label
                 Text(category)
-                    .font(AppTypography.caption1().bold())
+                    .font(.system(size: 12, weight: .bold))
                     .foregroundColor(Color.theme.accent)
                     .padding(.leading, 60)
                     .padding(.bottom, 2)
@@ -614,56 +738,58 @@ struct PaywallView: View {
                         // Outer glow
                         Circle()
                             .fill(Color.theme.accent.opacity(0.3))
-                            .frame(width: 52, height: 52)
-                            .blur(radius: isHovered ? 10 : 7)
+                            .frame(width: 48, height: 48)
+                            .blur(radius: isHovered ? 8 : 6)
                         
                         // Inner circle
                         Circle()
-                            .fill(Color.theme.surface)
-                            .frame(width: 44, height: 44)
-                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 8, x: 0, y: 0)
+                            .fill(colorScheme == .dark ? 
+                                Color.theme.surface.opacity(0.9) : 
+                                Color.theme.surface)
+                            .frame(width: 40, height: 40)
                         
                         // Icon
                         Image(systemName: iconName)
-                            .font(.system(size: AppSpacing.iconSizeMedium))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(Color.theme.accent)
-                            .shadow(color: Color.theme.accent.opacity(0.5), radius: 1, x: 0, y: 0)
                     }
-                    .scaleEffect(isHovered ? 1.07 : 1.0)
+                    .scaleEffect(isHovered ? 1.05 : 1.0)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
                     
                     // Feature text
-                    VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(title)
-                            .font(AppTypography.headline().bold())
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color.theme.text)
                         
                         Text(description)
-                            .font(AppTypography.subhead())
+                            .font(.system(size: 14, weight: .regular))
                             .foregroundColor(Color.theme.subtext)
                             .lineSpacing(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
-            .padding(AppSpacing.cardPadding)
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                RoundedRectangle(cornerRadius: 14)
                     .fill(colorScheme == .dark ? 
                           Color.theme.surface.opacity(0.7) : 
                           Color.theme.surface)
                     .shadow(color: Color.theme.shadow.opacity(isHovered ? 0.2 : 0.1), 
-                            radius: isHovered ? 10 : 6, 
+                            radius: isHovered ? 8 : 5, 
                             x: 0, 
-                            y: isHovered ? 5 : 3)
+                            y: isHovered ? 4 : 2)
                     .overlay(
-                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                            .stroke(Color.theme.accent.opacity(isHovered ? 0.2 : 0), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.theme.accent.opacity(isHovered ? 0.2 : 0.05), lineWidth: 1)
                     )
             )
             .onAppear {
-                // Cycle through highlighting features
-                DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
+                // Create a random delay for hover animation to stagger effects
+                DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.5...2.5)) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                         isHovered = true
                     }
@@ -689,18 +815,19 @@ struct PaywallView: View {
     
     private var actionButtons: some View {
         VStack(spacing: AppSpacing.m) {
-            // Subscribe button
+            // Subscribe button with improved styling
             Button {
                 purchaseSubscription()
             } label: {
                 HStack {
                     Text("Upgrade Now")
                         .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                     
-                    Text("- \(price)/month")
+                    Text("• \(price)/month")
                         .font(.system(size: 16))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
                 }
-                .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
                 .background(
@@ -709,29 +836,34 @@ struct PaywallView: View {
                         startPoint: .leading,
                         endPoint: .trailing
                     )
+                    .cornerRadius(14)
                 )
-                .cornerRadius(14)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(colorScheme == .dark ? Color.black.opacity(0.2) : Color.white.opacity(0.2), lineWidth: 1)
+                )
                 .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(AppScaleButtonStyle())
             .opacity(isAnimating ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.4).delay(0.8), value: isAnimating)
             
-            // Restore button
+            // Restore button with improved styling
             Button {
                 restorePurchases()
             } label: {
                 Text("Restore Purchases")
-                    .font(AppTypography.subhead().bold())
-                    .foregroundColor(colorScheme == .dark ? .white.opacity(0.9) : Color.theme.accent)
-                    .padding(.vertical, 12)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(Color.theme.accent)
+                    .padding(.vertical, 14)
                     .padding(.horizontal, 20)
+                    .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(colorScheme == .dark ? Color.theme.accent.opacity(0.3) : Color.theme.surface)
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.theme.surface)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(colorScheme == .dark ? Color.white.opacity(0.2) : Color.theme.border, lineWidth: 1)
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
                             )
                     )
             }
@@ -741,21 +873,45 @@ struct PaywallView: View {
             
             // Terms and conditions
             Text("Subscription auto-renews until cancelled")
-                .font(AppTypography.caption1())
-                .foregroundColor(Color.theme.subtext.opacity(0.8))
+                .font(AppTypography.caption1().bold())
+                .foregroundColor(Color.theme.text.opacity(0.9))
                 .multilineTextAlignment(.center)
-                .padding(.top, AppSpacing.xs)
+                .padding(.top, AppSpacing.s)
                 .opacity(isAnimating ? 1.0 : 0.0)
                 .animation(.easeOut(duration: 0.4).delay(1.0), value: isAnimating)
                 
-            Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. Manage or cancel your subscription in Settings.")
-                .font(AppTypography.caption2())
-                .foregroundColor(Color.theme.subtext.opacity(0.7))
-                .multilineTextAlignment(.center)
-                .padding(.top, AppSpacing.xxs)
-                .padding(.horizontal, AppSpacing.s)
-                .opacity(isAnimating ? 1.0 : 0.0)
-                .animation(.easeOut(duration: 0.4).delay(1.1), value: isAnimating)
+            // Legal text in a card for better visibility
+            VStack {
+                Text("Payment will be charged to your Apple ID account at confirmation of purchase. Subscription automatically renews unless it is canceled at least 24 hours before the end of the current period. Your account will be charged for renewal within 24 hours prior to the end of the current period. Manage or cancel your subscription in Settings.")
+                    .font(AppTypography.caption2())
+                    .foregroundColor(Color.theme.text.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(AppSpacing.s)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.theme.shadow.opacity(0.05), radius: 3, x: 0, y: 1)
+            )
+            .padding(.horizontal, AppSpacing.xs)
+            .opacity(isAnimating ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.4).delay(1.1), value: isAnimating)
+                
+            // Terms and Privacy links
+            HStack(spacing: 20) {
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                    .font(AppTypography.caption1().bold())
+                    .foregroundColor(Color.theme.accent)
+                
+                Link("Privacy Policy", destination: URL(string: "https://100days.site/privacy")!)
+                    .font(AppTypography.caption1().bold())
+                    .foregroundColor(Color.theme.accent)
+            }
+            .padding(.top, AppSpacing.s)
+            .padding(.bottom, AppSpacing.m)
+            .opacity(isAnimating ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.4).delay(1.2), value: isAnimating)
         }
     }
     
@@ -768,15 +924,16 @@ struct PaywallView: View {
                 ProgressView()
                     .scaleEffect(1.5)
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .padding(.bottom, 8)
                 
                 Text("Processing...")
-                    .font(AppTypography.headline())
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
             }
             .padding(AppSpacing.xl)
             .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                    .fill(Color.theme.surface.opacity(0.9))
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(Color.black.opacity(0.7))
                     .shadow(color: Color.black.opacity(0.2), radius: 10, x: 0, y: 5)
             )
         }

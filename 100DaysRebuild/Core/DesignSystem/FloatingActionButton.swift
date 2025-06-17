@@ -38,7 +38,7 @@ struct FloatingActionButton: View {
                     .foregroundColor(.white)
             }
         }
-        .buttonStyle(FloatingButtonStyle())
+        .buttonStyle(FABButtonStyle())
     }
 }
 
@@ -89,7 +89,7 @@ struct FloatingActionMenu<Content: View>: View {
                         .scaleEffect(isExpanded ? 1.1 : 1.0)
                 }
             }
-            .buttonStyle(FloatingButtonStyle())
+            .buttonStyle(FABButtonStyle())
         }
     }
 }
@@ -141,7 +141,7 @@ struct FloatingActionMenuItem: View {
 }
 
 // Button style for floating action button with spring animation
-private struct FloatingButtonStyle: ButtonStyle {
+private struct FABButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.92 : 1.0)

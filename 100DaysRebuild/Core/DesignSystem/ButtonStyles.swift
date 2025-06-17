@@ -20,6 +20,7 @@ public struct AppPrimaryButtonStyle: ButtonStyle {
     private let cornerRadius: CGFloat
     private let horizontalPadding: CGFloat
     private let verticalPadding: CGFloat
+    @Environment(\.colorScheme) private var colorScheme
     
     public init(
         cornerRadius: CGFloat = 14, 
@@ -34,7 +35,7 @@ public struct AppPrimaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(AppTypography.body(.medium))
-            .foregroundColor(.white)
+            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
             .padding(.horizontal, horizontalPadding)
             .padding(.vertical, verticalPadding)
             .background(
@@ -150,7 +151,9 @@ public struct PrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.system(size: 16, weight: .medium))
             .frame(maxWidth: .infinity, minHeight: height)
-            .foregroundColor(isEnabled ? .white : .white.opacity(0.7))
+            .foregroundColor(isEnabled 
+                ? Color.adaptiveForeground(for: colorScheme)
+                : Color.adaptiveForeground(for: colorScheme).opacity(0.7))
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isEnabled 

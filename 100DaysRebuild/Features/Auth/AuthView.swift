@@ -4,6 +4,7 @@ import FirebaseAuth
 import GoogleSignIn
 import AuthenticationServices
 import Firebase
+import CryptoKit
 
 // No need to import AuthAlert from Models since we're not using it directly in this file anymore
 
@@ -36,16 +37,34 @@ struct AuthView: View {
                 HStack {
                     // Close Button
                     Button(action: {
+                        // Navigate back to WelcomeView instead of just dismissing
                         dismiss()
+                        
+                        // Reset UserSession state to ensure Welcome screen is shown
+                        Task {
+                            await userSession.signOutWithoutThrowing()
+                            
+                            // Also post the navigation notification directly to ensure transition
+                            await MainActor.run {
+                                NotificationCenter.default.post(
+                                    name: NSNotification.Name("ForceNavigateToWelcome"),
+                                    object: nil
+                                )
+                            }
+                        }
                     }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .medium))
-                            .foregroundColor(Color.theme.text)
+                            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .padding(12)
                             .background(
                                 Circle()
-                                    .fill(Color.theme.surface)
+                                    .fill(colorScheme == .dark ? Color.theme.surface : Color.white)
                                     .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.2), lineWidth: 1)
                             )
                     }
                     
@@ -222,7 +241,9 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign In")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignIn ? .white : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignIn ? 
+                        (colorScheme == .dark ? .black : .white) : 
+                        .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -248,7 +269,8 @@ struct AuthModeSelector: View {
             }) {
                 Text("Sign Up")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignUp ? .white : .theme.subtext)
+                    .foregroundColor(viewModel.authMode == .emailSignUp ? 
+                        (colorScheme == .dark ? .black : .white) : .theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -409,65 +431,60 @@ private extension AuthView {
     
     // Main authentication form
     var authForm: some View {
-        VStack(spacing: 28) {
-            // Email & Password fields based on auth mode
-            switch viewModel.authMode {
-            case .emailSignIn, .emailSignUp:
-                emailPasswordForm
-                
-                // Sign In/Up button
-                Button(action: submitCredentials) {
-                    HStack(spacing: 12) {
-                        Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Sign Up")
-                            .font(.system(size: 17, weight: .semibold))
-                        
-                        if viewModel.isLoading {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        }
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CalAIDesignTokens.buttonHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.3))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.1 : 0), lineWidth: colorScheme == .dark ? 1 : 0)
-                    )
-                    .shadow(color: isButtonEnabled ? Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
-                }
-                .disabled(!isButtonEnabled)
-                .padding(.top, 4)
-                
-                // Forgot password link (sign in mode only)
-                if viewModel.authMode == .emailSignIn {
-                    Button("Forgot Password?") {
-                        withAnimation {
-                            viewModel.authMode = .forgotPassword
-                        }
-                    }
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.theme.accent)
-                    .padding(.top, 8)
-                }
-                
-            case .forgotPassword:
+        Group {
+            if viewModel.authMode == .forgotPassword {
                 forgotPasswordForm
-                
-            case .googleSignIn, .appleSignIn:
-                // These auth modes are handled directly by their respective buttons
-                // and don't need dedicated form UI in the authForm view
-                EmptyView()
+            } else {
+                standardAuthForm
             }
         }
     }
     
-    // Email and password form fields
-    var emailPasswordForm: some View {
+    // Standard sign in/sign up form
+    var standardAuthForm: some View {
+        VStack(spacing: 24) {
+            // Email and password fields
+            emailPasswordFields
+            
+            // Forgot password link (only in sign in mode)
+            if viewModel.authMode == .emailSignIn {
+                Button {
+                    withAnimation {
+                        viewModel.authMode = .forgotPassword
+                    }
+                } label: {
+                    Text("Forgot your password?")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.theme.accent)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.top, -12)
+            }
+            
+            // Submit button
+            Button(action: submitCredentials) {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else {
+                    Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Create Account")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .foregroundColor(Color.white)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: CalAIDesignTokens.buttonHeight)
+            .background(
+                RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                    .fill(isButtonEnabled ? Color.theme.accent : Color.gray.opacity(0.3))
+                    .shadow(color: isButtonEnabled ? Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
+            )
+            .disabled(!isButtonEnabled)
+        }
+    }
+    
+    // Email and password input fields
+    var emailPasswordFields: some View {
         VStack(spacing: 16) {
             // Email field
             VStack(alignment: .leading, spacing: 8) {
@@ -494,7 +511,7 @@ private extension AuthView {
                         print("Email field submitted, moving to password")
                         focusedField = Field.password
                     }
-                    .onChange(of: viewModel.email) { _, newValue in
+                    .onChange(of: viewModel.email) { newValue in
                         if !newValue.isEmpty {
                             Task { @MainActor in
                                 viewModel.updateValidationState()
@@ -537,7 +554,7 @@ private extension AuthView {
                             submitCredentials()
                         }
                     }
-                    .onChange(of: viewModel.password) { _, newValue in
+                    .onChange(of: viewModel.password) { newValue in
                         if !newValue.isEmpty {
                             Task { @MainActor in
                                 viewModel.updateValidationState()
@@ -575,7 +592,7 @@ private extension AuthView {
                         .onSubmit {
                             submitCredentials()
                         }
-                        .onChange(of: viewModel.confirmPassword) { _, newValue in
+                        .onChange(of: viewModel.confirmPassword) { newValue in
                             if !newValue.isEmpty {
                                 Task { @MainActor in
                                     viewModel.updateValidationState()
@@ -591,7 +608,7 @@ private extension AuthView {
                 }
             }
         }
-        .onChange(of: focusedField) { _, newValue in
+        .onChange(of: focusedField) { newValue in
             print("Focus changed to: \(String(describing: newValue))")
         }
     }
@@ -670,23 +687,30 @@ private extension AuthView {
     var socialSignInSection: some View {
         VStack(spacing: 24) {
             // Divider with "Or continue with" text
-            HStack {
+            HStack(spacing: 0) {
+                Spacer()
+                
                 Rectangle()
                     .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
+                    .frame(maxWidth: .infinity)
                 
                 Text("Or continue with")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(Color.theme.subtext)
                     .padding(.horizontal, 16)
+                    .fixedSize()
                 
                 Rectangle()
                     .fill(Color.theme.border.opacity(0.5))
                     .frame(height: 1)
+                    .frame(maxWidth: .infinity)
+                    
+                Spacer()
             }
             .padding(.horizontal, 8)
             
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 // Apple Sign In
                 if showAppleSignIn {
                     SignInWithAppleButton(
@@ -695,7 +719,15 @@ private extension AuthView {
                             let nonce = viewModel.randomNonceString()
                             currentNonce = nonce
                             request.requestedScopes = [.email]
-                            request.nonce = viewModel.sha256(nonce)
+                            
+                            // Use direct implementation to avoid dependency on incorrect AuthService method
+                            let inputData = Data(nonce.utf8)
+                            let hashedData = SHA256.hash(data: inputData)
+                            let hashString = hashedData.compactMap {
+                                String(format: "%02x", $0)
+                            }.joined()
+                            
+                            request.nonce = hashString
                         },
                         onCompletion: { result in
                             Task {
@@ -703,7 +735,7 @@ private extension AuthView {
                             }
                         }
                     )
-                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .signInWithAppleButtonStyle(.white) // Always white background with black text
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .overlay(
@@ -712,7 +744,7 @@ private extension AuthView {
                     )
                 }
                 
-                // Google Sign In
+                // Google Sign In - styled to match Apple button
                 Button {
                     Task {
                         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -725,29 +757,19 @@ private extension AuthView {
                         await viewModel.signInWithGoogle()
                     }
                 } label: {
-                    HStack {
-                        Spacer()
-                        
-                        Text("Continue with Google")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.theme.text)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: CalAIDesignTokens.buttonHeight)
-                    .background(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .fill(Color.theme.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
-                    )
-                    .shadow(color: Color.theme.shadow.opacity(0.08), radius: 4, x: 0, y: 2)
+                    Text("Continue with Google")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.black) // Always black text
+                        .frame(maxWidth: .infinity)
+                        .frame(height: CalAIDesignTokens.buttonHeight)
+                        .background(Color.white) // Always white background
+                        .cornerRadius(CalAIDesignTokens.buttonRadius)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                                .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
+                        )
                 }
-                .buttonStyle(AppScaleButtonStyle(scale: 0.98))
+                .buttonStyle(AuthScaleButtonStyle())
                 .disabled(!viewModel.networkConnected || viewModel.isLoading)
             }
         }
@@ -863,7 +885,7 @@ private extension AuthView {
                 .foregroundColor(.theme.subtext)
             
             HStack(spacing: 4) {
-                Link("Terms of Service", destination: URL(string: "https://100days.site/terms")!)
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
                     .font(.system(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.accent)
                 
@@ -917,12 +939,22 @@ struct SignInWithAppleButton: UIViewRepresentable {
         
         let button = ASAuthorizationAppleIDButton(authorizationButtonType: type, authorizationButtonStyle: style)
         
-        // Set exact frame for better layout control
+        // Improved frame for better layout control
         button.frame = CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width - 48, height: 50)
         
-        // Ensure the button adapts to layout changes but doesn't create invalid constraints
+        // Ensure content is properly centered
+        button.contentHorizontalAlignment = .center
+        button.contentVerticalAlignment = .center
         button.translatesAutoresizingMaskIntoConstraints = true
         button.clipsToBounds = true
+        
+        // Match button corner radius with SwiftUI buttons
+        button.cornerRadius = CalAIDesignTokens.buttonRadius
+
+        // Adjust text size to match the Google button text size
+        if let titleLabel = button.subviews.first?.subviews.first as? UILabel {
+            titleLabel.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        }
         
         // Add tap gesture recognizer
         let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.buttonTapped))
@@ -976,7 +1008,19 @@ struct SignInWithAppleButton: UIViewRepresentable {
         }
         
         func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-            return UIApplication.shared.windows.first { $0.isKeyWindow }!
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
+                .first { $0.isKeyWindow } ?? UIWindow()
         }
+    }
+}
+
+// Simple scale button style for consistent appearance with Apple button
+struct AuthScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 } 

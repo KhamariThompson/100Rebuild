@@ -190,7 +190,7 @@ struct CheckInDetailModalView: View {
                                         .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
                                 )
                                 .padding(.top, 4)
-                                .onChange(of: editedNote) { oldValue, newValue in
+                                .onChange(of: editedNote) { newValue in
                                     // Auto-save if needed
                                 }
                         } else {
@@ -274,7 +274,7 @@ struct CheckInDetailModalView: View {
                 }
             )
             .photosPicker(isPresented: $showingPhotosPicker, selection: $photoItem, matching: .images)
-            .onChange(of: photoItem) { oldValue, newValue in
+            .onChange(of: photoItem) { newValue in
                 Task {
                     // Add a minimal sleep to ensure there's a suspension point
                     try? await Task.sleep(nanoseconds: 1_000_000) // 1 millisecond
@@ -289,8 +289,8 @@ struct CheckInDetailModalView: View {
                     }
                 }
             }
-            .onChange(of: isEditingNote) { oldValue, newValue in
-                if oldValue == true && newValue == false {
+            .onChange(of: isEditingNote) { newValue in
+                if !newValue {
                     // Save the note when exiting edit mode
                     Task {
                         viewModel.updateCheckInNote(for: checkIn, newNote: editedNote)

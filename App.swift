@@ -7,21 +7,29 @@ import AuthenticationServices
 import Network
 import FirebaseFirestore
 import MessageUI
+import Purchases
 
-// Declare FirestoreCacheSizeUnlimited constant if it doesn't exist elsewhere
-let FirestoreCacheSizeUnlimited: Int64 = 104857600 // 100MB as a default size
+// Reduce Firebase cache size from 100MB to 10MB to prevent memory issues
+let FirestoreCacheSizeUnlimited: Int64 = 10485760 // 10MB instead of 100MB
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     private var networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
     static var firebaseConfigured = false
+    static var revenueCatConfigured = false
     
     // Add memory monitoring timer
     private var memoryMonitorTimer: Timer?
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        // Configure Firebase at the very beginning, before any other Firebase-related code
+        // Configure Firebase at the very beginning
         configureFirebaseOnce()
+        
+        // Configure RevenueCat after Firebase
+        configureRevenueCat()
+        
+        // Set up transaction observation for StoreKit updates
+        observeTransactionUpdates()
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -35,29 +43,114 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Start memory monitoring
         startMemoryMonitoring()
         
+        // Enhanced app state monitoring
+        setupAppStateMonitoring()
+        
         return true
     }
     
     // Helper method to ensure Firebase is only initialized once
     private func configureFirebaseOnce() {
-        // Only configure Firebase if it hasn't been configured yet
-        if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
-            print("DEBUG: Configuring Firebase for the first time")
-            FirebaseApp.configure()
+        guard !AppDelegate.firebaseConfigured else {
+            print("DEBUG: Firebase already configured, skipping configuration")
+            return
+        }
+        
+        print("DEBUG: Configuring Firebase for the first time")
+        FirebaseApp.configure()
+        
+        // Configure Firestore with minimal settings initially
+        let db = Firestore.firestore()
+        let settings = db.settings
+        settings.isPersistenceEnabled = false // Disable persistence initially
+        settings.cacheSizeBytes = 5242880 // 5MB cache
+        db.settings = settings
+        
+        // Mark Firebase as configured using static flag
+        AppDelegate.firebaseConfigured = true
+        print("DEBUG: Firebase configured with persistence disabled")
+    }
+    
+    private func configureRevenueCat() {
+        // Skip if already configured
+        guard !AppDelegate.revenueCatConfigured else {
+            #if DEBUG
+            print("🔐 RevenueCat: Already configured, skipping initialization")
+            #endif
+            return
+        }
+        
+        // Get the current Firebase user ID if available
+        let currentUserId = Auth.auth().currentUser?.uid
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Initial configuration with Firebase UID: \(currentUserId ?? "none")")
+        #endif
+        
+        // Configure RevenueCat with proper production settings
+        #if DEBUG
+        Purchases.logLevel = .debug // More verbose logging in debug builds
+        #else
+        Purchases.logLevel = .error // Only log errors in production
+        #endif
+        
+        Purchases.configure(
+            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+                .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
+                .with(observerMode: false)
+                .with(userDefaults: UserDefaults.standard)
+                .with(usesStoreKit2IfAvailable: true)
+                .build()
+        )
+        
+        // Set the delegate immediately
+        Purchases.shared.delegate = SubscriptionService.shared
+        
+        // Mark as configured to ensure it only happens once
+        AppDelegate.revenueCatConfigured = true
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
+        #endif
+        
+        // Check and log the current environment
+        Task {
+            do {
+                let customerInfo = try await Purchases.shared.customerInfo()
+                #if DEBUG
+                print("🔐 RevenueCat: Environment = \(customerInfo.entitlementVerification?.environment.rawValue ?? "unknown")")
+                print("🔐 RevenueCat: Initial Pro status = \(customerInfo.entitlements["pro"]?.isActive ?? false)")
+                #endif
+            } catch {
+                #if DEBUG
+                print("🔐 RevenueCat: Failed to get initial customer info: \(error.localizedDescription)")
+                #endif
+            }
             
-            // Configure Firestore for offline persistence
-            let db = Firestore.firestore()
-            let settings = db.settings
-            settings.cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited))
-            settings.isPersistenceEnabled = true // Ensure persistence is enabled
-            db.settings = settings
-            
-            // Mark Firebase as configured using static flag
-            AppDelegate.firebaseConfigured = true
-            
-            print("DEBUG: Firestore offline persistence configured")
-        } else {
-            print("DEBUG: Firebase was already configured, skipping configuration")
+            // Only identify if we have a Firebase user
+            if let currentUserId = currentUserId {
+                await SubscriptionService.shared.identifyCurrentUser()
+            }
+        }
+    }
+    
+    // Add transaction observation for StoreKit updates
+    private func observeTransactionUpdates() {
+        Task {
+            for await verificationResult in Transaction.updates {
+                if case .verified(let transaction) = verificationResult {
+                    #if DEBUG
+                    print("🔐 RevenueCat: Transaction update received for: \(transaction.productID)")
+                    #endif
+                    
+                    // Always finish the transaction
+                    await transaction.finish()
+                    
+                    // Refresh subscription status
+                    await SubscriptionService.shared.updateSubscriptionStatus()
+                }
+            }
         }
     }
     
@@ -117,7 +210,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Function to set up network monitoring
     private func startNetworkMonitoring() {
-        networkMonitor.pathUpdateHandler = { path in
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self = self else { return }
+            
             let isConnected = path.status == .satisfied
             print("Network connectivity changed: \(isConnected ? "Connected" : "Disconnected")")
             
@@ -156,6 +251,62 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         }
     }
     
+    // Enhanced app state monitoring
+    private func setupAppStateMonitoring() {
+        // App did become active notification observer
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func handleAppDidBecomeActive() {
+        #if DEBUG
+        print("🔐 RevenueCat: App became active, verifying user identity and subscription")
+        #endif
+        
+        Task {
+            // Check if the current user is properly identified with RevenueCat
+            if let currentFirebaseUID = Auth.auth().currentUser?.uid {
+                #if DEBUG
+                print("🔐 RevenueCat: Current Firebase UID: \(currentFirebaseUID)")
+                print("🔐 RevenueCat: Current RevenueCat appUserID: \(Purchases.shared.appUserID)")
+                #endif
+                
+                if Purchases.shared.appUserID != currentFirebaseUID {
+                    #if DEBUG
+                    print("🔐 RevenueCat: Identity mismatch detected, re-identifying user")
+                    #endif
+                    await SubscriptionService.shared.identifyCurrentUser()
+                } else {
+                    #if DEBUG
+                    print("🔐 RevenueCat: User identity matches")
+                    #endif
+                }
+                
+                // Refresh subscription status
+                await SubscriptionService.shared.updateSubscriptionStatus()
+                
+                // Log environment
+                #if DEBUG
+                do {
+                    let customerInfo = try await Purchases.shared.customerInfo()
+                    print("🔐 RevenueCat: Environment = \(customerInfo.entitlementVerification?.environment.rawValue ?? "unknown")")
+                    print("🔐 RevenueCat: Pro status = \(customerInfo.entitlements["pro"]?.isActive ?? false)")
+                } catch {
+                    print("🔐 RevenueCat: Failed to get customer info: \(error.localizedDescription)")
+                }
+                #endif
+            } else {
+                #if DEBUG
+                print("🔐 RevenueCat: No Firebase user logged in")
+                #endif
+            }
+        }
+    }
+    
     deinit {
         networkMonitor.cancel()
         memoryMonitorTimer?.invalidate()
@@ -172,14 +323,11 @@ extension Notification.Name {
 @main
 struct App100Days: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    
+    // Only keep essential services at startup
     @StateObject private var appStateCoordinator = AppStateCoordinator.shared
     @StateObject private var userSession = UserSession.shared
-    @StateObject private var subscriptionService = SubscriptionService.shared
-    @StateObject private var notificationService = NotificationService.shared
-    @StateObject private var adManager = AdManager.shared
-    @StateObject private var progressViewModel = ProgressDashboardViewModel.shared
     @StateObject private var themeManager = ThemeManager.shared
-    @StateObject private var navigationRouter = NavigationRouter()
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -216,39 +364,36 @@ struct App100Days: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                // Main app content conditional on app state
                 if appStateCoordinator.appState == .initializing {
-                    // Show loading screen while initializing
                     SplashScreen()
-                        .environmentObject(themeManager) // Add ThemeManager here
-                        .withAppTheme()
+                        .environmentObject(themeManager)
                 } else if case .error(let message) = appStateCoordinator.appState {
-                    // Show error screen if there's an error
                     ErrorView(message: message) {
                         appStateCoordinator.attemptRecovery()
                     }
-                    .environmentObject(themeManager) // Add ThemeManager here
-                    .withAppTheme()
+                    .environmentObject(themeManager)
                 } else {
-                    // Show main content when ready or offline
-                    MainAppView()
-                        .environmentObject(userSession)
-                        .environmentObject(subscriptionService)
-                        .environmentObject(notificationService)
-                        .environmentObject(adManager)
-                        .environmentObject(UserStatsService.shared)
-                        .environmentObject(themeManager) // Ensure ThemeManager is available
-                        .environmentObject(progressViewModel) // Add ProgressViewModel to fix loading issues
-                        .environmentObject(navigationRouter)
-                        .withAppTheme()
-                        .overlay(
-                            // Show offline banner when in offline state
-                            appStateCoordinator.appState == .offline ?
-                                OfflineBanner()
-                                    .transition(.move(edge: .top))
-                                    .animation(.spring(), value: appStateCoordinator.appState)
-                                : nil
-                        )
+                    // Debug print to verify onboarding status
+                    let _ = print("DEBUG: User authenticated: \(userSession.isAuthenticated), hasCompletedOnboarding: \(userSession.hasCompletedOnboarding)")
+                    
+                    if userSession.isAuthenticated && !userSession.hasCompletedOnboarding {
+                        OnboardingView()
+                            .environmentObject(userSession)
+                            .environmentObject(themeManager)
+                            .environmentObject(appStateCoordinator)
+                    } else {
+                        MainAppView()
+                            .environmentObject(userSession)
+                            .environmentObject(themeManager)
+                            .environmentObject(appStateCoordinator)
+                            .overlay(
+                                appStateCoordinator.appState == .offline ?
+                                    OfflineBanner()
+                                        .transition(.move(edge: .top))
+                                        .animation(.spring(), value: appStateCoordinator.appState)
+                                    : nil
+                            )
+                    }
                 }
             }
             .onAppear {
@@ -261,105 +406,6 @@ struct App100Days: App {
             }
         }
     }
-    
-    private func fixAppleButtonConstraints() {
-        // Fix for the AppleID button constraints that cause SIGABRT
-        UserDefaults.standard.set(false, forKey: "ASAuthorizationAppleIDButtonDrawsWhenDisabled")
-        
-        // Ensure we don't break constraints automatically
-        UserDefaults.standard.set(false, forKey: "UIViewLayoutConstraintBehaviorAllowBreakingConstraints")
-        
-        // Log unsatisfiable constraints
-        UserDefaults.standard.set(true, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
-        
-        // Register a notification to fix Apple button constraints when new views appear
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(fixNewAppleButtons),
-            name: UIView.didAddSubviewNotification,
-            object: nil
-        )
-        
-        // Ensure all existing windows are checked
-        DispatchQueue.main.async {
-            self.scanForAppleButtonsInAllWindows()
-        }
-    }
-    
-    @objc private func fixNewAppleButtons(notification: Notification) {
-        if let view = notification.object as? UIView {
-            // Check if this is an Apple sign-in button
-            let viewName = NSStringFromClass(type(of: view))
-            if viewName.contains("ASAuthorizationAppleIDButton") {
-                DispatchQueue.main.async {
-                    self.fixAppleButton(view)
-                }
-            }
-            
-            // Also check if this view might contain Apple button
-            DispatchQueue.main.async {
-                self.scanForAppleButtons(in: view)
-            }
-        }
-    }
-    
-    private func scanForAppleButtonsInAllWindows() {
-        for window in Self.getAppWindows() {
-            scanForAppleButtons(in: window)
-        }
-    }
-    
-    private func scanForAppleButtons(in view: UIView) {
-        // Check if this view is an Apple button
-        let viewName = NSStringFromClass(type(of: view))
-        if viewName.contains("ASAuthorizationAppleIDButton") {
-            fixAppleButton(view)
-        }
-        
-        // Check subviews recursively
-        for subview in view.subviews {
-            scanForAppleButtons(in: subview)
-        }
-    }
-    
-    private func fixAppleButton(_ button: UIView) {
-        print("Fixing ASAuthorizationAppleIDButton constraints")
-        
-        // Remove problematic width constraints
-        let constraintsToRemove = button.constraints.filter { constraint in
-            return constraint.firstAttribute == .width && 
-                   (constraint.constant == 380 || constraint.multiplier != 1.0)
-        }
-        
-        for constraint in constraintsToRemove {
-            button.removeConstraint(constraint)
-            print("Removed problematic constraint: \(constraint)")
-        }
-        
-        // Also check superview constraints
-        if let superview = button.superview {
-            let superviewConstraintsToModify = superview.constraints.filter { constraint in
-                (constraint.firstItem === button || constraint.secondItem === button) &&
-                (constraint.firstAttribute == .width || constraint.secondAttribute == .width)
-            }
-            
-            for constraint in superviewConstraintsToModify {
-                constraint.priority = .defaultLow
-                print("Lowered priority of superview constraint: \(constraint)")
-            }
-        }
-        
-        // Make the view size itself appropriately
-        button.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        button.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-    }
-}
-
-// Helper function to fix Apple button constraints
-func fixAppleButtonConstraints() {
-    // Implementation details would go here
-    // This is a placeholder since the real implementation would involve private API calls
-    print("Applied fix for ASAuthorizationAppleIDButton constraints")
 }
 
 // Simple offline banner
@@ -448,7 +494,7 @@ struct AppContentView: View {
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
     @StateObject private var navigationRouter = NavigationRouter()
-    @State private var isInitializing = true
+    @State private var isInitializing = true // Changed to true to show splash screen initially
     
     var body: some View {
         ZStack {
@@ -461,9 +507,9 @@ struct AppContentView: View {
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
-                        // Delay to show splash screen briefly
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            withAnimation(.easeInOut(duration: 0.4)) {
+                        // After a short delay, set isInitializing to false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
                                 isInitializing = false
                             }
                         }
@@ -473,11 +519,15 @@ struct AppContentView: View {
                     if userSession.isAuthenticated {
                         if userSession.hasCompletedOnboarding {
                             MainAppView()
+                                .environmentObject(navigationRouter)
+                                .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                         } else {
                             OnboardingView()
+                                .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                         }
                     } else {
                         AuthView()
+                            .transition(.opacity.animation(.easeInOut(duration: 0.3)))
                     }
                 }
                 .environmentObject(navigationRouter)

@@ -10,9 +10,17 @@ extension View {
     
     func checkInNavigation(isPresented: Binding<Bool>, challenge: Challenge, viewModel: ChallengesViewModel) -> some View {
         self.sheet(isPresented: isPresented) {
-            EnhancedCheckInView(
-                challengesViewModel: viewModel,
-                challenge: challenge
+            SimpleCheckInSheet(
+                challenge: challenge,
+                dayNumber: challenge.daysCompleted + 1,
+                onCheckIn: { note, image in
+                    Task {
+                        await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                    }
+                },
+                onDismiss: {
+                    isPresented.wrappedValue = false
+                }
             )
         }
     }

@@ -12,8 +12,12 @@ class UsernameSetupViewModel: ObservableObject {
     
     private let firestore = FirebaseService.shared
     private let userSession = UserSession.shared
+    private var validationTask: Task<Void, Never>?
     
     func validateUsername() {
+        // Cancel any existing validation task
+        validationTask?.cancel()
+        
         // Reset validation state
         isValid = false
         error = nil
@@ -29,28 +33,19 @@ class UsernameSetupViewModel: ObservableObject {
             return
         }
         
-        // For better UX, don't check availability on every keystroke
-        // Allow at least 3 characters before checking
-        if username.count >= 3 {
-            // Check availability after typing stops
-            debounceCheckAvailability()
-        }
-    }
-    
-    private var availabilityCheckTask: Task<Void, Never>?
-    
-    private func debounceCheckAvailability() {
-        // Cancel any pending availability check
-        availabilityCheckTask?.cancel()
-        
-        // Start a new check with a delay to avoid too many Firestore calls
-        availabilityCheckTask = Task {
+        // Create a new debounced task with increased debounce time
+        validationTask = Task {
             do {
-                try await Task.sleep(nanoseconds: 600_000_000) // 600ms debounce
+                // Longer debounce delay to prevent UI flickering
+                try await Task.sleep(nanoseconds: 800_000_000) // 800ms debounce
+                
                 if !Task.isCancelled {
+                    // Check availability after typing stops
                     await checkUsernameAvailability()
                 }
-            } catch {}
+            } catch {
+                // Task was cancelled, do nothing
+            }
         }
     }
     
@@ -114,9 +109,40 @@ class UsernameSetupViewModel: ObservableObject {
         error = nil
         
         do {
-            try await userSession.updateUsername(username)
+            // 1. Get current user ID
+            guard let userId = userSession.currentUser?.uid else {
+                error = "User not authenticated"
+                isLoading = false
+                return
+            }
+            
+            // Normalize the username to lowercase
+            let normalizedUsername = username.lowercased()
+            
+            // 2. Update Firestore user document - don't change the displayName
+            try await Firestore.firestore()
+                .collection("users")
+                .document(userId)
+                .updateData(["username": normalizedUsername])
+            
+            // 3. Create username reservation
+            try await Firestore.firestore()
+                .collection("usernames")
+                .document(normalizedUsername)
+                .setData(["userId": userId])
+            
+            // 4. Update UserSession's username (not displayName)
+            try await userSession.updateUsername(normalizedUsername)
+            
             isLoading = false
             showSuccess = true
+            
+            // Post notification that username has been updated
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserProfileUpdated"),
+                object: nil,
+                userInfo: ["username": normalizedUsername]
+            )
         } catch {
             self.error = error.localizedDescription
             isLoading = false

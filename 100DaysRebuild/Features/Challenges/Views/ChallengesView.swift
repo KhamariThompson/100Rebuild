@@ -2,6 +2,7 @@ import SwiftUI
 import Firebase
 import FirebaseFirestore
 import Combine
+import GoogleMobileAds
 
 // Using canonical Challenge model
 // (No import needed as it will be accessed directly)
@@ -17,6 +18,7 @@ struct ChallengesView: View {
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var router: NavigationRouter
     @EnvironmentObject private var userStatsService: UserStatsService
+    @EnvironmentObject private var userSession: UserSession
     @State private var isShowingEditChallenge = false
     @State private var challengeToEdit: Challenge?
     @State private var isShowingCheckInSheet = false
@@ -26,6 +28,8 @@ struct ChallengesView: View {
     @State private var showOfflineToast = false
     @State private var showErrorAlert = false
     @State private var scrollOffset: CGFloat = 0
+    @State private var showUpgradePrompt = false
+    @Environment(\.colorScheme) private var colorScheme
     
     // Gradient for challenges header styling
     private let challengesGradient = LinearGradient(
@@ -70,6 +74,76 @@ struct ChallengesView: View {
                         .padding(.bottom, AppSpacing.xl)
                 }
             }
+            
+            // Direct overlay modal for check-in sheet
+            if isShowingCheckInSheet, let challenge = challengeToCheckIn {
+                // Black semi-transparent background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        isShowingCheckInSheet = false
+                    }
+                
+                // Directly show the sheet content
+                SimpleCheckInSheet(
+                    challenge: challenge,
+                    dayNumber: challenge.daysCompleted + 1,
+                    onCheckIn: { note, image in
+                        Task {
+                            await viewModel.checkInToChallenge(challenge, note: note, image: image)
+                        }
+                        isShowingCheckInSheet = false
+                    },
+                    onDismiss: {
+                        isShowingCheckInSheet = false
+                    }
+                )
+                .environmentObject(subscriptionService)
+                .transition(.identity)
+                .zIndex(100)
+            }
+            
+            // Overlay for expired challenge restart prompt
+            if viewModel.showExpiredChallengeAlert, let challenge = viewModel.currentExpiredChallenge {
+                // Black semi-transparent background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        // Don't dismiss on background tap since this is important
+                    }
+                
+                // Show the ChallengeRestartView
+                ChallengeRestartView(
+                    challenge: challenge,
+                    onRestart: {
+                        print("🔄 Restart button tapped for challenge: \(challenge.id)")
+                        Task {
+                            print("🔄 Starting restart task for challenge: \(challenge.id)")
+                            await viewModel.restartExpiredChallenge(challenge)
+                            print("🔄 Completed restart task for challenge: \(challenge.id)")
+                        }
+                    },
+                    onArchive: {
+                        print("📦 Archive button tapped for challenge: \(challenge.id)")
+                        Task {
+                            print("📦 Starting archive task for challenge: \(challenge.id)")
+                            await viewModel.archiveExpiredChallenge(challenge)
+                            print("📦 Completed archive task for challenge: \(challenge.id)")
+                        }
+                    },
+                    onDismiss: {
+                        print("❌ Dismiss button tapped")
+                        viewModel.dismissExpiredChallengeAlert()
+                    }
+                )
+                .transition(.opacity)
+                .zIndex(110) // Higher than other overlays to ensure it's shown on top
+            }
+        }
+        .sheet(isPresented: $isShowingEditChallenge) {
+            if let challenge = challengeToEdit {
+                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
+            }
         }
         .sheet(isPresented: $viewModel.isShowingNewChallenge) {
             NewChallengeView(isPresented: $viewModel.isShowingNewChallenge, challengeTitle: $viewModel.challengeTitle) { title, isTimed in
@@ -78,29 +152,9 @@ struct ChallengesView: View {
                     await userStatsService.refreshUserStats()
                 }
             }
-        }
-        .sheet(isPresented: $isShowingEditChallenge) {
-            if let challenge = challengeToEdit {
-                EditChallengeSheet(viewModel: viewModel, challenge: challenge)
-            }
-        }
-        .sheet(isPresented: $isShowingCheckInSheet) {
-            if let challenge = challengeToCheckIn {
-                // Using SimpleCheckInSheet instead of EnhancedCheckInSheet
-                SimpleCheckInSheet(
-                    challenge: challenge, 
-                    dayNumber: challenge.daysCompleted + 1,
-                    onCheckIn: { note, image in
-                        performCheckIn(challenge: challenge, note: note, image: image)
-                        isShowingCheckInSheet = false
-                    },
-                    onDismiss: {
-                        isShowingCheckInSheet = false
-                    }
-                )
-                .presentationDetents([.large, .medium])
-                .presentationDragIndicator(.visible)
-            }
+            .environmentObject(subscriptionService)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(userSession)
         }
         .alert(isPresented: $viewModel.showError) {
             Alert(
@@ -109,15 +163,57 @@ struct ChallengesView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .overlay {
+            if viewModel.showSuccessToast {
+                VStack {
+                    Spacer()
+                    
+                    // Success toast
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.white)
+                            .font(.system(size: 20))
+                        
+                        Text(viewModel.successMessage)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.theme.accent)
+                            .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 5)
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.spring(), value: viewModel.showSuccessToast)
+                .zIndex(200)
+            }
+        }
         .onAppear {
             // Mark tab as changing when this view appears
             if router.selectedTab == 0 {
                 router.tabIsChanging = true
             }
             
+            // Pre-warm SimpleCheckInSheet to avoid first-render delays
+            let _ = SimpleCheckInSheet(
+                challenge: Challenge.mock(title: "", daysCompleted: 0, streakCount: 0),
+                dayNumber: 1,
+                onCheckIn: { _, _ in },
+                onDismiss: {}
+            )
+            
             Task {
                 await viewModel.loadChallenges()
                 await viewModel.loadUserProfile()
+                // Check for expired challenges when the view appears
+                await viewModel.checkForExpiredChallenges()
                 
                 // After data is loaded, mark tab as not changing
                 if router.selectedTab == 0 {
@@ -127,6 +223,10 @@ struct ChallengesView: View {
         }
         .refreshable {
             await viewModel.loadChallenges()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowNewChallengeView"))) { _ in
+            // Show the new challenge view when notification is received
+            viewModel.isShowingNewChallenge = true
         }
     }
     
@@ -201,7 +301,7 @@ struct ChallengesView: View {
             Button(action: { viewModel.isShowingNewChallenge = true }) {
                 Text("Create Challenge")
                     .font(AppTypography.headline())
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
                     .padding(.vertical, AppSpacing.buttonVerticalPadding)
                     .padding(.horizontal, AppSpacing.buttonHorizontalPadding)
                     .background(
@@ -252,10 +352,23 @@ struct ChallengesView: View {
                 LazyVStack(spacing: AppSpacing.m) {
                     ForEach(viewModel.challenges) { challenge in
                         ChallengeCardComponent(challenge: challenge) {
-                            // Only show the check-in sheet if not already completed today
-                            if !challenge.isCompletedToday && !challenge.isCompleted {
-                                self.challengeToCheckIn = challenge
-                                self.isShowingCheckInSheet = true
+                            // Only show the check-in sheet if not already completed today and streak hasn't expired
+                            if !challenge.isCompletedToday && !challenge.isCompleted && 
+                               !(challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0) {
+                                // Use transaction to disable animation when setting state
+                                withTransaction(Transaction(animation: nil)) {
+                                    // Set the challenge and show sheet immediately without any delay
+                                    self.challengeToCheckIn = challenge
+                                    self.isShowingCheckInSheet = true
+                                }
+                                
+                                // Optional print statements for debugging
+                                print("Button tapped at \(Date())")
+                                print("Setting sheet state at \(Date())")
+                            } else if challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0 {
+                                // Show the expired challenge alert instead of check-in sheet
+                                viewModel.currentExpiredChallenge = challenge
+                                viewModel.showExpiredChallengeAlert = true
                             }
                         }
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
@@ -280,8 +393,31 @@ struct ChallengesView: View {
                 }
                 .padding(.bottom, AppSpacing.m)
                 
+                // AdMob Banner
+                if !subscriptionService.isProUser {
+                    AdMobBannerView()
+                        .frame(height: 60)
+                        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                        .padding(.bottom, AppSpacing.m)
+                }
+                
                 // Add challenge button at bottom for easy access
-                Button(action: { viewModel.isShowingNewChallenge = true }) {
+                Button(action: { 
+                    if viewModel.challenges.count >= 2 && !subscriptionService.isProUser {
+                        // Show subtle upgrade prompt
+                        withAnimation {
+                            viewModel.showUpgradePrompt = true
+                        }
+                        // Hide the prompt after 3 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            withAnimation {
+                                viewModel.showUpgradePrompt = false
+                            }
+                        }
+                    } else {
+                        viewModel.isShowingNewChallenge = true
+                    }
+                }) {
                     HStack {
                         Image(systemName: "plus.circle.fill")
                             .foregroundColor(.theme.accent)
@@ -298,8 +434,27 @@ struct ChallengesView: View {
                     )
                 }
                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                .opacity(viewModel.challenges.count >= 3 && !subscriptionService.isProUser ? 0.5 : 1.0)
-                .disabled(viewModel.challenges.count >= 3 && !subscriptionService.isProUser)
+                .opacity(viewModel.challenges.count >= 2 && !subscriptionService.isProUser ? 0.5 : 1.0)
+                .disabled(viewModel.challenges.count >= 2 && !subscriptionService.isProUser)
+                
+                // Upgrade prompt
+                if viewModel.showUpgradePrompt {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.yellow)
+                        Text("Upgrade to Pro for unlimited challenges")
+                            .font(.subheadline)
+                            .foregroundColor(.theme.text)
+                    }
+                    .padding()
+                    .background(
+                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                            .fill(Color.theme.surface)
+                            .shadow(color: Color.theme.shadow.opacity(0.1), radius: 4, x: 0, y: 2)
+                    )
+                    .padding(.horizontal, AppSpacing.screenHorizontalPadding)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
     }
@@ -319,19 +474,21 @@ struct ChallengesView: View {
                 Spacer()
             }
             
-            if challenge.hasStreakExpired {
-                Text("Your streak for \"\(challenge.title)\" is at risk. Check in today to keep your \(challenge.streakCount)-day streak going!")
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-            } else {
-                Text("Keep your \(challenge.streakCount)-day streak for \"\(challenge.title)\" by checking in today!")
-                    .font(.subheadline)
-                    .foregroundColor(.theme.subtext)
-            }
+            // Calculate time until midnight
+            let timeUntilMidnight = calculateTimeUntilMidnight()
+            let formattedTime = formatTimeUntilMidnight(timeUntilMidnight)
+            
+            Text("Your \(challenge.streakCount)-day streak for \"\(challenge.title)\" will break at midnight (\(formattedTime) left). Check in now to keep it going!")
+                .font(.subheadline)
+                .foregroundColor(.theme.subtext)
             
             Button {
-                self.challengeToCheckIn = challenge
-                self.isShowingCheckInSheet = true
+                withTransaction(Transaction(animation: nil)) {
+                    self.challengeToCheckIn = challenge
+                    self.isShowingCheckInSheet = true
+                }
+                print("Button tapped at \(Date())")
+                print("Setting sheet state at \(Date())")
             } label: {
                 Text("Keep the Streak")
                     .font(.system(size: 16, weight: .semibold))
@@ -362,6 +519,31 @@ struct ChallengesView: View {
                 )
                 .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
         )
+    }
+    
+    // Helper function to calculate time until midnight
+    private func calculateTimeUntilMidnight() -> TimeInterval {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        guard let tomorrowDate = calendar.date(byAdding: .day, value: 1, to: now) else {
+            return 0
+        }
+        let midnight = calendar.startOfDay(for: tomorrowDate)
+        
+        return midnight.timeIntervalSince(now)
+    }
+    
+    // Format the time until midnight in a friendly way
+    private func formatTimeUntilMidnight(_ timeInterval: TimeInterval) -> String {
+        let hours = Int(timeInterval) / 3600
+        let minutes = (Int(timeInterval) % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        } else {
+            return "\(minutes) minutes"
+        }
     }
     
     // Pro limit warning when user has 3+ challenges as a free user
@@ -419,28 +601,6 @@ struct ChallengesView: View {
                 )
                 .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-    }
-    
-    // MARK: - Check In Functionality
-    
-    private func performCheckIn(challenge: Challenge, note: String, image: UIImage?) {
-        Task {
-            let result = await viewModel.checkInToChallenge(challenge, note: note, image: image)
-            
-            switch result {
-            case .success(_):
-                showSuccessToast = true
-                // User stats are now being refreshed in the viewModel's checkInToChallenge method
-                
-                // Dismiss the toast after a delay
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    showSuccessToast = false
-                }
-            case .failure(let error):
-                checkInError = error.localizedDescription
-                showErrorAlert = true
-            }
-        }
     }
     
     // Helper functions to convert between TimeOfDay enums
@@ -587,6 +747,8 @@ struct EditChallengeSheet: View {
     @State private var title: String
     @Environment(\.dismiss) private var dismiss
     @FocusState private var isTitleFocused: Bool
+    @State private var showDeleteConfirmation = false
+    @State private var isSaving = false
     
     init(viewModel: ChallengesViewModel, challenge: Challenge) {
         self.viewModel = viewModel
@@ -596,75 +758,241 @@ struct EditChallengeSheet: View {
     
     var body: some View {
         NavigationView {
-            Form {
-                if viewModel.isOffline {
-                    Section {
-                        HStack {
-                            Image(systemName: "wifi.slash")
-                                .foregroundColor(.yellow)
-                            Text("You're offline. Changes will be saved locally.")
-                                .font(.footnote)
-                                .foregroundColor(.secondary)
+            ZStack {
+                Color.theme.background.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        if viewModel.isOffline {
+                            HStack {
+                                Image(systemName: "wifi.slash")
+                                    .foregroundColor(.yellow)
+                                Text("You're offline. Changes will be saved locally.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(Color.yellow.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                            .padding(.bottom, 8)
+                        }
+                        
+                        // Challenge Title Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Challenge Title")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                            
+                            TextField("Enter challenge title", text: $title)
+                                .font(.body)
+                                .padding()
+                                .background(Color.theme.surface)
+                                .cornerRadius(12)
+                                .focused($isTitleFocused)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.theme.accent.opacity(0.5), lineWidth: 1)
+                                )
+                        }
+                        
+                        // Challenge Progress Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Progress Details")
+                                .font(.headline)
+                                .foregroundColor(.theme.text)
+                                .padding(.bottom, 4)
+                            
+                            // Progress bar
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("Days Completed")
+                                        .font(.subheadline)
+                                        .foregroundColor(.theme.text)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(challenge.daysCompleted) / 100")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.theme.accent)
+                                }
+                                
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        // Background track
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color.gray.opacity(0.2))
+                                            .frame(height: 12)
+                                        
+                                        // Filled portion with gradient
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [.theme.accent, .theme.accent.opacity(0.7)]),
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                            .frame(width: max(12, geo.size.width * challenge.progressPercentage), height: 12)
+                                    }
+                                }
+                                .frame(height: 12)
+                            }
+                            .padding(.bottom, 8)
+                            
+                            Divider()
+                                .padding(.vertical, 4)
+                            
+                            // Stats grid
+                            VStack(spacing: 16) {
+                                // Current Streak
+                                HStack(spacing: 16) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "flame.fill")
+                                            .foregroundColor(.orange)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Current Streak")
+                                                .font(.subheadline)
+                                                .foregroundColor(.theme.subtext)
+                                            
+                                            Text("\(challenge.streakCount) days")
+                                                .font(.headline)
+                                                .foregroundColor(.theme.text)
+                                        }
+                                    }
+                                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                                    
+                                    // Started On
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "calendar")
+                                            .foregroundColor(.theme.accent)
+                                            .font(.system(size: 18))
+                                        
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Started On")
+                                                .font(.subheadline)
+                                                .foregroundColor(.theme.subtext)
+                                            
+                                            Text(challenge.startDate, style: .date)
+                                                .font(.headline)
+                                                .foregroundColor(.theme.text)
+                                        }
+                                    }
+                                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                                }
+                                
+                                Divider()
+                                
+                                // Last Modified
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock")
+                                        .foregroundColor(.theme.accent)
+                                        .font(.system(size: 18))
+                                    
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("Last Modified")
+                                            .font(.subheadline)
+                                            .foregroundColor(.theme.subtext)
+                                        
+                                        Text(challenge.lastModified, style: .date)
+                                            .font(.headline)
+                                            .foregroundColor(.theme.text)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding()
+                        .background(Color.theme.surface)
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                        
+                        // Save Button
+                        Button(action: {
+                            isSaving = true
+                            Task {
+                                await viewModel.updateChallenge(id: challenge.id, title: title)
+                                isSaving = false
+                                dismiss()
+                            }
+                        }) {
+                            HStack {
+                                if isSaving {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .padding(.trailing, 8)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 18))
+                                }
+                                
+                                Text("Save Changes")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(title.isEmpty ? Color.gray : Color.theme.accent)
+                            )
+                        }
+                        .disabled(title.isEmpty || isSaving)
+                        
+                        // Delete Button
+                        Button(action: {
+                            showDeleteConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 18))
+                                
+                                Text("Archive Challenge")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.red.opacity(0.7), lineWidth: 1)
+                            )
+                        }
+                        .alert("Archive Challenge?", isPresented: $showDeleteConfirmation) {
+                            Button("Cancel", role: .cancel) {}
+                            Button("Archive", role: .destructive) {
+                                Task {
+                                    await viewModel.archiveChallenge(challenge)
+                                    dismiss()
+                                }
+                            }
+                        } message: {
+                            Text("This will archive your challenge and it won't appear in your active challenges list. Your progress data will be preserved.")
                         }
                     }
-                }
-                
-                Section(header: Text("Challenge Details")) {
-                    TextField("Title", text: $title)
-                        .focused($isTitleFocused)
-                }
-                
-                Section(header: Text("Challenge Progress")) {
-                    HStack {
-                        Text("Days Completed")
-                        Spacer()
-                        Text("\(challenge.daysCompleted) / 100")
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Current Streak")
-                        Spacer()
-                        Text("\(challenge.streakCount) days")
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Started On")
-                        Spacer()
-                        Text(challenge.startDate, style: .date)
-                            .foregroundColor(.theme.subtext)
-                    }
-                    
-                    HStack {
-                        Text("Last Modified")
-                        Spacer()
-                        Text(challenge.lastModified, style: .date)
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-                
-                Section {
-                    Button("Save Changes") {
-                        Task {
-                            await viewModel.updateChallenge(id: challenge.id, title: title)
-                            dismiss()
-                        }
-                    }
-                    .disabled(title.isEmpty)
-                }
-                
-                Section {
-                    Button("Delete Challenge", role: .destructive) {
-                        Task {
-                            await viewModel.archiveChallenge(challenge)
-                            dismiss()
-                        }
-                    }
+                    .padding()
                 }
             }
             .navigationTitle("Edit Challenge")
-            .navigationBarItems(trailing: Button("Cancel") { dismiss() })
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.theme.accent)
+                }
+            }
             .onAppear {
                 // Auto-focus the title field when the view appears
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -854,5 +1182,228 @@ struct ChallengesView_Previews: PreviewProvider {
                 .environmentObject(SubscriptionService.shared)
                 .environmentObject(NotificationService.shared)
         }
+    }
+}
+
+// Challenge Restart View for expired challenges
+struct ChallengeRestartView: View {
+    let challenge: Challenge
+    let onRestart: () -> Void
+    let onArchive: () -> Void
+    let onDismiss: () -> Void
+    @State private var isRestartLoading = false
+    @State private var isArchiveLoading = false
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.orange)
+                    .padding(.bottom, 4)
+                
+                Text("Challenge Expired")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .foregroundColor(.theme.text)
+                
+                Text("You missed check-ins for \(challenge.title)")
+                    .font(.system(size: 16))
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            
+            // Challenge info
+            VStack(spacing: 16) {
+                // Progress lost
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.orange.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .font(.system(size: 18))
+                            .foregroundColor(.orange)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Progress at risk")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                        
+                        Text("\(challenge.daysCompleted) days of progress could be reset")
+                            .font(.system(size: 14))
+                            .foregroundColor(.theme.subtext)
+                    }
+                    
+                    Spacer()
+                }
+                
+                // Last check-in
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "clock.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(.blue)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last check-in")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                        
+                        if let lastCheckIn = challenge.lastCheckInDate {
+                            Text(formatLastCheckIn(lastCheckIn))
+                                .font(.system(size: 14))
+                                .foregroundColor(.theme.subtext)
+                        } else {
+                            Text("No previous check-ins recorded")
+                                .font(.system(size: 14))
+                                .foregroundColor(.theme.subtext)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.theme.surface)
+                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+            )
+            
+            // Options
+            VStack(spacing: 12) {
+                Button(action: {
+                    // Use haptic feedback for better user experience
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // Set loading state to true
+                    isRestartLoading = true
+                    
+                    // Delay slightly to allow UI update before potentially heavy operation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        onRestart()
+                    }
+                }) {
+                    HStack {
+                        if isRestartLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                                .padding(.trailing, 5)
+                        }
+                        
+                        Text("Restart Challenge")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+                    )
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+                .buttonStyle(SpringButtonStyle())
+                
+                Button(action: {
+                    // Use haptic feedback for better user experience
+                    let generator = UIImpactFeedbackGenerator(style: .medium)
+                    generator.impactOccurred()
+                    
+                    // Set loading state to true
+                    isArchiveLoading = true
+                    
+                    // Delay slightly to allow UI update before potentially heavy operation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        onArchive()
+                    }
+                }) {
+                    HStack {
+                        if isArchiveLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .primary))
+                                .scaleEffect(0.8)
+                                .padding(.trailing, 5)
+                        }
+                        
+                        Text("Archive Challenge")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.theme.text)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.theme.border, lineWidth: 1.5)
+                            .background(Color.theme.surface.cornerRadius(12))
+                    )
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+                .buttonStyle(SpringButtonStyle())
+                
+                Button(action: {
+                    let generator = UIImpactFeedbackGenerator(style: .light)
+                    generator.impactOccurred()
+                    onDismiss()
+                }) {
+                    Text("Decide Later")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.theme.subtext)
+                        .padding(.vertical, 8)
+                }
+                .disabled(isRestartLoading || isArchiveLoading)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.theme.background)
+                .shadow(color: Color.black.opacity(0.15), radius: 10, x: 0, y: 4)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    private func formatLastCheckIn(_ date: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.day], from: date, to: now)
+        
+        if let days = components.day {
+            if days == 0 {
+                return "Today"
+            } else if days == 1 {
+                return "Yesterday"
+            } else {
+                return "\(days) days ago"
+            }
+        }
+        
+        return "Some time ago"
+    }
+}
+
+// Button style for spring animation effect
+struct SpringButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 } 

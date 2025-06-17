@@ -6,6 +6,8 @@ struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
     @Environment(\.colorScheme) private var colorScheme
     @State private var scrollOffset: CGFloat = 0
+    @State private var showUsernameSetup = false
+    @EnvironmentObject var userSession: UserSession
     
     // Social gradient for header title
     private let socialGradient = LinearGradient(
@@ -68,6 +70,10 @@ struct SocialView: View {
                 dismissButton: .default(Text("OK"))
             )
         }
+        .sheet(isPresented: $showUsernameSetup) {
+            UsernameSetupView()
+                .environmentObject(userSession)
+        }
         .onAppear {
             // Only fetch the username when the view appears
             Task {
@@ -98,8 +104,33 @@ struct SocialView: View {
             if case .claimed(let username) = viewModel.usernameStatus {
                 // User has already claimed a username
                 UsernameDisplayView(username: username)
+            } else if case .unclaimed = viewModel.usernameStatus {
+                // User needs to set up a username
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Choose Your Username")
+                        .font(.headline)
+                        .foregroundColor(Color.theme.text)
+                    
+                    Text("Set up your username to connect with others and appear on future leaderboards.")
+                        .font(.subheadline)
+                        .foregroundColor(Color.theme.subtext)
+                    
+                    Button(action: {
+                        showUsernameSetup = true
+                    }) {
+                        Text("Set Username")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                            .background(Color.theme.accent)
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 8)
+                }
+                .padding()
             } else {
-                // Error or loading state
+                // Error state
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Username Setup Required")
                         .font(.headline)

@@ -200,8 +200,8 @@ struct ProgressView: View {
                     title: "Unlock Detailed Analytics",
                     description: "Track your trends, predict completion, and get personalized insights",
                     onUpgrade: {
-                        // Navigate to subscription view
-                        router.navigateTo(.subscription)
+                        // Show the real paywall
+                        subscriptionService.showPaywall = true
                     },
                     onDismiss: {
                         // Dismiss the pro preview

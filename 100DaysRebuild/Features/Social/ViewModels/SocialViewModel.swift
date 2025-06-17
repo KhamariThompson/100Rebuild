@@ -27,15 +27,87 @@ class SocialViewModel: ObservableObject {
     @Published var isOffline = false // Track offline status
     @Published var error: String? = nil // For displaying errors
     
+    // Computed properties for UI
+    var validationBorderColor: Color {
+        switch usernameStatus {
+        case .validating:
+            return .yellow
+        case .claimed:
+            return .green
+        case .invalid:
+            return .red
+        case .error:
+            return .red
+        case .unclaimed:
+            // When unclaimed but username has content and passes basic validation, show green
+            if !username.isEmpty && username.count >= 3 && isValidFormat(username) {
+                return .green
+            }
+            return Color.theme.border
+        }
+    }
+    
+    var validationMessageColor: Color {
+        switch usernameStatus {
+        case .validating:
+            return .yellow
+        case .claimed:
+            return .green
+        case .invalid, .error:
+            return .red
+        case .unclaimed:
+            // Show green for available username
+            if validationMessage == "Username available!" {
+                return .green
+            }
+            return Color.theme.subtext
+        }
+    }
+    
+    var canClaimUsername: Bool {
+        if case .validating = usernameStatus { return false }
+        if case .claimed = usernameStatus { return false }
+        if case .invalid = usernameStatus { return false }
+        if case .error = usernameStatus { return false }
+        if isCheckingUsername { return false }
+        return !username.isEmpty && username.count >= 3 && isValidFormat(username)
+    }
+    
+    
     // Dependencies
     private let firestore = Firestore.firestore()
     
-    enum UsernameStatus {
+    enum UsernameStatus: Equatable {
         case unclaimed
         case claimed(String)
         case validating
         case invalid
         case error(String)
+        
+        // Add computed property to check for error state
+        var hasError: Bool {
+            if case .error(_) = self {
+                return true
+            }
+            return false
+        }
+        
+        static func == (lhs: UsernameStatus, rhs: UsernameStatus) -> Bool {
+            switch (lhs, rhs) {
+            case (.unclaimed, .unclaimed):
+                return true
+            case (.claimed(let lhsValue), .claimed(let rhsValue)):
+                return lhsValue == rhsValue
+            case (.validating, .validating):
+                return true
+            case (.invalid, .invalid):
+                return true
+            case (.error(let lhsValue), .error(let rhsValue)):
+                return lhsValue == rhsValue
+            default:
+                return false
+            }
+        }
     }
     
     init() {
@@ -51,8 +123,9 @@ class SocialViewModel: ObservableObject {
         )
         
         // Load initial data
-        Task {
-            await refreshData()
+        Task { [weak self] in
+            guard let self = self else { return }
+            await self.refreshData()
         }
     }
     
@@ -66,7 +139,10 @@ class SocialViewModel: ObservableObject {
     }
     
     deinit {
+        print("✅ Released: SocialViewModel")
         NotificationCenter.default.removeObserver(self)
+        // Cancel any async tasks
+        validationTask?.cancel()
     }
     
     // MARK: - Public Methods
@@ -81,15 +157,29 @@ class SocialViewModel: ObservableObject {
         isLoading = true
         
         do {
+            // Check UserSession first - this should be most up-to-date
+            if let sessionUsername = UserSession.shared.username, !sessionUsername.isEmpty {
+                self.username = sessionUsername
+                usernameStatus = .claimed(sessionUsername)
+                isLoading = false
+                return
+            }
+            
+            // If not in UserSession, check Firestore
             let document = try await firestore
                 .collection("users")
                 .document(userId)
                 .getDocument()
             
-            if document.exists, let data = document.data(), let username = data["username"] as? String {
+            if document.exists, let data = document.data(), let username = data["username"] as? String, !username.isEmpty {
                 self.username = username
                 usernameStatus = .claimed(username)
+                
+                // Update the UserSession as well
+                try? await UserSession.shared.updateUsername(username)
             } else {
+                // No username found or empty username
+                self.username = ""
                 usernameStatus = .unclaimed
             }
         } catch {
@@ -100,12 +190,31 @@ class SocialViewModel: ObservableObject {
         isLoading = false
     }
     
-    /// Validates the input username
+    /// Shows the username setup UI and prepares for username validation
+    func showUsernameSetup() {
+        // Reset the validation state
+        username = ""
+        validationMessage = "Enter a username"
+        usernameStatus = .unclaimed
+        
+        // Display a text field or prompt for username input
+        // This method is called when the user taps the "Set Username" button
+    }
+    
+    // MARK: - Username Validation
+    
+    // Improved debouncing with cancellation
+    private var validationTask: Task<Void, Never>?
+    
+    /// Validates the input username with debouncing to prevent rapid UI updates
     func validateUsername(username: String) {
         // Reset validation state
         self.username = username
         
-        // Quick format checks
+        // Cancel any pending validation task
+        validationTask?.cancel()
+        
+        // Quick format checks - these are immediate, without server check
         if username.isEmpty {
             validationMessage = "Username cannot be empty"
             usernameStatus = .invalid
@@ -124,16 +233,57 @@ class SocialViewModel: ObservableObject {
             return
         }
         
-        // Check for alphanumeric characters
-        let allowedCharacterSet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-        if username.rangeOfCharacter(from: allowedCharacterSet.inverted) != nil {
+        if !isValidFormat(username) {
             validationMessage = "Username can only contain letters and numbers"
             usernameStatus = .invalid
             return
         }
         
-        // If we pass all local validation, check availability
-        checkUsernameAvailability(username: username)
+        // At this point, username format is valid
+        validationMessage = "Valid format, checking availability..."
+        
+        // Create a new task with debounce to avoid rapid server calls
+        validationTask = Task { @MainActor in
+            do {
+                // Debounce delay - only start server check after user stops typing
+                try await Task.sleep(nanoseconds: 800_000_000) // 800ms debounce
+                
+                if Task.isCancelled { return }
+                
+                // Indicate validation in progress
+                usernameStatus = .validating
+                isCheckingUsername = true
+                
+                // Check username availability with the server
+                let isAvailable = try await isUsernameAvailable(username)
+                
+                if Task.isCancelled { return }
+                
+                if isAvailable {
+                    validationMessage = "Username available!"
+                    usernameStatus = .unclaimed
+                } else {
+                    // Check if it's the user's own username
+                    if case .claimed(let currentUsername) = usernameStatus,
+                       currentUsername.lowercased() == username.lowercased() {
+                        validationMessage = "This is already your username"
+                    } else {
+                        validationMessage = "Username already taken"
+                        usernameStatus = .invalid
+                    }
+                }
+            } catch {
+                if !Task.isCancelled {
+                    validationMessage = "Error checking username"
+                    usernameStatus = .error(error.localizedDescription)
+                }
+            }
+            
+            // Reset loading state
+            if !Task.isCancelled {
+                isCheckingUsername = false
+            }
+        }
     }
     
     /// Claims the validated username for the user
@@ -141,6 +291,13 @@ class SocialViewModel: ObservableObject {
         guard let userId = Auth.auth().currentUser?.uid else {
             errorMessage = "User not signed in"
             usernameStatus = .error("User not signed in")
+            return
+        }
+        
+        // Don't allow claiming if the format is invalid
+        if !isValidFormat(username) {
+            errorMessage = "Invalid username format"
+            usernameStatus = .invalid
             return
         }
         
@@ -172,19 +329,27 @@ class SocialViewModel: ObservableObject {
                 return nil
             }
             
+            // Update UserSession
+            try await UserSession.shared.updateUsername(username.lowercased())
+            
             // Update local state
             usernameStatus = .claimed(username.lowercased())
             showSuccessToast = true
             usernameJustClaimed = true
             
             // Hide toast after delay
-            Task {
+            Task { [weak self] in
+                guard let self = self else { return }
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-                self.showSuccessToast = false
+                await MainActor.run {
+                    self.showSuccessToast = false
+                }
                 
                 // Reset the animation trigger after a delay
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                self.usernameJustClaimed = false
+                await MainActor.run {
+                    self.usernameJustClaimed = false
+                }
             }
         } catch {
             errorMessage = "Failed to claim username: \(error.localizedDescription)"
@@ -221,43 +386,17 @@ class SocialViewModel: ObservableObject {
         isLoading = false
     }
     
-    // MARK: - Private Methods
+    // MARK: - Helper Methods
+    
+    /// Checks if a username follows the required format
+    private func isValidFormat(_ username: String) -> Bool {
+        let allowedCharacterSet = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        return username.rangeOfCharacter(from: allowedCharacterSet.inverted) == nil
+    }
     
     /// Filters username to only contain alphanumeric characters
     func filterUsername(_ input: String) -> String {
         return input.replacingOccurrences(of: "[^a-zA-Z0-9]", with: "", options: .regularExpression)
-    }
-    
-    /// Checks if a username is available to claim
-    private func checkUsernameAvailability(username: String) {
-        usernameStatus = .validating
-        isCheckingUsername = true
-        validationMessage = "Checking availability..."
-        
-        Task {
-            do {
-                let isAvailable = try await isUsernameAvailable(username)
-                
-                if isAvailable {
-                    validationMessage = "Username available!"
-                    usernameStatus = .unclaimed
-                } else {
-                    // Check if it's the user's own username
-                    if case .claimed(let currentUsername) = usernameStatus, 
-                       currentUsername.lowercased() == username.lowercased() {
-                        validationMessage = "This is already your username"
-                    } else {
-                        validationMessage = "Username already taken"
-                        usernameStatus = .invalid
-                    }
-                }
-            } catch {
-                validationMessage = "Error checking username"
-                usernameStatus = .error(error.localizedDescription)
-            }
-            
-            isCheckingUsername = false
-        }
     }
     
     /// Checks if a username is available in Firestore

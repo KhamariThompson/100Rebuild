@@ -16,21 +16,23 @@ struct WelcomeView: View {
     @State private var testimonialIndex = 0
     
     // Timer for automatic testimonial cycling
-    let testimonialTimer = Timer.publish(every: 5, on: .main, in: .common).autoconnect()
+    let testimonialTimer = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
     
     // State for Apple Sign In
     @State private var currentNonce: String?
     
-    // Testimonials
+    // Enhanced testimonials with more realistic data and profile images
     private let testimonials = [
-        (quote: "100Days helped me finally stick with my meditation practice. I'm on day 87!", name: "Sarah K."),
-        (quote: "I've tried many habit apps, but this one actually keeps me accountable.", name: "Michael T."),
-        (quote: "The streaks visualization makes it so satisfying to stay consistent.", name: "James R.")
+        (quote: "100Days helped me finally stick with my meditation practice. I'm on day 87 and it's changed my life!", name: "Sarah K.", image: "testimonial-sarah", location: "New York"),
+        (quote: "I've tried many habit apps, but this one actually keeps me accountable. The visualization makes progress so satisfying.", name: "Michael T.", image: "testimonial-michael", location: "San Francisco"),
+        (quote: "The streaks visualization makes it so satisfying to stay consistent. I've never kept a habit this long before.", name: "James R.", image: "testimonial-james", location: "Chicago"),
+        (quote: "This app helped me write daily for 100 days straight. I finally finished my book!", name: "Emily L.", image: "testimonial-emily", location: "London"),
+        (quote: "The clean design and simple tracking keeps me motivated. Perfect for building a consistent workout routine.", name: "David W.", image: "testimonial-david", location: "Toronto")
     ]
     
     var body: some View {
         ZStack {
-            // Background with gradient overlay
+            // Enhanced background with improved gradient overlay
             backgroundView
             
             // Main content
@@ -39,24 +41,25 @@ struct WelcomeView: View {
                     // Logo and hero section
                     heroSection
                     
-                    // Testimonials
+                    // Enhanced testimonials
                     testimonialsSection
                         .padding(.top, 40)
                     
                     // Feature cards with animations
                     featuresSection
-                        .padding(.top, 60)
+                        .padding(.top, 50)
                     
                     // Stats section
                     statsSection
-                        .padding(.top, 50)
+                        .padding(.top, 40)
                     
                     // Call to action
                     callToActionSection
-                        .padding(.top, 50)
-                        .padding(.bottom, 30)
+                        .padding(.top, 40)
+                        .padding(.bottom, 40)
                 }
                 .padding(.horizontal)
+                .padding(.bottom, 180)
             }
             
             // Bottom action bar that stays fixed
@@ -72,7 +75,7 @@ struct WelcomeView: View {
             }
         }
         .onReceive(testimonialTimer) { _ in
-            withAnimation(.easeInOut(duration: 0.5)) {
+            withAnimation(.easeInOut(duration: 0.7)) {
                 testimonialIndex = (testimonialIndex + 1) % testimonials.count
             }
         }
@@ -89,15 +92,15 @@ struct WelcomeView: View {
     
     // MARK: - View Components
     
-    // Background view with gradient
+    // Enhanced background view with gradient
     private var backgroundView: some View {
         ZStack {
             Color.theme.background.ignoresSafeArea()
             
-            // Top gradient for hero section
+            // Top gradient for hero section - improved for both light and dark mode
             LinearGradient(
                 gradient: Gradient(colors: [
-                    Color.theme.accent.opacity(0.2),
+                    Color.theme.accent.opacity(0.15),
                     Color.theme.background.opacity(0.0)
                 ]),
                 startPoint: .topLeading,
@@ -105,31 +108,32 @@ struct WelcomeView: View {
             )
             .ignoresSafeArea()
             
-            // Bottom gradient for action bar
+            // Bottom gradient for action bar - smoother transition
             VStack {
                 Spacer()
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color.theme.background.opacity(0.0),
+                        Color.theme.background.opacity(0.8),
                         Color.theme.background
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 120)
+                .frame(height: 150)
                 .ignoresSafeArea()
             }
         }
     }
     
-    // Hero section with logo and tagline
+    // Enhanced hero section with logo and tagline
     private var heroSection: some View {
         VStack(spacing: 20) {
             // Logo with highlighting glow effect
             ZStack {
-                // Glow effect
+                // Glow effect - adjusted for better appearance in dark mode
                 Circle()
-                    .fill(Color.theme.accent.opacity(0.15))
+                    .fill(Color.theme.accent.opacity(0.18))
                     .frame(width: 130, height: 130)
                     .blur(radius: 20)
                 
@@ -138,7 +142,7 @@ struct WelcomeView: View {
                     .scaledToFit()
                     .frame(width: 100, height: 100)
                     .foregroundColor(.theme.accent)
-                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 10, x: 0, y: 5)
+                    .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
             }
             .offset(y: animateElements ? 0 : -20)
             .opacity(animateElements ? 1 : 0)
@@ -171,38 +175,41 @@ struct WelcomeView: View {
         .padding(.bottom, 20)
     }
     
-    // Testimonials section
+    // Enhanced testimonials section with profile pictures
     private var testimonialsSection: some View {
         VStack(spacing: 16) {
             // Section title
             Text("People love 100Days")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 5)
                 .opacity(animateElements ? 1 : 0)
             
-            // Testimonial card
+            // Enhanced testimonial cards in TabView
             TabView(selection: $testimonialIndex) {
                 ForEach(0..<testimonials.count, id: \.self) { index in
-                    testimonialCard(
+                    enhancedTestimonialCard(
                         quote: testimonials[index].quote,
-                        name: testimonials[index].name
+                        name: testimonials[index].name,
+                        imageName: testimonials[index].image,
+                        location: testimonials[index].location
                     )
                     .tag(index)
                 }
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-            .frame(height: 160)
+            .frame(height: 180)
             .opacity(animateElements ? 1 : 0)
             
-            // Indicators
+            // Indicators - improved styling
             HStack(spacing: 8) {
                 ForEach(0..<testimonials.count, id: \.self) { index in
                     Circle()
                         .fill(testimonialIndex == index ? Color.theme.accent : Color.theme.border.opacity(0.5))
                         .frame(width: 8, height: 8)
                         .animation(.spring(), value: testimonialIndex)
+                        .scaleEffect(testimonialIndex == index ? 1.2 : 1.0)
                 }
             }
             .padding(.top, 8)
@@ -210,7 +217,7 @@ struct WelcomeView: View {
         }
     }
     
-    // Features section
+    // Enhanced features section
     private var featuresSection: some View {
         VStack(spacing: 16) {
             // Section title
@@ -255,19 +262,19 @@ struct WelcomeView: View {
         }
     }
     
-    // Stats section
+    // Enhanced stats section
     private var statsSection: some View {
         VStack(spacing: 20) {
             // Stats title
             Text("Proven Results")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 5)
                 .padding(.bottom, 10)
                 .opacity(animateElements ? 1 : 0)
             
-            // Stats row
+            // Stats row - enhanced styling
             HStack(spacing: 0) {
                 statItem(number: "100", text: "DAYS", delay: 0.1)
                 
@@ -291,14 +298,14 @@ struct WelcomeView: View {
             .background(
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.08), radius: 12, x: 0, y: 6)
+                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 12, x: 0, y: 5)
             )
             .opacity(animateElements ? 1 : 0)
         }
         .padding(.bottom, 10)
     }
     
-    // Call to action section
+    // Enhanced call to action section
     private var callToActionSection: some View {
         VStack(spacing: 24) {
             // CTA title
@@ -319,34 +326,34 @@ struct WelcomeView: View {
         }
     }
     
-    // Fixed action bar at bottom
+    // Enhanced fixed action bar at bottom
     private var actionBar: some View {
         VStack(spacing: 16) {
-            // Primary button
+            // Primary button - enhanced shadow and gradient
             Button {
                 isShowingAuthView = true
             } label: {
                 Text("Get Started Free")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .foregroundColor(colorScheme == .dark ? .black : .white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)
                     .background(
                         LinearGradient(
                             gradient: Gradient(colors: [
                                 Color.theme.accent,
-                                Color.theme.accent.opacity(0.8)
+                                Color.theme.accent.opacity(0.85)
                             ]),
                             startPoint: .leading,
                             endPoint: .trailing
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 10, x: 0, y: 5)
+                        .shadow(color: Color.theme.accent.opacity(0.35), radius: 8, x: 0, y: 4)
                     )
             }
             .padding(.horizontal, 20)
             
-            // Sign in with Apple
+            // Sign in with Apple - improved styling
             SignInWithAppleButton(
                 text: .signIn,
                 onRequest: { request in
@@ -382,11 +389,9 @@ struct WelcomeView: View {
                     .font(.system(size: 13))
                     .foregroundColor(.theme.subtext)
                 
-                Button(action: { showTerms = true }) {
-                    Text("Terms")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.theme.accent)
-                }
+                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.theme.accent)
                 
                 Text("and")
                     .font(.system(size: 13))
@@ -405,20 +410,26 @@ struct WelcomeView: View {
         .background(
             Rectangle()
                 .fill(Color.theme.background)
-                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 10, x: 0, y: -5)
+                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 10, x: 0, y: -5)
                 .edgesIgnoringSafeArea(.bottom)
         )
     }
     
     // MARK: - Helper Components
     
-    // Feature card component
+    // Enhanced feature card component with improved shadows and styling
     private func featureCard(icon: String, title: String, description: String, delay: Double) -> some View {
         HStack(spacing: 16) {
-            // Icon with accent color
-            Image(systemName: icon)
-                .font(.system(size: 26, weight: .medium))
-                .foregroundColor(Color.theme.accent)
+            // Icon with enhanced styling
+            ZStack {
+                Circle()
+                    .fill(Color.theme.accent.opacity(0.1))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(Color.theme.accent)
+            }
             
             // Text content
             VStack(alignment: .leading, spacing: 6) {
@@ -443,14 +454,82 @@ struct WelcomeView: View {
                     RoundedRectangle(cornerRadius: 16)
                         .stroke(Color.theme.accent.opacity(0.08), lineWidth: 1)
                 )
-                .shadow(color: Color.theme.shadow.opacity(0.12), radius: 15, x: 0, y: 4)
+                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 15, x: 0, y: 4)
         )
         .offset(x: animateElements ? 0 : -30, y: 0)
         .opacity(animateElements ? 1 : 0)
         .animation(.easeOut(duration: 0.7).delay(delay), value: animateElements)
     }
     
-    // Testimonial card
+    // Enhanced testimonial card with profile image
+    private func enhancedTestimonialCard(quote: String, name: String, imageName: String, location: String) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Quote with quote marks
+            HStack(alignment: .top, spacing: 8) {
+                Text("\u{201C}")
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundColor(Color.theme.accent.opacity(0.3))
+                    .offset(y: -8)
+                
+                Text(quote)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3)
+                
+                Spacer()
+            }
+            
+            // Name with profile image
+            HStack {
+                Spacer()
+                
+                HStack(spacing: 12) {
+                    // Check if custom image exists, otherwise fall back to SF Symbol
+                    if UIImage(named: imageName) != nil {
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 36, height: 36)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                            )
+                            .shadow(color: Color.theme.shadow.opacity(0.1), radius: 2, x: 0, y: 1)
+                    } else {
+                        Image(systemName: "person.circle.fill")
+                            .resizable()
+                            .frame(width: 36, height: 36)
+                            .foregroundColor(.theme.accent.opacity(0.8))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundColor(.theme.text)
+                        
+                        Text(location)
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundColor(.theme.subtext)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: UIScreen.main.bounds.width - 40, height: 180)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.theme.accent.opacity(0.1), lineWidth: 1)
+                )
+                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 12, x: 0, y: 4)
+        )
+    }
+    
+    // Legacy testimonial card (kept for backward compatibility)
     private func testimonialCard(quote: String, name: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             // Quote with quote marks
@@ -497,7 +576,7 @@ struct WelcomeView: View {
         )
     }
     
-    // Stat item
+    // Enhanced stat item
     private func statItem(number: String, text: String, delay: Double) -> some View {
         VStack(spacing: 6) {
             Text(number)
@@ -632,7 +711,7 @@ struct WelcomeView: View {
         return result
     }
     
-    // Compute the SHA256 hash of the nonce
+    // Generate SHA256 hash of the nonce
     private func sha256(_ input: String) -> String {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)

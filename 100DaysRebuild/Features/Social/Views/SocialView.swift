@@ -1,12 +1,19 @@
 import SwiftUI
 import FirebaseFirestore
 import FirebaseAuth
+import Foundation
 
 struct SocialView: View {
     @StateObject private var viewModel = SocialViewModel()
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var router: NavigationRouter
+    @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var subscriptionService: SubscriptionService
     @State private var scrollOffset: CGFloat = 0
+    @State private var showUsernameSetup = false
+    @State private var showNewChallengeModal = false
+    @State private var challengeTitle: String = ""
     
     // Animation states
     @State private var heroAppeared = false
@@ -35,7 +42,7 @@ struct SocialView: View {
             
             // ScrollView with integrated title
             ScrollView {
-                VStack(spacing: AppSpacing.m) {
+                VStack(spacing: AppSpacing.l) {
                     // Title with gradient inside ScrollView
                     Text("Social")
                         .font(.largeTitle)
@@ -64,6 +71,7 @@ struct SocialView: View {
                             .transition(.opacity)
                     }
                 }
+                .padding(.bottom, 20) // Add bottom padding to prevent content from being cut off
             }
             .animation(.easeInOut(duration: 0.3), value: viewModel.isLoading)
             .animation(.easeInOut(duration: 0.3), value: viewModel.error)
@@ -72,7 +80,7 @@ struct SocialView: View {
         .background(Color.theme.background.ignoresSafeArea())
         .overlay {
             if viewModel.isLoading {
-                LoadingOverlay()
+                SocialLoadingOverlay()
             }
         }
         .alert(isPresented: Binding<Bool>(
@@ -96,6 +104,23 @@ struct SocialView: View {
                 .zIndex(100)
             }
         }
+        .sheet(isPresented: $showUsernameSetup) {
+            UsernameSetupView()
+                .environmentObject(userSession)
+        }
+        .sheet(isPresented: $showNewChallengeModal) {
+            NewChallengeView(isPresented: $showNewChallengeModal, challengeTitle: $challengeTitle) { title, isTimed in
+                Task {
+                    // Handle challenge creation
+                    // This is a placeholder since the social challenges feature is not fully implemented
+                    challengeTitle = ""
+                    showNewChallengeModal = false
+                }
+            }
+            .environmentObject(userSession)
+            .environmentObject(subscriptionService)
+            .environmentObject(ThemeManager.shared)
+        }
         .onAppear {
             // Staggered animations
             withAnimation(.easeOut(duration: 0.6)) {
@@ -112,6 +137,11 @@ struct SocialView: View {
                 withAnimation(.easeOut(duration: 0.8)) {
                     socialsAppeared = true
                 }
+            }
+            
+            // Only fetch the username when the view appears
+            Task {
+                await viewModel.loadUserUsername()
             }
         }
     }
@@ -144,163 +174,85 @@ struct SocialView: View {
     }
     
     // 2. Username Claim Section
-    private var usernameClaimSection: some View {
+    private var usernameCard: some View {
         VStack(spacing: 0) {
             if case .claimed(let username) = viewModel.usernameStatus {
                 // User has already claimed a username
-                VStack(alignment: .center, spacing: AppSpacing.m) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(.theme.success)
-                    
-                    VStack(spacing: AppSpacing.xs) {
-                        Text("Your username is")
-                            .font(AppTypography.body())
-                            .foregroundColor(.theme.text)
-                        
-                        Text("@\(username)")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.theme.accent)
-                    }
-                    
-                    Text("You're all set for the social features launch!")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext)
-                        .multilineTextAlignment(.center)
-                        .padding(.top, AppSpacing.xs)
-                }
-                .padding(AppSpacing.l)
+                UsernameDisplayView(username: username)
+            } else if case .unclaimed = viewModel.usernameStatus {
+                // User needs to set up a username
+                UsernameInputView(viewModel: viewModel)
             } else {
-                // User has not claimed a username yet
-                VStack(alignment: .center, spacing: AppSpacing.m) {
-                    Text("Claim Your Username")
-                        .font(AppTypography.title3())
-                        .fontWeight(.bold)
-                        .foregroundColor(.theme.text)
+                // Error state
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Username Setup Required")
+                        .font(.headline)
+                        .foregroundColor(Color.theme.text)
                     
-                    Text("Reserve your username now to secure your identity before others claim it.")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext)
-                        .multilineTextAlignment(.center)
-                        .padding(.bottom, AppSpacing.xs)
-                    
-                    // Username text field
-                    VStack(alignment: .leading, spacing: AppSpacing.s) {
-                        HStack {
-                            Text("@")
-                                .foregroundColor(.theme.accent)
-                                .font(.headline)
-                            
-                            TextField("Choose a username", text: Binding(
-                                get: { viewModel.username },
-                                set: { newValue in
-                                    let filtered = viewModel.filterUsername(newValue)
-                                    viewModel.validateUsername(username: filtered)
-                                }
-                            ))
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .textInputAutocapitalization(.never)
-                            .textContentType(.username)
-                            .submitLabel(.done)
-                            .padding(.vertical, AppSpacing.s)
-                        }
-                        .padding(.horizontal, AppSpacing.m)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(validationBorderColor, lineWidth: 1)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.theme.surface)
-                                )
-                        )
-                        
-                        // Validation message
-                        if !viewModel.validationMessage.isEmpty {
-                            HStack {
-                                if viewModel.isCheckingUsername {
-                                    ProgressView()
-                                        .scaleEffect(0.7)
-                                        .frame(width: 16, height: 16)
-                                        .padding(.trailing, 4)
-                                } else if isInvalidStatus {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.theme.error)
-                                        .font(.system(size: 12))
-                                } else if viewModel.validationMessage == "Username available!" {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundColor(.theme.success)
-                                        .font(.system(size: 12))
-                                }
-                                
-                                Text(viewModel.validationMessage)
-                                    .font(AppTypography.caption1())
-                                    .foregroundColor(validationMessageColor)
-                                    .lineLimit(1)
-                            }
-                            .padding(.horizontal, 4)
-                        }
-                    }
-                    
-                    // Claim button
-                    Button {
-                        Task {
-                            // Trigger haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .light)
-                            generator.prepare()
-                            
-                            await viewModel.claimUsername()
-                        }
-                    } label: {
-                        Text("Claim Username")
-                            .font(AppTypography.headline())
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, AppSpacing.m)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.5))
-                            )
-                    }
-                    .disabled(!canClaimUsername)
-                    .buttonStyle(AppScaleButtonStyle())
-                    .padding(.top, AppSpacing.s)
+                    Text("We couldn't find your username. Please reload the app or contact support if this issue persists.")
+                        .font(.subheadline)
+                        .foregroundColor(Color.theme.subtext)
                 }
-                .padding(AppSpacing.l)
+                .padding()
             }
         }
+        .padding()
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                       radius: 12, x: 0, y: 8)
+                       radius: 8, x: 0, y: 4)
         )
     }
     
     // 3. Feature Teaser Section
     private var featureTeaseSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Coming Soon")
-                .font(AppTypography.title3())
-                .fontWeight(.bold)
-                .foregroundColor(.theme.text)
-                .padding(.horizontal, AppSpacing.xs)
+            HStack {
+                Text("Coming Soon")
+                    .font(AppTypography.title3())
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+                
+                Spacer()
+                
+                // Test button to directly show modal (for debugging)
+                Button(action: {
+                    showNewChallengeModal = true
+                }) {
+                    Image(systemName: "plus.circle")
+                        .font(.system(size: 22))
+                        .foregroundColor(.theme.accent)
+                }
+            }
+            .padding(.horizontal, AppSpacing.xs)
             
-            // Horizontal scroll of feature cards
+            // Horizontal scroll of feature cards with improved layout
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: AppSpacing.m) {
-                    ForEach(featureCards) { card in
-                        FeatureTeaseCard(
-                            title: card.title,
-                            description: card.description,
-                            iconName: card.iconName
-                        )
-                        .frame(width: 180, height: 200)
+                    ForEach(Array(featureCards.enumerated()), id: \.offset) { index, card in
+                        Button {
+                            // Show new challenge modal when Group Challenges card is tapped
+                            if index == 0 { // Group Challenges is the first card
+                                showNewChallengeModal = true
+                            }
+                            
+                            // Haptic feedback
+                            let generator = UIImpactFeedbackGenerator(style: .medium)
+                            generator.impactOccurred()
+                        } label: {
+                            FeatureTeaseCard(
+                                title: card.title,
+                                description: card.description,
+                                iconName: card.iconName
+                            )
+                            .frame(width: 180, height: 200)
+                        }
                     }
                 }
-                .padding(.horizontal, AppSpacing.xs)
-                .padding(.bottom, AppSpacing.s)
+                .padding(.horizontal, AppSpacing.m)
+                .padding(.bottom, AppSpacing.m)
+                .padding(.top, AppSpacing.xs)
             }
         }
     }
@@ -308,58 +260,137 @@ struct SocialView: View {
     // 4. Social Media Follow Section
     private var socialFollowSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            Text("Follow Us for Updates")
-                .font(AppTypography.title3())
-                .fontWeight(.bold)
-                .foregroundColor(.theme.text)
-                .padding(.horizontal, AppSpacing.xs)
+            // Header with icon
+            HStack(spacing: 8) {
+                Image(systemName: "globe")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.theme.accent)
+                
+                Text("Connect With Us")
+                    .font(AppTypography.title3())
+                    .fontWeight(.bold)
+                    .foregroundColor(.theme.text)
+            }
+            .padding(.horizontal, AppSpacing.m)
             
-            // Social media buttons in an enhanced layout
-            HStack(alignment: .top, spacing: AppSpacing.xl) {
-                // TikTok Button
-                SocialButton(
-                    platform: "TikTok",
-                    username: "@100days.site",
-                    icon: "tiktok-icon",
-                    url: URL(string: "https://www.tiktok.com/@100days.site")!
-                )
+            // Social media cards with improved 3-card layout
+            VStack(spacing: 20) {
+                // Top row - 2 cards side by side
+                HStack(spacing: 20) {
+                    // TikTok Card
+                    socialMediaCard(
+                        platform: "TikTok",
+                        username: "@100days.site",
+                        systemIcon: "play.square.fill",
+                        url: URL(string: "https://www.tiktok.com/@100days.site") ?? URL(string: "https://100days.site")!,
+                        gradient: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)]
+                    )
+                    .frame(maxWidth: .infinity)
+                    
+                    // X Card (formerly Twitter)
+                    socialMediaCard(
+                        platform: "X",
+                        username: "@100DaysHQ",
+                        systemIcon: "bubble.left.and.bubble.right.fill",
+                        url: URL(string: "https://twitter.com/100DaysHQ") ?? URL(string: "https://100days.site")!,
+                        gradient: [Color(red: 0.05, green: 0.05, blue: 0.05), Color(red: 0.2, green: 0.2, blue: 0.2)]
+                    )
+                    .frame(maxWidth: .infinity)
+                }
                 
-                // X/Twitter Button
-                SocialButton(
-                    platform: "X",
-                    username: "@100DaysHQ",
-                    icon: "x-icon",
-                    url: URL(string: "https://twitter.com/100DaysHQ")!
-                )
-                
-                // Instagram Button
-                SocialButton(
+                // Bottom row - centered Instagram card
+                socialMediaCard(
                     platform: "Instagram",
                     username: "@100days.site",
-                    icon: "instagram-icon",
-                    url: URL(string: "https://instagram.com/100days.site")!
+                    systemIcon: "camera.circle.fill",
+                    url: URL(string: "https://instagram.com/100days.site") ?? URL(string: "https://100days.site")!,
+                    gradient: [Color.purple, Color.pink.opacity(0.8)]
                 )
+                .frame(maxWidth: .infinity)
+                .frame(height: 160) // Make the bottom card taller for better visual balance
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, AppSpacing.l)
-            
-            // Coming soon label
-            Text("Coming Soon")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.theme.subtext)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 16)
-                .background(
-                    Capsule()
-                        .fill(Color.theme.surface)
-                        .overlay(
-                            Capsule()
-                                .stroke(Color.theme.border, lineWidth: 1)
-                        )
-                )
-                .padding(.top, AppSpacing.s)
+            .padding(.horizontal, AppSpacing.m)
+            .padding(.vertical, AppSpacing.m)
         }
-        .padding(.bottom, AppSpacing.l)
+        .padding(.vertical, AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 8, x: 0, y: 4)
+        )
+        .padding(.horizontal, AppSpacing.xs)
+    }
+    
+    // Redesigned social media card with gradient background
+    private func socialMediaCard(platform: String, username: String, systemIcon: String, url: URL, gradient: [Color]) -> some View {
+        Button {
+            // Open URL
+            UIApplication.shared.open(url)
+            
+            // Haptic feedback
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                // Platform icon
+                HStack(spacing: 8) {
+                    Image(systemName: systemIcon)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 14, weight: .medium))
+                        .padding(6)
+                        .background(Color.white.opacity(0.2))
+                        .clipShape(Circle())
+                        .foregroundColor(.white)
+                }
+                
+                Spacer()
+                
+                // Platform name and username
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(platform)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text(username)
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.9))
+                        .lineLimit(1)
+                }
+            }
+            .frame(height: 130)
+            .padding(18)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: gradient),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(16)
+            .shadow(color: Color.theme.shadow.opacity(0.2), radius: 8, x: 0, y: 4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .overlay(
+                // Add subtle pulsating effect on hover
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    .scaleEffect(1.02)
+                    .opacity(0.0)
+                    .animation(
+                        Animation.easeInOut(duration: 1.5)
+                            .repeatForever(autoreverses: true),
+                        value: UUID()
+                    )
+            )
+        }
+        .buttonStyle(AppScaleButtonStyle())
     }
     
     // MARK: - Helper Properties
@@ -470,7 +501,7 @@ struct SocialView: View {
                 .offset(y: heroAppeared ? 0 : 20)
             
             // Username claim section
-            usernameClaimSection
+            usernameCard
                 .opacity(heroAppeared ? 1 : 0)
                 .offset(y: heroAppeared ? 0 : 30)
             
@@ -552,6 +583,121 @@ struct SocialView: View {
 
 // MARK: - Supporting Views and Models
 
+// Username Input View for username setup with improved stability
+struct UsernameInputView: View {
+    @ObservedObject var viewModel: SocialViewModel
+    @FocusState private var isUsernameFocused: Bool
+    @State private var localUsername: String = ""
+    @State private var isFirstAppear = true
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Choose Your Username")
+                .font(.headline)
+                .foregroundColor(Color.theme.text)
+            
+            Text("This username will be used for social features. It must be unique and contain only letters and numbers.")
+                .font(.subheadline)
+                .foregroundColor(Color.theme.subtext)
+            
+            // Username input field with local state
+            TextField("Username", text: $localUsername)
+                .padding()
+                .background(Color.theme.surface)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(viewModel.validationBorderColor, lineWidth: 1)
+                )
+                .focused($isUsernameFocused)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
+                .onChange(of: localUsername) { newValue in
+                    // Filter out invalid characters immediately
+                    let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                    if filtered != newValue {
+                        localUsername = filtered
+                        return
+                    }
+                    
+                    // Only update viewModel when needed
+                    viewModel.validateUsername(username: filtered)
+                }
+            
+            // Validation message with improved styling
+            if !viewModel.validationMessage.isEmpty {
+                HStack {
+                    // Show different icons based on validation state
+                    if viewModel.isCheckingUsername {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else if viewModel.validationMessage == "Username available!" {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    } else if viewModel.usernameStatus == .invalid || 
+                              (viewModel.usernameStatus.hasError) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .foregroundColor(.red)
+                    }
+                    
+                    Text(viewModel.validationMessage)
+                        .font(.caption)
+                        .foregroundColor(viewModel.validationMessageColor)
+                }
+                .padding(.top, 4)
+                .animation(.easeInOut(duration: 0.2), value: viewModel.validationMessage)
+            }
+            
+            // Claim button with improved state management
+            Button {
+                Task {
+                    await viewModel.claimUsername()
+                }
+            } label: {
+                HStack {
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .tint(colorScheme == .dark ? .black : .white)
+                            .scaleEffect(0.8)
+                            .padding(.trailing, 4)
+                    }
+                    
+                    Text("Claim Username")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(colorScheme == .dark ? .black : .white)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(viewModel.canClaimUsername ? Color.theme.accent : Color.gray.opacity(0.3))
+                .cornerRadius(10)
+            }
+            .disabled(!viewModel.canClaimUsername || viewModel.isLoading)
+            .padding(.top, 8)
+        }
+        .padding()
+        .onAppear {
+            // Only auto-focus and set up initial values on first appear
+            if isFirstAppear {
+                // Initialize local username from view model if it exists
+                localUsername = viewModel.username
+                
+                // Auto-focus the username field with a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    isUsernameFocused = true
+                    isFirstAppear = false
+                }
+            }
+        }
+        .onChange(of: viewModel.username) { newValue in
+            // Keep local username in sync with viewModel when changed externally
+            if newValue != localUsername {
+                localUsername = newValue
+            }
+        }
+    }
+}
+
 // Feature Card Model
 struct FeatureCard: Identifiable {
     let id = UUID()
@@ -560,7 +706,7 @@ struct FeatureCard: Identifiable {
     let iconName: String
 }
 
-// Feature Teaser Card
+// Feature Teaser Card with improved layout
 struct FeatureTeaseCard: View {
     let title: String
     let description: String
@@ -574,8 +720,6 @@ struct FeatureTeaseCard: View {
                 Circle()
                     .fill(Color.theme.accent.opacity(0.15))
                     .frame(width: 60, height: 60)
-                    .blur(radius: animateGlow ? 8 : 5)
-                    .opacity(animateGlow ? 0.8 : 0.5)
                 
                 Image(systemName: iconName)
                     .font(.system(size: 28))
@@ -583,21 +727,23 @@ struct FeatureTeaseCard: View {
                 
                 // Lock overlay
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(6)
                     .background(
                         Circle()
                             .fill(Color.theme.accent)
                     )
-                    .offset(x: 20, y: 20)
+                    .offset(x: 18, y: 18)
             }
-            .padding(.top, AppSpacing.s)
+            .padding(.top, AppSpacing.m)
+            .padding(.leading, AppSpacing.s)
             
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(title)
                     .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
+                    .padding(.top, AppSpacing.s)
                 
                 Text(description)
                     .font(AppTypography.caption1())
@@ -605,158 +751,27 @@ struct FeatureTeaseCard: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, AppSpacing.s)
+            .padding(.horizontal, AppSpacing.s)
+            .padding(.bottom, AppSpacing.m)
             
             Spacer()
         }
-        .padding(AppSpacing.m)
+        .frame(height: 190)
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.theme.accent.opacity(0.2), lineWidth: 1)
-        )
         .onAppear {
-            withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 animateGlow = true
             }
         }
     }
 }
 
-// Social Media Button
-struct SocialButton: View {
-    let platform: String
-    let username: String
-    let icon: String
-    let url: URL
-    
-    @State private var isPressed = false
-    @State private var isHovered = false
-    
-    var body: some View {
-        Button {
-            // Open URL
-            UIApplication.shared.open(url)
-            
-            // Haptic feedback
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
-        } label: {
-            VStack(spacing: AppSpacing.s) {
-                // Enhanced Icon with better styling
-                ZStack {
-                    Circle()
-                        .fill(getSocialBackgroundColor(for: platform))
-                        .frame(width: 60, height: 60)
-                        .shadow(color: getSocialBackgroundColor(for: platform).opacity(0.3), radius: 8, x: 0, y: 3)
-                    
-                    // App icon
-                    getIconView(for: platform, icon: icon)
-                        .font(.system(size: 28))
-                        .foregroundColor(getSocialIconColor(for: platform))
-                }
-                .scaleEffect(isHovered ? 1.05 : 1.0)
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-                .onAppear {
-                    // Create subtle hover animation
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1...3)) {
-                        withAnimation(.spring()) {
-                            isHovered = true
-                        }
-                        
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            withAnimation(.spring()) {
-                                isHovered = false
-                            }
-                        }
-                    }
-                }
-                
-                // Platform name and username with improved spacing
-                VStack(spacing: 4) {
-                    Text(platform)
-                        .font(AppTypography.subhead())
-                        .fontWeight(.semibold)
-                        .foregroundColor(.theme.text)
-                    
-                    Text(username)
-                        .font(AppTypography.footnote())
-                        .foregroundColor(.theme.subtext)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-            .padding(AppSpacing.m)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: isPressed ? 2 : 5, x: 0, y: isPressed ? 1 : 3)
-            )
-        }
-        .buttonStyle(AppScaleButtonStyle())
-    }
-    
-    // Get the appropriate icon view based on platform
-    @ViewBuilder
-    private func getIconView(for platform: String, icon: String) -> some View {
-        if ["tiktok-icon", "x-icon", "instagram-icon"].contains(icon) {
-            // Use actual image assets
-            Image(icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 32, height: 32)
-        } else {
-            // Fallback to SF Symbols
-            Image(systemName: getSFSymbolFallback(for: icon))
-        }
-    }
-    
-    // Helper to get background color for different platforms
-    private func getSocialBackgroundColor(for platform: String) -> Color {
-        switch platform {
-        case "TikTok":
-            return Color.black
-        case "X":
-            return Color(.systemBlue)
-        case "Instagram":
-            return Color.purple
-        default:
-            return Color.theme.accent
-        }
-    }
-    
-    // Helper to get icon color for different platforms
-    private func getSocialIconColor(for platform: String) -> Color {
-        switch platform {
-        case "TikTok", "X", "Instagram":
-            return .white
-        default:
-            return Color.theme.accent
-        }
-    }
-    
-    // Helper to get SF Symbol fallbacks if needed
-    private func getSFSymbolFallback(for icon: String) -> String {
-        switch icon {
-        case "tiktok":
-            return "music.note.list"
-        case "x.logo":
-            return "x"
-        case "instagram.logo":
-            return "camera"
-        default:
-            return icon
-        }
-    }
-    
-    @Environment(\.colorScheme) private var colorScheme
-}
-
 /// Loading overlay view
-struct LoadingOverlay: View {
+struct SocialLoadingOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.3)

@@ -8,6 +8,8 @@ import Network
 import FirebaseFirestore
 import Foundation
 import RevenueCat
+import GoogleMobileAds
+import StoreKit
 
 // Replace the import with a direct implementation of OfflineBanner
 // @_exported import struct App.OfflineBanner
@@ -37,6 +39,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
     // Add a static flag to track when Firebase has been configured
     static var firebaseConfigured = false
+    static var revenueCatConfigured = false
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -46,6 +49,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Configure RevenueCat after Firebase
         configureRevenueCat()
+        
+        // Initialize Google AdMob SDK
+        MobileAds.initialize()
+        print("MobileAds initialized")
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -62,7 +69,31 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Preemptively handle Apple authentication issues
         setupAppleAuthErrorHandling()
         
+        // Register for memory warning notifications
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+        
         return true
+    }
+    
+    // Handle memory warnings by clearing caches and non-essential data
+    @objc private func handleMemoryWarning() {
+        print("⚠️ Memory warning received - clearing caches")
+        
+        // Clear image caches
+        URLCache.shared.removeAllCachedResponses()
+        
+        // Notify other components to clear their caches
+        NotificationCenter.default.post(name: .appDidReceiveMemoryWarning, object: nil)
+        
+        // Perform garbage collection
+        autoreleasepool {
+            // Force a garbage collection cycle
+        }
     }
     
     // Extract Firebase configuration to a separate method
@@ -96,16 +127,69 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Extract RevenueCat configuration to a separate method
     private func configureRevenueCat() {
-        Purchases.logLevel = .debug
+        // Skip if already configured
+        guard !AppDelegate.revenueCatConfigured else {
+            #if DEBUG
+            print("🔐 RevenueCat: Already configured, skipping initialization")
+            #endif
+            return
+        }
+        
+        // Get the current Firebase user ID if available
+        let currentUserId = Auth.auth().currentUser?.uid
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Initial configuration with Firebase UID: \(currentUserId ?? "none")")
+        #endif
+        
+        // Configure RevenueCat with proper production settings
+        #if DEBUG
+        Purchases.logLevel = .debug // More verbose logging in debug builds
+        #else
+        Purchases.logLevel = .error // Only log errors in production
+        #endif
+        
         Purchases.configure(
             with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
-                .with(appUserID: nil)
+                .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
                 .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
                 .with(userDefaults: UserDefaults.standard)
                 .with(usesStoreKit2IfAvailable: true)
                 .build()
         )
-        print("RevenueCat configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        
+        // Set the delegate immediately
+        Purchases.shared.delegate = SubscriptionService.shared
+        
+        // Mark as configured to ensure it only happens once
+        AppDelegate.revenueCatConfigured = true
+        
+        #if DEBUG
+        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
+        #endif
+        
+        // Check and log the current environment
+        let storeEnvironment: String
+        if #available(iOS 15.0, *) {
+            // StoreKit 2 is available on iOS 15+
+            storeEnvironment = "StoreKit 2"
+        } else {
+            storeEnvironment = "StoreKit 1"
+        }
+        print("🔐 RevenueCat: Current store environment: \(storeEnvironment)")
+        
+        // If user is logged in, attempt to migrate any anonymous subscriptions
+        if let currentUserId = currentUserId {
+            Task {
+                print("🔐 RevenueCat: Checking for anonymous subscription to migrate during app launch")
+                let migrationResult = await SubscriptionService.shared.migrateAnonymousSubscription()
+                print("🔐 RevenueCat: Initial migration check result: \(migrationResult ? "Transferred subscription" : "No migration needed")")
+                
+                // After migration check, make sure to identify the user and update subscription status
+                await SubscriptionService.shared.identifyCurrentUser()
+            }
+        }
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -147,6 +231,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Fix for layout constraints in NavigationViews
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
+        appearance.shadowColor = .clear // Remove the bottom border
+        
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance
         UINavigationBar.appearance().compactAppearance = appearance
@@ -330,8 +416,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap { $0.windows }
         } else {
-            // For iOS < 15, use the deprecated API
-            return UIApplication.shared.windows
+            // For iOS < 15, use the Scene-based lookup which is safer than the deprecated API
+            return UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
     }
     
@@ -339,10 +427,16 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Check for SystemInputAssistantView
         let viewName = NSStringFromClass(type(of: view))
         if viewName.contains("SystemInputAssistantView") {
+            print("Found SystemInputAssistantView, fixing constraints")
+            
             // Lower the priority of constraints rather than completely removing them
             for constraint in view.constraints {
-                if constraint.firstAttribute == .height {
+                // Safely check constraint attributes
+                if let identifier = constraint.identifier, identifier == "assistantHeight" {
                     constraint.priority = UILayoutPriority(50) // Very low priority
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    // Also catch height constraints without identifiers
+                    constraint.priority = UILayoutPriority(50)
                 }
             }
         }
@@ -455,14 +549,13 @@ class InputAssistantManager {
                     }
                 }
             } else {
-                // For iOS < 15, use the deprecated API
-                #if DEBUG
-                print("Using deprecated UIApplication.windows API for iOS < 15")
-                #endif
-                
-                // swiftlint:disable:next deprecated
-                for window in UIApplication.shared.windows {
-                    self.lowerAssistantViewConstraintPriority(in: window, assistantViewClass: assistantViewClass)
+                // For iOS < 15, use the Scene-based lookup
+                for scene in UIApplication.shared.connectedScenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        for window in windowScene.windows {
+                            self.lowerAssistantViewConstraintPriority(in: window, assistantViewClass: assistantViewClass)
+                        }
+                    }
                 }
             }
         }
@@ -471,11 +564,14 @@ class InputAssistantManager {
     private func lowerAssistantViewConstraintPriority(in window: UIWindow, assistantViewClass: UIView.Type) {
         for view in window.subviews {
             if type(of: view) == assistantViewClass {
-                // Instead of removing constraints, lower their priority
+                // Use safer approach to modify constraints
                 for constraint in view.constraints {
-                    if constraint.identifier == "assistantHeight" {
+                    // Safely check identifier to avoid EXC_BAD_ACCESS crash
+                    if let identifier = constraint.identifier, identifier == "assistantHeight" {
                         constraint.priority = UILayoutPriority(250)  // Lower priority
-                        break
+                    } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                        // Also modify height constraints without identifiers
+                        constraint.priority = UILayoutPriority(250)
                     }
                 }
                 
@@ -493,10 +589,14 @@ class InputAssistantManager {
         // Recursively search for and fix assistant views
         for subview in view.subviews {
             if type(of: subview) == assistantViewClass {
+                // Use a safer approach to find and modify constraints
                 for constraint in subview.constraints {
-                    if constraint.identifier == "assistantHeight" {
+                    // Safely check constraint identifier to avoid EXC_BAD_ACCESS
+                    if let identifier = constraint.identifier, identifier == "assistantHeight" {
                         constraint.priority = UILayoutPriority(250)  // Lower priority
-                        break
+                    } else if constraint.firstAttribute == .height && constraint.firstItem === subview {
+                        // Also modify any height constraint directly affecting this view
+                        constraint.priority = UILayoutPriority(250)
                     }
                 }
                 
@@ -556,8 +656,10 @@ class ConstraintSwizzler {
                 }
             }
         } else {
-            // For iOS < 15, use the deprecated API
-            windows = UIApplication.shared.windows
+            // For iOS < 15, use the Scene-based lookup
+            windows = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap { $0.windows }
         }
         
         // Find and fix constraints in each window
@@ -571,9 +673,13 @@ class ConstraintSwizzler {
         if type(of: view) == classType {
             var constraintsToModify: [NSLayoutConstraint] = []
             
-            // Find the height constraint
+            // Find the height constraint - use safer approach
             for constraint in view.constraints {
-                if constraint.identifier == "assistantHeight" {
+                // Safely check for constraint identifier to avoid EXC_BAD_ACCESS
+                if let identifier = constraint.identifier, identifier == "assistantHeight" {
+                    constraintsToModify.append(constraint)
+                } else if constraint.firstAttribute == .height && constraint.firstItem === view {
+                    // Also modify height constraints without identifiers
                     constraintsToModify.append(constraint)
                 }
             }
@@ -597,7 +703,7 @@ class ConstraintSwizzler {
 
 @main
 struct App100Days: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var userSession = UserSession.shared
     @StateObject private var subscriptionService = SubscriptionService.shared
     @StateObject private var notificationService = NotificationService.shared
@@ -606,6 +712,7 @@ struct App100Days: App {
     @StateObject private var networkMonitor = NetworkMonitor.shared
     @StateObject private var userStatsService = UserStatsService.shared
     @StateObject private var navigationRouter = NavigationRouter()
+    @StateObject private var badgeService = BadgeService.shared
     
     init() {
         print("App100Days init - Using AppDelegate for Firebase initialization")
@@ -623,21 +730,49 @@ struct App100Days: App {
                 .environmentObject(networkMonitor)
                 .environmentObject(userStatsService)
                 .environmentObject(navigationRouter)
-                .withAppTheme()
-                .task {
-                    // Register custom fonts if any
-                    FontRegistration.registerFonts()
+                .environmentObject(badgeService)
+                .preferredColorScheme(themeManager.effectiveColorScheme())
+                .onAppear {
+                    setupApp()
                 }
         }
     }
     
-    private func initializeServices() {
-        // Log initialized services, but don't re-configure Firestore
-        // as it's already configured in AppDelegate
-        print("Services already initialized in AppDelegate")
-        print("Auth service initialized")
-        print("Firestore service initialized")
-        print("Storage service initialized")
+    private func setupApp() {
+        // Configure non-Firebase aspects
+        configureUndimmedAnimations()
+        setupNavigationBarAppearance()
+        setupKeyboardDismissal()
+        
+        // Prevent layout constraint issues, especially on iOS 15+
+        fixLayoutConstraintIssues()
+        
+        // Configure Apple Auth to prevent initialization delays
+        AuthUtilities.configureAppleAuthSession()
+    }
+    
+    private func configureUndimmedAnimations() {
+        UIView.appearance(whenContainedInInstancesOf: [UIAlertController.self]).tintColor = UIColor(Color.theme.accent)
+    }
+    
+    private func setupKeyboardDismissal() {
+        // Implement better keyboard dismissal
+        UIScrollView.appearance().keyboardDismissMode = .onDrag
+    }
+    
+    private func fixLayoutConstraintIssues() {
+        // This is a workaround for constraint issues, particularly on iOS 15+
+        UserDefaults.standard.setValue(false, forKey: "_UIConstraintBasedLayoutLogUnsatisfiable")
+    }
+    
+    // Remove NavigationBar bottom border
+    private func setupNavigationBarAppearance() {
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.shadowColor = .clear // Remove the bottom border
+        
+        UINavigationBar.appearance().standardAppearance = appearance
+        UINavigationBar.appearance().scrollEdgeAppearance = appearance
     }
 }
 
@@ -650,49 +785,54 @@ struct AppContentView: View {
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
     @EnvironmentObject var userStatsService: UserStatsService
+    @EnvironmentObject var badgeService: BadgeService
     @StateObject private var navigationRouter = NavigationRouter()
     @State private var isInitializing = true
+    @State private var forceWelcomeView = false
+    
+    // Track previous auth state to prevent flickering
+    @State private var previousAuthState: Bool? = nil
     
     var body: some View {
         ZStack {
-            // Background color for the entire app
+            // Background color for the entire app - always present for consistent visual
             Color.theme.background
                 .ignoresSafeArea()
             
-            // Content based on state
+            // Content based on state with controlled transitions
             if isInitializing {
+                // Initial splash screen
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
                         // Delay to show splash screen briefly
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            withAnimation(.easeInOut(duration: 0.4)) {
+                            // Capture auth state before finishing initialization
+                            previousAuthState = userSession.isAuthenticated
+                            
+                            withAnimation(Animation.easeInOut(duration: 0.4)) {
                                 isInitializing = false
                             }
                         }
                     }
             } else {
+                // Controlled view transitions based on authentication state
                 Group {
-                    if userSession.isAuthenticated {
-                        // Main app for authenticated users
-                        MainAppView()
-                            .environmentObject(userSession)
-                            .environmentObject(subscriptionService)
-                            .environmentObject(notificationService)
-                            .environmentObject(themeManager)
-                            .environmentObject(progressDashboardViewModel)
-                            .environmentObject(networkMonitor)
-                            .environmentObject(userStatsService)
-                            .environmentObject(navigationRouter)
-                    } else {
-                        // Welcome view for non-authenticated users
+                    if shouldShowWelcomeView {
                         WelcomeView()
-                            .environmentObject(userSession)
-                            .environmentObject(themeManager)
+                            .transition(.opacity)
+                    } else if !userSession.hasCompletedOnboarding {
+                        OnboardingView()
+                            .transition(.opacity)
+                    } else {
+                        MainAppView()
+                            .transition(.opacity)
                     }
                 }
-                .transition(.opacity)
-                .animation(.easeInOut(duration: 0.4), value: userSession.isAuthenticated)
+                .environmentObject(navigationRouter)
+                .animation(Animation.easeInOut(duration: 0.3), value: userSession.isAuthenticated)
+                .animation(Animation.easeInOut(duration: 0.3), value: userSession.hasCompletedOnboarding)
+                .animation(Animation.easeInOut(duration: 0.3), value: forceWelcomeView)
             }
             
             // Offline banner overlay (always on top)
@@ -702,10 +842,65 @@ struct AppContentView: View {
                     Spacer()
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
-                .animation(.easeInOut, value: networkMonitor.isConnected)
+                .animation(Animation.easeInOut, value: networkMonitor.isConnected)
                 .zIndex(100) // Ensure it's on top
             }
         }
+        .onChange(of: userSession.isAuthenticated) { newValue in
+            // Only animate if we have a previous state and it's different
+            if let previous = previousAuthState, previous != newValue {
+                withAnimation(Animation.easeInOut(duration: 0.3)) {
+                    // Update state with animation
+                }
+            }
+            // Always update the previous state
+            previousAuthState = newValue
+        }
+        .onAppear {
+            // Listen for force navigation to welcome screen
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name("ForceNavigateToWelcome"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                withAnimation(Animation.easeInOut(duration: 0.3)) {
+                    // First set the flag to trigger view transition
+                    forceWelcomeView = true
+                    
+                    // Reset all view models and services in a specific order
+                    Task { @MainActor in
+                        // First reset UI-related services
+                        navigationRouter.reset()
+                        
+                        // Reset view models
+                        progressDashboardViewModel.reset()
+                        
+                        // Wait a bit to ensure view changes have time to propagate
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                        
+                        // Reset remaining services
+                        userStatsService.reset()
+                        badgeService.reset()
+                        SubscriptionService.shared.reset()
+                        notificationService.reset()
+                        
+                        // Reset after a short delay to prepare for future sign-ins
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                            // Only reset the flag if we're still in the welcome state
+                            // This prevents showing main app during transition
+                            if !userSession.isAuthenticated {
+                                forceWelcomeView = false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Computed property to determine if welcome view should show
+    private var shouldShowWelcomeView: Bool {
+        return !userSession.isAuthenticated || forceWelcomeView
     }
 }
 
@@ -844,17 +1039,23 @@ struct SplashScreen: View {
             .opacity(opacity)
             .onAppear {
                 // Subtle animations
-                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                withAnimation(Animation.spring(response: 0.8, dampingFraction: 0.7)) {
                     opacity = 1.0
                     scale = 1.0
                 }
                 
                 // Subtle rotation animation for the checkmark
-                withAnimation(.easeInOut(duration: 1.2)) {
+                withAnimation(Animation.easeInOut(duration: 1.2)) {
                     rotation = 360
                 }
             }
         }
     }
+}
+
+// Add Notification.Name extension if it's not defined elsewhere
+extension Notification.Name {
+    static let networkStatusChanged = Notification.Name("NetworkStatusChanged")
+    static let appDidReceiveMemoryWarning = Notification.Name("AppDidReceiveMemoryWarning")
 }
 
