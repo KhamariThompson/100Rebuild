@@ -3,8 +3,9 @@ import SwiftUI
 /// A banner that shows subscription renewal issues or expiration warnings
 struct SubscriptionBanner: View {
     @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @State private var showBanner = false
-    
+
     var body: some View {
         VStack {
             if subscriptionService.subscriptionRenewalIssue && showBanner {
@@ -125,5 +126,6 @@ struct SubscriptionBanner_Previews: PreviewProvider {
     static var previews: some View {
         SubscriptionBanner()
             .environmentObject(SubscriptionService.shared)
+            .environmentObject(EntitlementsAdapter.shared)
     }
 } 

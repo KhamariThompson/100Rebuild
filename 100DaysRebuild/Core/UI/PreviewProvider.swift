@@ -9,18 +9,21 @@ extension PreviewProvider {
 @MainActor
 class DeveloperPreview {
     static let instance = DeveloperPreview()
-    
-    let subscriptionService: SubscriptionService
+
+    let subscriptionStore: SubscriptionStore
+    let entitlementsAdapter: EntitlementsAdapter
     let userSession: UserSession
-    
+
     private init() {
-        self.subscriptionService = SubscriptionService.shared
+        self.subscriptionStore = SubscriptionStore.shared
+        self.entitlementsAdapter = EntitlementsAdapter.shared
         self.userSession = UserSession.shared
     }
-    
+
     func previewView<Content: View>(_ content: Content) -> some View {
         content
-            .environmentObject(subscriptionService)
+            .environmentObject(subscriptionStore)
+            .environmentObject(entitlementsAdapter)
             .environmentObject(userSession)
     }
 } 

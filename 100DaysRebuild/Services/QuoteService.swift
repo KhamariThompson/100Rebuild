@@ -33,15 +33,14 @@ class QuoteService {
         sessionConfig.timeoutIntervalForResource = 20
         sessionConfig.waitsForConnectivity = true
         
-        // Allow unsecured connections for quote APIs
+        // Configure cache policy for quote APIs
         // This is safe for non-sensitive data like quotes
-        let securityConfig = [NSURLRequestUseProtocolCachePolicy: true]
-        sessionConfig.connectionProxyDictionary = securityConfig
+        sessionConfig.requestCachePolicy = .useProtocolCachePolicy
         
-        // Allow insecure HTTP loads for the quote APIs
+        // Configure session for better performance
         if #available(iOS 15.0, *) {
-            // Disable certificate validation for these specific domains
-            sessionConfig.assumesHTTP3Capable = true
+            // Enable multiplexing for better performance
+            sessionConfig.multipathServiceType = .handover
         }
         
         // Prefill cache with fallback quotes to ensure we always have quotes available

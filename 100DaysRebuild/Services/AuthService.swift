@@ -29,12 +29,29 @@ class AuthService {
             print("AuthService: Attempting sign in with email: \(email)")
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
             print("AuthService: Sign in successful")
+            
+            // Track successful auth
+            AnalyticsService.shared.trackEvent(AppAnalytics.auth_success, properties: [
+                "provider": "email",
+                "user_id": result.user.uid
+            ])
+            
             await userSession.handleAuthSuccess(provider: "password")
+            // Determine user cohort after successful auth
+            userSession.determineUserCohortAfterAuth()
+            
             // Identify user with RevenueCat immediately
             await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
         } catch {
             print("AuthService: Sign in failed - \(error.localizedDescription)")
+            
+            // Track auth failure
+            AnalyticsService.shared.trackEvent(AppAnalytics.auth_failure, properties: [
+                "provider": "email",
+                "error": error.localizedDescription
+            ])
+            
             await userSession.handleAuthError(error, for: .signIn, provider: "password")
             return false
         }
@@ -47,6 +64,8 @@ class AuthService {
             let result = try await Auth.auth().createUser(withEmail: email, password: password)
             print("AuthService: Sign up successful")
             await userSession.handleAuthSuccess(provider: "password")
+            // Determine user cohort after successful auth
+            userSession.determineUserCohortAfterAuth()
             // Identify user with RevenueCat immediately
             await identifyUserWithRevenueCat(uid: result.user.uid)
             return true
@@ -184,6 +203,8 @@ class AuthService {
             
             print("AuthService: Firebase authentication with Google successful")
             await userSession.handleAuthSuccess(provider: "google.com")
+            // Determine user cohort after successful auth
+            userSession.determineUserCohortAfterAuth()
             // Identify user with RevenueCat immediately
             await identifyUserWithRevenueCat(uid: Auth.auth().currentUser!.uid)
             return true
@@ -292,6 +313,8 @@ class AuthService {
             // Success, notify UserSession
             print("AuthService: Apple sign-in successful for user: \(firebaseUser.uid)")
             await userSession.handleAuthSuccess(provider: "apple.com")
+            // Determine user cohort after successful auth
+            userSession.determineUserCohortAfterAuth()
             // Identify user with RevenueCat immediately
             await identifyUserWithRevenueCat(uid: firebaseUser.uid)
             return true

@@ -2,35 +2,37 @@ import SwiftUI
 
 struct ProLockedView<Content: View>: View {
     let content: Content
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @StateObject private var entitlements = Entitlements.shared
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @State private var isShowingPaywall = false
     @State private var isContentVisible = false
     @State private var animateElements = false
-    
+
     // For visual appeal
     @State private var pulseAnimation = false
     @State private var hoverEffect = false
-    
+
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
-    
+
     var body: some View {
         ZStack {
             // Content with enhanced visual treatment
             content
-                .blur(radius: subscriptionService.isProUser ? 0 : 5)
-                .opacity(subscriptionService.isProUser ? 1 : 0.4)
-                .scaleEffect(subscriptionService.isProUser ? 1 : 0.98)
-                .animation(.easeInOut(duration: 0.5), value: subscriptionService.isProUser)
-                .onChange(of: subscriptionService.isProUser) { newValue in
+                .blur(radius: entitlements.effectiveIsProUser ? 0 : 5)
+                .opacity(entitlements.effectiveIsProUser ? 1 : 0.4)
+                .scaleEffect(entitlements.effectiveIsProUser ? 1 : 0.98)
+                .animation(.easeInOut(duration: 0.5), value: entitlements.effectiveIsProUser)
+                .onChange(of: entitlements.effectiveIsProUser) { newValue in
                     withAnimation(.easeInOut(duration: 0.5)) {
                         isContentVisible = newValue
                     }
                 }
-            
+
             // Enhanced overlay for non-pro users
-            if !subscriptionService.isProUser {
+            if !entitlements.effectiveIsProUser {
                 VStack(spacing: AppSpacing.m) {
                     // Animated lock icon with glow effect
                     ZStack {
@@ -158,17 +160,18 @@ struct ProLockedView<Content: View>: View {
                     .padding()
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                .animation(.easeInOut(duration: 0.3), value: subscriptionService.isProUser)
+                .animation(.easeInOut(duration: 0.3), value: entitlements.effectiveIsProUser)
             }
         }
         .sheet(isPresented: $isShowingPaywall, onDismiss: {
             // Check subscription status when paywall is dismissed
             Task {
-                await subscriptionService.refreshSubscriptionStatus()
+                await subscriptionStore.load()
             }
         }) {
             PaywallView()
-                .environmentObject(subscriptionService)
+                .environmentObject(subscriptionStore)
+                .environmentObject(entitlementsAdapter)
         }
         .onAppear {
             // Start the pulse animation
@@ -183,7 +186,7 @@ struct ProLockedView<Content: View>: View {
             
             // Check subscription status on appear
             Task {
-                await subscriptionService.refreshSubscriptionStatus()
+                await subscriptionStore.load()
             }
         }
     }

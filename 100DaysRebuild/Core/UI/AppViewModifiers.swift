@@ -5,15 +5,17 @@ import SwiftUI
 /// ViewModifier that applies all common app dependencies to a view
 struct AppDependenciesModifier: ViewModifier {
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var userStatsService: UserStatsService
-    
+
     func body(content: Content) -> some View {
         content
             .environmentObject(userSession)
-            .environmentObject(subscriptionService)
+            .environmentObject(subscriptionStore)
+            .environmentObject(entitlementsAdapter)
             .environmentObject(notificationService)
             .environmentObject(themeManager)
             .environmentObject(userStatsService)

@@ -27,12 +27,9 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		54080C102DCA4512000747B5 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */ = {
+		5482AADD2DC25D9600AF37F0 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Configuration/Config.xcconfig,
-				Configuration/Development.xcconfig,
-				Configuration/Production.xcconfig,
 				Info.plist,
 			);
 			target = 5482AAD92DC25D9600AF37F0 /* 100DaysRebuild */;
@@ -43,7 +40,7 @@
 		5482AADC2DC25D9600AF37F0 /* 100DaysRebuild */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				54080C102DCA4512000747B5 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */,
+				5482AADD2DC25D9600AF37F0 /* Exceptions for "100DaysRebuild" folder in "100DaysRebuild" target */,
 			);
 			path = 100DaysRebuild;
 			sourceTree = "<group>";
@@ -321,25 +318,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = 100DaysRebuild/100DaysRebuild.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = NO;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
 				DEVELOPMENT_TEAM = 5392LZDF92;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = 100Days;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_PREPROCESS = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -365,25 +353,16 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = 100DaysRebuild/100DaysRebuild.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = NO;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"100DaysRebuild/Preview Content\"";
 				DEVELOPMENT_TEAM = 5392LZDF92;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = 100DaysRebuild/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = 100Days;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
-				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
-				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_PREPROCESS = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

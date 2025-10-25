@@ -150,7 +150,7 @@ struct CalAITabBar_Previews: PreviewProvider {
                 selectedTab: .constant(1),
                 items: [
                     CalAITabBar.TabItem(icon: "house", text: "Home"),
-                    CalAITabBar.TabItem(icon: "chart.bar", text: "Progress"),
+                    CalAITabBar.TabItem(icon: "chart.bar.fill", text: "Progress"),
                     CalAITabBar.TabItem(icon: "person.2", text: "Social"),
                     CalAITabBar.TabItem(icon: "person", text: "Profile")
                 ]
@@ -167,7 +167,7 @@ struct CalAITabBar_Previews: PreviewProvider {
                 selectedTab: .constant(0),
                 items: [
                     CalAITabBar.TabItem(icon: "house", text: "Home"),
-                    CalAITabBar.TabItem(icon: "chart.bar", text: "Progress"),
+                    CalAITabBar.TabItem(icon: "chart.bar.fill", text: "Progress"),
                     CalAITabBar.TabItem(icon: "person", text: "Profile"),
                     CalAITabBar.TabItem(icon: "gearshape", text: "Settings")
                 ],

@@ -143,6 +143,8 @@ class ChallengeStore: ObservableObject {
                     
                     // Notify observers that challenges have been updated
                     NotificationCenter.default.post(name: Self.challengesDidUpdateNotification, object: nil)
+                    // Trigger feature recomputations (momentum & forecast)
+                    ProgressDashboardViewModel.shared.triggerFeatureComputations()
                 }
             } catch {
                 if !Task.isCancelled {

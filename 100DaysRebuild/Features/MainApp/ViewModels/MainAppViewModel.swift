@@ -45,8 +45,7 @@ class MainAppViewModel: ObservableObject {
     func showPaywallForFeature() {
         withAnimation {
             showPaywall = true
-            // Also set the subscription service property to ensure consistency
-            SubscriptionService.shared.showPaywall = true
+            // TODO: Trigger paywall via navigation
         }
     }
     
@@ -86,34 +85,19 @@ class MainAppViewModel: ObservableObject {
     }
     
     private func setupSubscriptionMonitoring() {
-        // Monitor the subscription service's showPaywall property
-        SubscriptionService.shared.$showPaywall
-            .sink { [weak self] showPaywall in
-                guard let self = self else { return }
-                if showPaywall != self.showPaywall {
-                    // Update our local property to match the service
-                    DispatchQueue.main.async {
-                        withAnimation {
-                            self.showPaywall = showPaywall
-                        }
-                    }
-                }
-            }
-            .store(in: &cancellables)
-            
-        // Monitor the subscription service's isProUser property
-        SubscriptionService.shared.$isProUser
-            .sink { [weak self] isProUser in
+        // Monitor the EntitlementsAdapter's hasProAccess property
+        EntitlementsAdapter.shared.$hasProAccess
+            .sink { [weak self] hasProAccess in
                 guard let self = self else { return }
                 DispatchQueue.main.async {
-                    if self.isProUser != isProUser {
-                        print("🔐 RevenueCat: MainAppViewModel - Pro status changed to: \(isProUser)")
-                        self.isProUser = isProUser
+                    if self.isProUser != hasProAccess {
+                        print("🔐 RevenueCat: MainAppViewModel - Pro status changed to: \(hasProAccess)")
+                        self.isProUser = hasProAccess
                     }
                 }
             }
             .store(in: &cancellables)
-            
+
         // Also listen for subscription status changes via notification
         NotificationCenter.default.publisher(for: NSNotification.Name("SubscriptionStatusChanged"))
             .sink { [weak self] notification in
@@ -128,7 +112,7 @@ class MainAppViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-        
+
         // Add listener for when the app becomes active to validate subscription status
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
@@ -136,18 +120,17 @@ class MainAppViewModel: ObservableObject {
                 print("🔐 RevenueCat: MainAppViewModel - App became active, verifying subscription status")
                 Task {
                     // Force refresh subscription status
-                    await SubscriptionService.shared.updateSubscriptionStatus()
-                    
-                    // Attempt to migrate subscription from anonymous user if needed
-                    if Auth.auth().currentUser != nil {
-                        print("🔐 RevenueCat: MainAppViewModel - Checking for anonymous subscription to migrate")
-                        let migrationOccurred = await SubscriptionService.shared.migrateAnonymousSubscription()
-                        print("🔐 RevenueCat: MainAppViewModel - Migration result: \(migrationOccurred ? "Transferred subscription" : "No migration needed")")
+                    await SubscriptionStore.shared.load()
+
+                    // Identify current user if needed
+                    if let currentUser = Auth.auth().currentUser {
+                        print("🔐 RevenueCat: MainAppViewModel - Identifying current user")
+                        await SubscriptionStore.shared.identifyUser(currentUser.uid)
                     }
                 }
             }
             .store(in: &cancellables)
-        
+
         // Listen for auth state changes to refresh subscription status
         NotificationCenter.default.publisher(for: NSNotification.Name("AuthStateChanged"))
             .sink { [weak self] _ in
@@ -155,24 +138,9 @@ class MainAppViewModel: ObservableObject {
                 print("🔐 RevenueCat: MainAppViewModel - Auth state changed, verifying subscription status")
                 Task {
                     // Verify subscription status when auth state changes
-                    await SubscriptionService.shared.identifyCurrentUser()
-                    
-                    // Also attempt migration after auth state changes (e.g., user logs in)
-                    if Auth.auth().currentUser != nil {
-                        print("🔐 RevenueCat: MainAppViewModel - Auth state changed, checking for subscription migration")
-                        _ = await SubscriptionService.shared.migrateAnonymousSubscription()
+                    if let currentUser = Auth.auth().currentUser {
+                        await SubscriptionStore.shared.identifyUser(currentUser.uid)
                     }
-                }
-            }
-            .store(in: &cancellables)
-            
-        // Listen for successful subscription migrations
-        NotificationCenter.default.publisher(for: NSNotification.Name("SubscriptionMigrationCompleted"))
-            .sink { [weak self] notification in
-                guard let _ = self else { return }
-                if let originalUserId = notification.userInfo?["originalAppUserId"] as? String {
-                    print("🔐 RevenueCat: MainAppViewModel - Subscription successfully migrated from user: \(originalUserId)")
-                    // Could add UI feedback here if desired
                 }
             }
             .store(in: &cancellables)

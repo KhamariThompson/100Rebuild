@@ -6,16 +6,15 @@ import SwiftUI
 struct ChallengeCardView: View {
     @State var challenge: Challenge
     let onCheckIn: () -> Void
-    let subscriptionService: SubscriptionService
+    // Removed: let subscriptionService: SubscriptionService (no longer needed in this view)
     @State private var isCheckedIn = false
     @State private var isPerformingCheckIn = false
-    
+
     @State private var isAnimating = false
     @State private var scale: CGFloat = 1.0
-    
-    init(challenge: Challenge, subscriptionService: SubscriptionService, onCheckIn: @escaping () -> Void) {
+
+    init(challenge: Challenge, onCheckIn: @escaping () -> Void) {
         _challenge = State(initialValue: challenge)
-        self.subscriptionService = subscriptionService
         self.onCheckIn = onCheckIn
         _isCheckedIn = State(initialValue: challenge.isCompletedToday)
     }
@@ -311,41 +310,37 @@ struct ChallengeCardView_Previews: PreviewProvider {
         VStack {
             ChallengeCardView(
                 challenge: Challenge(title: "Test Challenge", ownerId: "test"),
-                subscriptionService: SubscriptionService.shared,
                 onCheckIn: {}
             )
-            
+
             ChallengeCardView(
                 challenge: Challenge(
-                    title: "Completed Today", 
+                    title: "Completed Today",
                     lastCheckInDate: Date(),
                     daysCompleted: 50,
                     isCompletedToday: true,
                     ownerId: "test"
                 ),
-                subscriptionService: SubscriptionService.shared,
                 onCheckIn: {}
             )
-            
+
             ChallengeCardView(
                 challenge: Challenge(
-                    title: "Completed Challenge", 
+                    title: "Completed Challenge",
                     daysCompleted: 100,
                     ownerId: "test"
                 ),
-                subscriptionService: SubscriptionService.shared,
                 onCheckIn: {}
             )
-            
+
             ChallengeCardView(
                 challenge: Challenge(
-                    title: "Expired Streak", 
+                    title: "Expired Streak",
                     lastCheckInDate: Calendar.current.date(byAdding: .day, value: -3, to: Date())!,
                     streakCount: 5,
                     daysCompleted: 25,
                     ownerId: "test"
                 ),
-                subscriptionService: SubscriptionService.shared,
                 onCheckIn: {}
             )
         }

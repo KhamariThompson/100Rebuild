@@ -4,7 +4,8 @@ import SwiftUI
 struct MainAppChallengesTabView: View {
     @StateObject private var viewModel = ChallengesViewModel()
     @EnvironmentObject private var router: NavigationRouter
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var userStatsService: UserStatsService
     @EnvironmentObject private var userSession: UserSession
@@ -44,10 +45,9 @@ struct MainAppChallengesTabView: View {
                         
                         // Menu button
                         Menu {
-                            Button(action: { viewModel.isShowingNewChallenge = true }) {
-                                Label("New Challenge", systemImage: "plus")
-                            }
-                            
+                            // Removed direct "New Challenge" action from the top-right menu
+                            // to avoid duplicate entry points for creating challenges.
+                            // Keep Refresh if there are existing challenges.
                             if !viewModel.challenges.isEmpty {
                                 Button(action: refreshChallenges) {
                                     Label("Refresh", systemImage: "arrow.clockwise")
@@ -101,7 +101,8 @@ struct MainAppChallengesTabView: View {
                         await userStatsService.refreshUserStats()
                     }
                 }
-                .environmentObject(subscriptionService)
+                .environmentObject(subscriptionStore)
+                .environmentObject(entitlementsAdapter)
                 .environmentObject(ThemeManager.shared)
                 .environmentObject(userSession)
             }

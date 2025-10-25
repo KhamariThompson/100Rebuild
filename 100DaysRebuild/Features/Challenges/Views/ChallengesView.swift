@@ -14,7 +14,8 @@ extension Notification.Name {
 
 struct ChallengesView: View {
     @StateObject private var viewModel = ChallengesViewModel()
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject private var notificationService: NotificationService
     @EnvironmentObject private var router: NavigationRouter
     @EnvironmentObject private var userStatsService: UserStatsService
@@ -56,15 +57,7 @@ struct ChallengesView: View {
                         
                         Spacer()
                         
-                        // Add button
-                        Button(action: { viewModel.isShowingNewChallenge = true }) {
-                            Image(systemName: "plus")
-                                .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
-                                .foregroundColor(.theme.accent)
-                                .frame(width: 40, height: 40)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(AppScaleButtonStyle())
+                        // Top-right add button removed per design request
                     }
                     .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                     .padding(.top, AppSpacing.m)
@@ -98,7 +91,8 @@ struct ChallengesView: View {
                         isShowingCheckInSheet = false
                     }
                 )
-                .environmentObject(subscriptionService)
+                .environmentObject(subscriptionStore)
+                .environmentObject(entitlementsAdapter)
                 .transition(.identity)
                 .zIndex(100)
             }
@@ -152,7 +146,8 @@ struct ChallengesView: View {
                     await userStatsService.refreshUserStats()
                 }
             }
-            .environmentObject(subscriptionService)
+            .environmentObject(subscriptionStore)
+            .environmentObject(entitlementsAdapter)
             .environmentObject(ThemeManager.shared)
             .environmentObject(userSession)
         }
@@ -342,7 +337,7 @@ struct ChallengesView: View {
                 }
                 
                 // Pro limit warning if user has too many challenges
-                if viewModel.challenges.count >= 3 && !subscriptionService.isProUser {
+                if viewModel.challenges.count >= 3 && !entitlementsAdapter.hasProAccess {
                     proLimitWarning
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                         .padding(.bottom, AppSpacing.s)
@@ -392,18 +387,18 @@ struct ChallengesView: View {
                     }
                 }
                 .padding(.bottom, AppSpacing.m)
-                
+
                 // AdMob Banner
-                if !subscriptionService.isProUser {
+                if !entitlementsAdapter.hasProAccess {
                     AdMobBannerView()
                         .frame(height: 60)
                         .padding(.horizontal, AppSpacing.screenHorizontalPadding)
                         .padding(.bottom, AppSpacing.m)
                 }
-                
+
                 // Add challenge button at bottom for easy access
-                Button(action: { 
-                    if viewModel.challenges.count >= 2 && !subscriptionService.isProUser {
+                Button(action: {
+                    if viewModel.challenges.count >= 2 && !entitlementsAdapter.hasProAccess {
                         // Show subtle upgrade prompt
                         withAnimation {
                             viewModel.showUpgradePrompt = true
@@ -434,8 +429,8 @@ struct ChallengesView: View {
                     )
                 }
                 .padding(.horizontal, AppSpacing.screenHorizontalPadding)
-                .opacity(viewModel.challenges.count >= 2 && !subscriptionService.isProUser ? 0.5 : 1.0)
-                .disabled(viewModel.challenges.count >= 2 && !subscriptionService.isProUser)
+                .opacity(viewModel.challenges.count >= 2 && !entitlementsAdapter.hasProAccess ? 0.5 : 1.0)
+                .disabled(viewModel.challenges.count >= 2 && !entitlementsAdapter.hasProAccess)
                 
                 // Upgrade prompt
                 if viewModel.showUpgradePrompt {
@@ -636,7 +631,8 @@ struct ChallengesOfflineBanner: View {
 struct NewChallengeSheet: View {
     @ObservedObject var viewModel: ChallengesViewModel
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var notificationService: NotificationService
     @FocusState private var isTitleFocused: Bool
     @State private var isTimed: Bool = false
@@ -1179,7 +1175,8 @@ struct ChallengesView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
             ChallengesView()
-                .environmentObject(SubscriptionService.shared)
+                .environmentObject(SubscriptionStore.shared)
+                .environmentObject(EntitlementsAdapter.shared)
                 .environmentObject(NotificationService.shared)
         }
     }

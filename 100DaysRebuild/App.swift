@@ -14,6 +14,11 @@ import StoreKit
 // Replace the import with a direct implementation of OfflineBanner
 // @_exported import struct App.OfflineBanner
 
+// NOTE: top-level executable statements are not allowed in app modules.
+// Firebase configuration (and Firestore settings) will be performed early
+// inside the App lifecycle initializer below to avoid static initialization
+// races while remaining within a valid declaration context.
+
 // Add OfflineBanner struct definition
 struct OfflineBanner: View {
     var body: some View {
@@ -83,13 +88,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     // Handle memory warnings by clearing caches and non-essential data
     @objc private func handleMemoryWarning() {
         print("⚠️ Memory warning received - clearing caches")
-        
+
         // Clear image caches
         URLCache.shared.removeAllCachedResponses()
-        
-        // Notify other components to clear their caches
-        NotificationCenter.default.post(name: .appDidReceiveMemoryWarning, object: nil)
-        
+
         // Perform garbage collection
         autoreleasepool {
             // Force a garbage collection cycle
@@ -157,18 +159,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                 .with(usesStoreKit2IfAvailable: true)
                 .build()
         )
-        
-        // Set the delegate immediately
-        Purchases.shared.delegate = SubscriptionService.shared
-        
+
+        // Note: Delegate will be set by SubscriptionStore when initialized
+
         // Mark as configured to ensure it only happens once
         AppDelegate.revenueCatConfigured = true
-        
+
         #if DEBUG
         print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
         print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
         #endif
-        
+
         // Check and log the current environment
         let storeEnvironment: String
         if #available(iOS 15.0, *) {
@@ -178,18 +179,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             storeEnvironment = "StoreKit 1"
         }
         print("🔐 RevenueCat: Current store environment: \(storeEnvironment)")
-        
-        // If user is logged in, attempt to migrate any anonymous subscriptions
-        if let currentUserId = currentUserId {
-            Task {
-                print("🔐 RevenueCat: Checking for anonymous subscription to migrate during app launch")
-                let migrationResult = await SubscriptionService.shared.migrateAnonymousSubscription()
-                print("🔐 RevenueCat: Initial migration check result: \(migrationResult ? "Transferred subscription" : "No migration needed")")
-                
-                // After migration check, make sure to identify the user and update subscription status
-                await SubscriptionService.shared.identifyCurrentUser()
-            }
-        }
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -705,7 +694,9 @@ class ConstraintSwizzler {
 struct App100Days: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var userSession = UserSession.shared
+    @StateObject private var subscriptionStore: SubscriptionStore
     @StateObject private var subscriptionService = SubscriptionService.shared
+    @StateObject private var entitlementsAdapter: EntitlementsAdapter
     @StateObject private var notificationService = NotificationService.shared
     @StateObject private var themeManager = ThemeManager.shared
     @StateObject private var progressDashboardViewModel = ProgressDashboardViewModel.shared
@@ -713,17 +704,40 @@ struct App100Days: App {
     @StateObject private var userStatsService = UserStatsService.shared
     @StateObject private var navigationRouter = NavigationRouter()
     @StateObject private var badgeService = BadgeService.shared
-    
+
     init() {
+        // Perform early Firebase configuration here (inside init) rather than
+        // at top-level so we remain within a valid declaration context.
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+            print("✅ Firebase configured (early init)")
+
+            // Apply Firestore settings immediately to avoid race conditions
+            let settings = FirestoreSettings()
+            let cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 100 * 1024 * 1024)) // 100MB cache
+            settings.cacheSettings = cacheSettings
+            Firestore.firestore().settings = settings
+
+            UserDefaults.standard.set(true, forKey: "firebase_initialized")
+            AppDelegate.firebaseConfigured = true
+            print("Firestore offline persistence configured (early init)")
+        }
+
         print("App100Days init - Using AppDelegate for Firebase initialization")
-        // Firebase will be configured in AppDelegate
+
+        // Initialize SubscriptionStore and EntitlementsAdapter with shared instance
+        let store = SubscriptionStore(repository: RevenueCatSubscriptionRepository())
+        _subscriptionStore = StateObject(wrappedValue: store)
+        _entitlementsAdapter = StateObject(wrappedValue: EntitlementsAdapter(store: store))
     }
     
     var body: some Scene {
         WindowGroup {
             AppContentView()
                 .environmentObject(userSession)
+                .environmentObject(subscriptionStore)
                 .environmentObject(subscriptionService)
+                .environmentObject(entitlementsAdapter)
                 .environmentObject(notificationService)
                 .environmentObject(themeManager)
                 .environmentObject(progressDashboardViewModel)
@@ -779,7 +793,8 @@ struct App100Days: App {
 // App content view for the main content area
 struct AppContentView: View {
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
@@ -789,9 +804,12 @@ struct AppContentView: View {
     @StateObject private var navigationRouter = NavigationRouter()
     @State private var isInitializing = true
     @State private var forceWelcomeView = false
-    
+
     // Track previous auth state to prevent flickering
     @State private var previousAuthState: Bool? = nil
+
+    // Track if auth state is resolved
+    @State private var isAuthResolved = false
     
     var body: some View {
         ZStack {
@@ -800,8 +818,8 @@ struct AppContentView: View {
                 .ignoresSafeArea()
             
             // Content based on state with controlled transitions
-            if isInitializing {
-                // Initial splash screen
+            if isInitializing || (userSession.authState == .loading && !isAuthResolved) {
+                // Initial splash screen - also wait for auth to resolve
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
@@ -812,27 +830,57 @@ struct AppContentView: View {
                             
                             withAnimation(Animation.easeInOut(duration: 0.4)) {
                                 isInitializing = false
+                                
+                                // Check if auth is already resolved
+                                if userSession.authState != .loading {
+                                    isAuthResolved = true
+                                }
+                            }
+                        }
+                        
+                        // Add a timeout to prevent infinite waiting for auth
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                            withAnimation {
+                                isAuthResolved = true
                             }
                         }
                     }
             } else {
-                // Controlled view transitions based on authentication state
+                // Authentication → Funnel → Hard Paywall flow
                 Group {
-                    if shouldShowWelcomeView {
-                        WelcomeView()
+                    // Step 1: Check if user is signed in
+                    if !userSession.isAuthenticated {
+                        // Not signed in - show auth screen
+                        AuthView()
                             .transition(.opacity)
-                    } else if !userSession.hasCompletedOnboarding {
-                        OnboardingView()
-                            .transition(.opacity)
-                    } else {
+                    } else if entitlementsAdapter.effectiveIsProUser {
+                        // Step 2: User is signed in and pro - go directly to main app
                         MainAppView()
                             .transition(.opacity)
+                    } else {
+                        // Step 3 & 4: User is signed in, not pro - show OnboardingFlowOrchestrator
+                        // This orchestrates: Migration → Funnel → Founder's Paywall based on user type
+                        OnboardingFlowOrchestrator {
+                            // Onboarding completed - user either subscribed or is legacy user
+                            // Refresh subscription status to reflect changes
+                            Task {
+                                await subscriptionStore.load()
+                            }
+                        }
+                        .transition(.opacity)
                     }
                 }
                 .environmentObject(navigationRouter)
                 .animation(Animation.easeInOut(duration: 0.3), value: userSession.isAuthenticated)
                 .animation(Animation.easeInOut(duration: 0.3), value: userSession.hasCompletedOnboarding)
                 .animation(Animation.easeInOut(duration: 0.3), value: forceWelcomeView)
+                .onReceive(userSession.$authState) { state in
+                    if state != .loading {
+                        withAnimation {
+                            isAuthResolved = true
+                        }
+                    }
+                }
             }
             
             // Offline banner overlay (always on top)
@@ -881,7 +929,6 @@ struct AppContentView: View {
                         // Reset remaining services
                         userStatsService.reset()
                         badgeService.reset()
-                        SubscriptionService.shared.reset()
                         notificationService.reset()
                         
                         // Reset after a short delay to prepare for future sign-ins
@@ -1053,9 +1100,5 @@ struct SplashScreen: View {
     }
 }
 
-// Add Notification.Name extension if it's not defined elsewhere
-extension Notification.Name {
-    static let networkStatusChanged = Notification.Name("NetworkStatusChanged")
-    static let appDidReceiveMemoryWarning = Notification.Name("AppDidReceiveMemoryWarning")
-}
+// Notification names are now defined in Constants.swift
 

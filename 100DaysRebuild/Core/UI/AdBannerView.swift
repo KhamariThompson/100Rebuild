@@ -2,12 +2,15 @@ import SwiftUI
 import GoogleMobileAds
 
 /// A SwiftUI view that displays a Google AdMob banner ad
+/// NOTE: Ads are DISABLED in the new Pro-only model - this view never shows
 struct AdMobBannerView: View {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @StateObject private var adManager = AdManager.shared
-    
+
     var body: some View {
-        if adManager.shouldShowAds() {
+        // Always return EmptyView - no ads in Pro-only model
+        if false {
             VStack(spacing: 0) {
                 // Header with upgrade option
                 HStack {
@@ -18,8 +21,8 @@ struct AdMobBannerView: View {
                     Spacer()
                     
                     Button(action: {
-                        subscriptionService.showPaywall = true
-                        
+                        // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
+
                         // Add haptic feedback for better user experience
                         let generator = UIImpactFeedbackGenerator(style: .medium)
                         generator.impactOccurred()
@@ -83,6 +86,7 @@ struct BannerViewController: UIViewControllerRepresentable {
 struct AdMobBannerView_Previews: PreviewProvider {
     static var previews: some View {
         AdMobBannerView()
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
+            .environmentObject(EntitlementsAdapter.shared)
     }
 } 

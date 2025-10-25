@@ -2,10 +2,10 @@ import SwiftUI
 
 /// A view modifier that gates content behind a Pro subscription
 struct ProGatedFeature: ViewModifier {
-    @EnvironmentObject var subscriptionService: SubscriptionService
-    
+    @StateObject private var entitlements = Entitlements.shared
+
     func body(content: Content) -> some View {
-        if subscriptionService.isProUser {
+        if entitlements.effectiveIsProUser {
             content
         } else {
             ProLockedView {
@@ -30,19 +30,21 @@ extension View {
 
 /// A view modifier for actions that require Pro subscription
 struct ProGatedActionModifier: ViewModifier {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @StateObject private var entitlements = Entitlements.shared
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     let action: () async throws -> Void
-    
+
     func body(content: Content) -> some View {
         Button {
-            if subscriptionService.isProUser {
+            if entitlements.effectiveIsProUser {
                 Task {
                     try? await action()
                 }
             } else {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
                 generator.impactOccurred()
-                subscriptionService.showPaywall = true
+                // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
             }
         } label: {
             content
@@ -52,18 +54,20 @@ struct ProGatedActionModifier: ViewModifier {
 
 /// A modifier to blur content with an upgrade prompt
 struct ProBlurredPreview: ViewModifier {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @StateObject private var entitlements = Entitlements.shared
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     let message: String
-    
+
     func body(content: Content) -> some View {
         ZStack {
             // Blur content for non-pro users
             content
-                .blur(radius: subscriptionService.isProUser ? 0 : 10)
+                .blur(radius: entitlements.effectiveIsProUser ? 0 : 10)
                 .overlay(
                     // Show overlay only for non-pro users
                     ZStack {
-                        if !subscriptionService.isProUser {
+                        if !entitlements.effectiveIsProUser {
                             VStack(spacing: AppSpacing.s) {
                                 Text(message)
                                     .font(AppTypography.headline())
@@ -72,7 +76,7 @@ struct ProBlurredPreview: ViewModifier {
                                     .padding(.bottom, AppSpacing.xs)
                                 
                                 Button {
-                                    subscriptionService.showPaywall = true
+                                    // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
                                 } label: {
                                     Text("Upgrade to Pro")
                                         .font(AppTypography.subhead().bold())
@@ -96,15 +100,8 @@ struct ProBlurredPreview: ViewModifier {
                     }
                 )
         }
-        .sheet(isPresented: $subscriptionService.showPaywall, onDismiss: {
-            // Refresh status when paywall is dismissed
-            Task {
-                await subscriptionService.refreshSubscriptionStatus()
-            }
-        }) {
-            PaywallView()
-                .environmentObject(subscriptionService)
-        }
+        // Note: Sheet handling removed as showPaywall is no longer in SSOT
+        // TODO: Implement paywall navigation through proper routing
     }
 }
 

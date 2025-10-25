@@ -13,7 +13,8 @@ struct MainAppView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var themeManager: ThemeManager
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var progressDashboardViewModel: ProgressDashboardViewModel
     @EnvironmentObject var networkMonitor: NetworkMonitor
@@ -24,6 +25,7 @@ struct MainAppView: View {
     @State private var showTabBar = true
     @State private var showNotificationSettings = false
     @State private var showAddAction = false
+    @State private var showCreateGroupSheet = false
     @State private var safeAreaBottom: CGFloat = 0
     @State private var isMenuExpanded = false
     
@@ -35,10 +37,10 @@ struct MainAppView: View {
     @AppStorage("isHighContrastEnabled") private var isHighContrastEnabled = false
     
     // Tab items for CalAI style tab bar
+    // Note: Social tab is hidden but code remains for future use
     private let tabItems = [
         CalAITabBar.TabItem(icon: "house", text: "Home"),
-        CalAITabBar.TabItem(icon: "chart.bar", text: "Progress"),
-        CalAITabBar.TabItem(icon: "person.2", text: "Social"),
+        CalAITabBar.TabItem(icon: "chart.bar.fill", text: "Progress"),
         CalAITabBar.TabItem(icon: "person", text: "Profile")
     ]
     
@@ -51,24 +53,24 @@ struct MainAppView: View {
                 
                 // Apply tab transition modifier to entire tab view
                 TabView(selection: $router.selectedTab) {
-                    // Challenges Tab
+                    // Challenges Tab (Home)
                     ChallengesView()
                         .tag(0)
                         .withTabTransition(router: router)
-                    
+
                     // Progress Tab
                     ProgressView()
                         .tag(1)
                         .withTabTransition(router: router)
-                    
-                    // Social Feed Tab
-                    SocialView()
-                        .tag(2)
-                        .withTabTransition(router: router)
-                    
+
+                    // Social Feed Tab - Hidden but code remains
+                    // SocialFeedView()
+                    //     .tag(2)
+                    //     .withTabTransition(router: router)
+
                     // Profile Tab
                     ProfileView()
-                        .tag(3)
+                        .tag(2)
                         .withTabTransition(router: router)
                 }
                 .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
@@ -82,7 +84,7 @@ struct MainAppView: View {
                 
                 // Add subscription warning banner at the top
                 VStack {
-                    if subscriptionService.isProUser {
+                    if subscriptionStore.isPro {
                         SubscriptionBanner()
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
@@ -115,6 +117,9 @@ struct MainAppView: View {
         }
         .onChange(of: UIDevice.current.orientation) { newValue in
             viewModel.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)
+        }
+        .sheet(isPresented: $showCreateGroupSheet) {
+            CreateGroupChallengeView()
         }
     }
     
@@ -177,21 +182,7 @@ struct MainAppView: View {
                     }
                 }
                 
-                // Pro-locked feature (grayed out)
-                ActionSheetItem(
-                    icon: "person.3.fill",
-                    title: "Group Challenge",
-                    subtitle: "Complete goals with friends",
-                    isPrimary: false,
-                    isLocked: true
-                ) {
-                    hapticFeedback(.medium)
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        showAddAction = false
-                        // Show paywall
-                        viewModel.showPaywallForFeature()
-                    }
-                }
+                // (Removed Group Challenge) Keep the sheet clean when only two actions are present
                 
                 // Cancel button
                 Button {
@@ -251,8 +242,45 @@ struct MainAppView: View {
             Divider()
                 .opacity(0.2)
             
-            ZStack(alignment: .center) {
-                // Floating action button for creating new challenges
+            ZStack(alignment: .trailing) {
+                // Tab items with icons and labels
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+
+                    ForEach(Array(tabItems.enumerated()), id: \.offset) { index, item in
+                        Button(action: {
+                            // Use the router's changeTab method for proper tab switching
+                            if router.selectedTab != index {
+                                hapticFeedback(.light)
+                                router.changeTab(to: index)
+                            }
+                        }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: item.icon)
+                                    .font(.system(size: 20, weight: router.selectedTab == index ? .semibold : .regular))
+                                    .foregroundColor(router.selectedTab == index ?
+                                                    Color.theme.accent :
+                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
+
+                                Text(item.text)
+                                    .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium))
+                                    .foregroundColor(router.selectedTab == index ?
+                                                    Color.theme.accent :
+                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
+                            }
+                            .frame(height: CalAIDesignTokens.tabBarHeight - 10) // Reduced height slightly
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(TabBarButtonStyle())
+
+                        Spacer(minLength: 0)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .background(Color.theme.surface.opacity(0.98))
+
+                // Floating action button for creating new challenges - moved to the right
                 Button(action: {
                     // Show action menu with animation
                     hapticFeedback(.medium)
@@ -268,8 +296,8 @@ struct MainAppView: View {
                             Circle()
                                 .fill(
                                     LinearGradient(
-                                        colors: colorScheme == .dark ? 
-                                            [.white, Color.white.opacity(0.9)] : 
+                                        colors: colorScheme == .dark ?
+                                            [.white, Color.white.opacity(0.9)] :
                                             [Color.black, Color.black.opacity(0.9)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
@@ -279,51 +307,14 @@ struct MainAppView: View {
                         .shadow(color: Color.theme.accent.opacity(0.25), radius: 6, x: 0, y: 3)
                         .overlay(
                             Circle()
-                                .stroke(colorScheme == .dark ? 
-                                    Color.black.opacity(0.3) : 
-                                    Color.white.opacity(0.3), 
+                                .stroke(colorScheme == .dark ?
+                                    Color.black.opacity(0.3) :
+                                    Color.white.opacity(0.3),
                                     lineWidth: 1.5)
                         )
                 }
-                .offset(y: -30) // Increased offset to make button more visible
+                .offset(x: -20, y: -30) // Position to the right with offset
                 .zIndex(2) // Ensures it appears above tab bar
-                
-                // Tab items with icons and labels
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    
-                    ForEach(Array(tabItems.enumerated()), id: \.offset) { index, item in
-                        Button(action: {
-                            // Use the router's changeTab method for proper tab switching
-                            if router.selectedTab != index {
-                                hapticFeedback(.light)
-                                router.changeTab(to: index)
-                            }
-                        }) {
-                            VStack(spacing: 4) {
-                                Image(systemName: item.icon)
-                                    .font(.system(size: 20, weight: router.selectedTab == index ? .semibold : .regular))
-                                    .foregroundColor(router.selectedTab == index ? 
-                                                    Color.theme.accent : 
-                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
-                                
-                                Text(item.text)
-                                    .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium))
-                                    .foregroundColor(router.selectedTab == index ? 
-                                                    Color.theme.accent : 
-                                                    (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
-                            }
-                            .frame(height: CalAIDesignTokens.tabBarHeight - 10) // Reduced height slightly
-                            .frame(maxWidth: .infinity)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(TabBarButtonStyle())
-                        
-                        Spacer(minLength: 0)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .background(Color.theme.surface.opacity(0.98))
             }
             .frame(height: CalAIDesignTokens.tabBarHeight)
         }

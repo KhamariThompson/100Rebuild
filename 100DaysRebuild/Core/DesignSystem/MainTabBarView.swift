@@ -6,7 +6,16 @@ struct MainTabBarView: View {
     var onNewChallengeButtonTapped: () -> Void
     var socialBadgeCount: Int?
     @Environment(\.colorScheme) private var colorScheme
-    
+
+    // Get safe area bottom inset
+    private var safeAreaBottom: CGFloat {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return 0
+        }
+        return window.safeAreaInsets.bottom
+    }
+
     var body: some View {
         // Base container
         ZStack(alignment: .top) {
@@ -15,7 +24,7 @@ struct MainTabBarView: View {
                 .frame(height: 0.5)
                 .background(Color.theme.border)
                 .opacity(0.5)
-            
+
             // Main tab bar content
             HStack(spacing: 0) {
                 // Home tab
@@ -28,7 +37,7 @@ struct MainTabBarView: View {
                 
                 // Progress tab
                 tabButton(
-                    icon: "chart.line.uptrend.xyaxis",
+                    icon: "chart.bar.fill",
                     label: "Progress",
                     isSelected: selectedTab == 1,
                     action: { selectTab(1) }
@@ -56,7 +65,7 @@ struct MainTabBarView: View {
                 )
             }
             .padding(.top, 8)
-            .padding(.bottom, 30) // Extra padding for bottom safe area
+            .padding(.bottom, max(safeAreaBottom, 8)) // Respect safe area or use minimal padding
             .frame(maxWidth: .infinity)
             .background(tabBarBackground)
             
@@ -66,13 +75,13 @@ struct MainTabBarView: View {
                     // Outer glow effect
                     Circle()
                         .fill(
-                            colorScheme == .light 
-                                ? Color.black.opacity(0.1) 
+                            colorScheme == .light
+                                ? Color.black.opacity(0.1)
                                 : Color.white.opacity(0.15)
                         )
-                        .frame(width: 64, height: 64)
+                        .frame(width: 68, height: 68)
                         .blur(radius: 4)
-                    
+
                     // Main button background
                     Circle()
                         .fill(
@@ -94,19 +103,19 @@ struct MainTabBarView: View {
                                     endPoint: .bottomTrailing
                                 )
                         )
-                        .frame(width: 56, height: 56)
+                        .frame(width: 60, height: 60)
                         .shadow(
-                            color: colorScheme == .light 
-                                ? Color.black.opacity(0.25) 
+                            color: colorScheme == .light
+                                ? Color.black.opacity(0.25)
                                 : Color.white.opacity(0.3),
-                            radius: 8, 
-                            x: 0, 
+                            radius: 8,
+                            x: 0,
                             y: 4
                         )
-                    
+
                     // Plus icon with contrast
                     Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundColor(colorScheme == .light ? .white : .black)
                 }
                 .scaleEffect(1.0)

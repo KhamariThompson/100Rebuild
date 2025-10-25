@@ -42,7 +42,8 @@ class ProfileViewModel: ObservableObject {
     // Dependencies
     private let firebaseService = FirebaseService.shared
     private let userSession = UserSession.shared
-    private let subscriptionService = SubscriptionService.shared
+    // private let subscriptionService = SubscriptionService.shared // TODO: Inject instead
+    private let subscriptionStore = SubscriptionStore.shared // TODO: Inject instead
     private let challengeStore = ChallengeStore.shared
     
     // User stats

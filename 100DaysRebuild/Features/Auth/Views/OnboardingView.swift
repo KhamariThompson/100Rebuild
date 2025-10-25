@@ -3,9 +3,98 @@ import UserNotifications
 import Foundation
 import FirebaseFirestore
 
+// MARK: - Updated Onboarding View with Auth → Funnel → Paywall Flow
+//
+// CHANGED: Enhanced to enforce auth before funnel and handle different user states
+// - Requires authentication before showing funnel
+// - Checks for completed onboarding to skip directly to paywall if needed
+// - Syncs user cohort and attributes with RevenueCat
+// - Respects business rules for hard paywall
+
 struct OnboardingView: View {
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
+    @EnvironmentObject var router: NavigationRouter
+    @StateObject private var entitlements = Entitlements.shared
+    @StateObject private var cohortManager = CohortManager.shared
+    @StateObject private var analyticsService = AnalyticsService.shared
+    
+    var body: some View {
+        Group {
+            // Step 1: Verify user is authenticated (defensive check)
+            if !userSession.isAuthenticated {
+                // Redirect to auth if somehow we got here without authentication
+                AuthView()
+                    .transition(.opacity)
+            }
+            // Step 2: Check if user is already pro (for restoration cases)
+            else if entitlements.effectiveIsProUser {
+                // Skip funnel, go directly to main app
+                MainAppView()
+                    .onAppear {
+                        Task {
+                            await userSession.completeOnboarding()
+                        }
+                    }
+            }
+            // Step 3: Check if user already completed funnel but isn't pro
+            else if userSession.hasCompletedFunnel {
+                // Skip directly to paywall
+                PaywallView()
+                    .onDisappear {
+                        Task {
+                            await userSession.completeOnboarding()
+                        }
+                    }
+                .environmentObject(analyticsService)
+                .onAppear {
+                    // Start paywall timer if needed
+                    cohortManager.startPaywallTimer()
+                    analyticsService.trackEvent("paywall_shown", properties: [
+                        "source": "direct_from_onboarding",
+                        "user_cohort": cohortManager.userCohort.rawValue,
+                        "completed_funnel": "true"
+                    ])
+                }
+            }
+            // Step 4: Show funnel for users who haven't completed it
+            else {
+                // Show funnel that leads to hard paywall
+                OnboardingFlowView()
+                    .environmentObject(analyticsService)
+                    .onAppear {
+                        // Determine user cohort if not already set
+                        userSession.determineUserCohort()
+                    }
+            }
+        }
+        .onAppear {
+            // Refresh entitlements to check current status
+            Task {
+                await entitlements.refreshEntitlements()
+
+                // Set RevenueCat attributes for cohort tracking
+                if let userId = userSession.currentUser?.uid {
+                    let cohortValue = cohortManager.userCohort.rawValue
+                    entitlements.setUserAttributes(
+                        userId: userId,
+                        cohort: cohortValue,
+                        funnelCompletedAt: userSession.onboardingCompletedAt,
+                        firstPaywallAt: cohortManager.firstPaywallAt
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Legacy Onboarding View (kept for reference but unused)
+
+struct LegacyOnboardingView: View {
+    @EnvironmentObject var userSession: UserSession
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var router: NavigationRouter
     @Environment(\.colorScheme) private var colorScheme
     
@@ -588,7 +677,8 @@ struct OnboardingView_Previews: PreviewProvider {
     static var previews: some View {
         OnboardingView()
             .environmentObject(UserSession.shared)
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
+            .environmentObject(EntitlementsAdapter.shared)
             .environmentObject(NavigationRouter())
     }
 } 

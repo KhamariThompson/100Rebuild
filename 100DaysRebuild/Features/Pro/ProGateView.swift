@@ -15,9 +15,10 @@ struct ProGateView: View {
     var proRequiredMessage: String = "Pro subscription required"
     var gradientColors: [Color] = [.theme.accent, .theme.accent.opacity(0.7)]
     
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     @Environment(\.colorScheme) private var colorScheme
-    
+
     var body: some View {
         VStack(spacing: 24) {
             // Pro badge and icon
@@ -79,38 +80,32 @@ struct ProGateView: View {
             
             Spacer()
                 .frame(height: 20)
-            
+
             // State-based actions
-            if subscriptionService.isLoading {
+            if subscriptionStore.isLoading {
                 // Loading state
                 ProgressView()
                     .scaleEffect(1.2)
                     .padding()
-            } else if subscriptionService.isProUser {
+            } else if entitlementsAdapter.hasProAccess {
                 // Already a pro user - shouldn't see this, but just in case
                 VStack(spacing: 16) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 30))
                         .foregroundColor(.green)
-                    
+
                     Text("You already have Pro access!")
                         .font(.headline)
                         .foregroundColor(.theme.text)
                 }
                 .padding()
-            } else if !subscriptionService.isPurchasingEnabled {
-                // Purchasing is disabled (App Store review mode)
-                Text("Purchases are currently unavailable")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.theme.subtext)
-                    .padding()
             } else {
                 // Normal upsell buttons
                 VStack(spacing: 16) {
                     if showUpgradeButton {
                         // Upgrade button
                         Button {
-                            subscriptionService.presentSubscriptionSheet()
+                            // TODO: Trigger paywall via navigation
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "star.fill")
@@ -175,17 +170,18 @@ struct ProFeatureWrapper<Content: View, Fallback: View>: View {
     let featureName: String
     let content: Content
     let fallback: Fallback
-    @EnvironmentObject private var subscriptionService: SubscriptionService
-    
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
+
     init(featureName: String, @ViewBuilder content: () -> Content, @ViewBuilder fallback: () -> Fallback) {
         self.featureName = featureName
         self.content = content()
         self.fallback = fallback()
     }
-    
+
     var body: some View {
         ZStack {
-            if subscriptionService.isProUser {
+            if entitlementsAdapter.hasProAccess {
                 content
             } else {
                 fallback
@@ -193,14 +189,14 @@ struct ProFeatureWrapper<Content: View, Fallback: View>: View {
         }
         .onAppear {
             // Log analytics for feature access attempts
-            if !subscriptionService.isProUser {
+            if !entitlementsAdapter.hasProAccess {
                 AnalyticsService.shared.trackEvent(
                     "pro_feature_accessed",
                     properties: ["feature": featureName, "has_access": false]
                 )
             } else {
                 AnalyticsService.shared.trackEvent(
-                    "pro_feature_accessed", 
+                    "pro_feature_accessed",
                     properties: ["feature": featureName, "has_access": true]
                 )
             }
@@ -238,6 +234,7 @@ struct ProGateView_Previews: PreviewProvider {
             iconName: "chart.bar.fill",
             featureName: "analytics"
         )
-        .environmentObject(SubscriptionService.shared)
+        .environmentObject(SubscriptionStore.shared)
+        .environmentObject(EntitlementsAdapter.shared)
     }
 } 

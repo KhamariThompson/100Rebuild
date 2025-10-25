@@ -175,149 +175,185 @@ struct SocialView: View {
     
     // 2. Username Claim Section
     private var usernameCard: some View {
-        VStack(spacing: 0) {
-            if case .claimed(let username) = viewModel.usernameStatus {
-                // User has already claimed a username
-                UsernameDisplayView(username: username)
-            } else if case .unclaimed = viewModel.usernameStatus {
-                // User needs to set up a username
-                UsernameInputView(viewModel: viewModel)
-            } else {
-                // Error state
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Username Setup Required")
-                        .font(.headline)
-                        .foregroundColor(Color.theme.text)
-                    
-                    Text("We couldn't find your username. Please reload the app or contact support if this issue persists.")
-                        .font(.subheadline)
-                        .foregroundColor(Color.theme.subtext)
+        AppComponents.Card {
+            VStack(spacing: 0) {
+                if case .claimed(let username) = viewModel.usernameStatus {
+                    // User has already claimed a username
+                    UsernameDisplayView(username: username)
+                } else if case .unclaimed = viewModel.usernameStatus {
+                    // User needs to set up a username
+                    UsernameInputView(viewModel: viewModel)
+                } else {
+                    // Error state
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Username Setup Required")
+                            .font(.headline)
+                            .foregroundColor(Color.theme.text)
+                        
+                        Text("We couldn't find your username. Please reload the app or contact support if this issue persists.")
+                            .font(.subheadline)
+                            .foregroundColor(Color.theme.subtext)
+                    }
+                    .padding()
                 }
-                .padding()
             }
+            .padding()
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(colorScheme == .dark ? 0.3 : 0.1), 
-                       radius: 8, x: 0, y: 4)
-        )
     }
     
     // 3. Feature Teaser Section
     private var featureTeaseSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            HStack {
-                Text("Coming Soon")
-                    .font(AppTypography.title3())
-                    .fontWeight(.bold)
-                    .foregroundColor(.theme.text)
-                
-                Spacer()
-                
-                // Test button to directly show modal (for debugging)
-                Button(action: {
-                    showNewChallengeModal = true
-                }) {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: 22))
-                        .foregroundColor(.theme.accent)
-                }
-            }
-            .padding(.horizontal, AppSpacing.xs)
-            
-            // Horizontal scroll of feature cards with improved layout
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: AppSpacing.m) {
-                    ForEach(Array(featureCards.enumerated()), id: \.offset) { index, card in
-                        Button {
-                            // Show new challenge modal when Group Challenges card is tapped
-                            if index == 0 { // Group Challenges is the first card
-                                showNewChallengeModal = true
-                            }
-                            
-                            // Haptic feedback
-                            let generator = UIImpactFeedbackGenerator(style: .medium)
-                            generator.impactOccurred()
-                        } label: {
-                            FeatureTeaseCard(
-                                title: card.title,
-                                description: card.description,
-                                iconName: card.iconName
-                            )
-                            .frame(width: 180, height: 200)
-                        }
+        AppComponents.Card {
+            VStack(alignment: .leading, spacing: AppSpacing.m) {
+                HStack {
+                    Text("Coming Soon")
+                        .font(AppTypography.title3())
+                        .fontWeight(.bold)
+                        .foregroundColor(.theme.text)
+                    
+                    Spacer()
+                    
+                    // Test button to directly show modal (for debugging)
+                    Button(action: {
+                        showNewChallengeModal = true
+                    }) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 22))
+                            .foregroundColor(.theme.accent)
                     }
                 }
-                .padding(.horizontal, AppSpacing.m)
-                .padding(.bottom, AppSpacing.m)
-                .padding(.top, AppSpacing.xs)
+                .padding(.horizontal, AppSpacing.xs)
+                
+                // Horizontal scroll of feature cards with improved layout
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: AppSpacing.m) {
+                        ForEach(Array(featureCards.enumerated()), id: \.offset) { index, card in
+                            Button {
+                                // Show new challenge modal when Group Challenges card is tapped
+                                if index == 0 { // Group Challenges is the first card
+                                    showNewChallengeModal = true
+                                }
+                                
+                                // Haptic feedback
+                                let generator = UIImpactFeedbackGenerator(style: .medium)
+                                generator.impactOccurred()
+                            } label: {
+                                FeatureTeaseCard(
+                                    title: card.title,
+                                    description: card.description,
+                                    iconName: card.iconName
+                                )
+                                .frame(width: 180, height: 200)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, AppSpacing.m)
+                    .padding(.bottom, AppSpacing.m)
+                    .padding(.top, AppSpacing.xs)
+                }
+            }
+            .padding(.vertical, AppSpacing.s)
+        }
+    }
+
+    // Quick access to Friends (make social features discoverable)
+    private var quickAccessSection: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("Quick Access")
+                    .font(AppTypography.title3())
+                    .fontWeight(.semibold)
+                    .foregroundColor(.theme.text)
+                Spacer()
+            }
+
+            NavigationLink(destination: FriendsView()) {
+                HStack(spacing: 12) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white)
+                        .padding(8)
+                        .background(Color.theme.accent)
+                        .cornerRadius(8)
+
+                    VStack(alignment: .leading) {
+                        Text("Friends")
+                            .font(AppTypography.headline())
+                            .foregroundColor(.theme.text)
+                        Text("Search, add, and manage your friends")
+                            .font(AppTypography.caption1())
+                            .foregroundColor(.theme.subtext)
+                    }
+
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.theme.subtext)
+                }
+                .padding()
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.theme.surface))
             }
         }
+        .padding(.horizontal, AppSpacing.screenHorizontalPadding)
     }
     
     // 4. Social Media Follow Section
     private var socialFollowSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Header with icon
-            HStack(spacing: 8) {
-                Image(systemName: "globe")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.theme.accent)
-                
-                Text("Connect With Us")
-                    .font(AppTypography.title3())
-                    .fontWeight(.bold)
-                    .foregroundColor(.theme.text)
-            }
-            .padding(.horizontal, AppSpacing.m)
-            
-            // Social media cards with improved 3-card layout
-            VStack(spacing: 20) {
-                // Top row - 2 cards side by side
-                HStack(spacing: 20) {
-                    // TikTok Card
-                    socialMediaCard(
-                        platform: "TikTok",
-                        username: "@100days.site",
-                        systemIcon: "play.square.fill",
-                        url: URL(string: "https://www.tiktok.com/@100days.site") ?? URL(string: "https://100days.site")!,
-                        gradient: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)]
-                    )
-                    .frame(maxWidth: .infinity)
+        AppComponents.Card {
+            VStack(alignment: .leading, spacing: AppSpacing.m) {
+                // Header with icon
+                HStack(spacing: 8) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.theme.accent)
                     
-                    // X Card (formerly Twitter)
+                    Text("Connect With Us")
+                        .font(AppTypography.title3())
+                        .fontWeight(.bold)
+                        .foregroundColor(.theme.text)
+                }
+                .padding(.horizontal, AppSpacing.m)
+                
+                // Social media cards with improved 3-card layout
+                VStack(spacing: 20) {
+                    // Top row - 2 cards side by side
+                    HStack(spacing: 20) {
+                        // TikTok Card
+                        socialMediaCard(
+                            platform: "TikTok",
+                            username: "@100days.site",
+                            systemIcon: "play.square.fill",
+                            url: URL(string: "https://www.tiktok.com/@100days.site") ?? URL(string: "https://100days.site")!,
+                            gradient: [Color.black, Color(red: 0.1, green: 0.1, blue: 0.2)]
+                        )
+                        .frame(maxWidth: .infinity)
+                        
+                        // X Card (formerly Twitter)
+                        socialMediaCard(
+                            platform: "X",
+                            username: "@100DaysHQ",
+                            systemIcon: "bubble.left.and.bubble.right.fill",
+                            url: URL(string: "https://twitter.com/100DaysHQ") ?? URL(string: "https://100days.site")!,
+                            gradient: [Color(red: 0.05, green: 0.05, blue: 0.05), Color(red: 0.2, green: 0.2, blue: 0.2)]
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    
+                    // Bottom row - centered Instagram card
                     socialMediaCard(
-                        platform: "X",
-                        username: "@100DaysHQ",
-                        systemIcon: "bubble.left.and.bubble.right.fill",
-                        url: URL(string: "https://twitter.com/100DaysHQ") ?? URL(string: "https://100days.site")!,
-                        gradient: [Color(red: 0.05, green: 0.05, blue: 0.05), Color(red: 0.2, green: 0.2, blue: 0.2)]
+                        platform: "Instagram",
+                        username: "@100days.site",
+                        systemIcon: "camera.circle.fill",
+                        url: URL(string: "https://instagram.com/100days.site") ?? URL(string: "https://100days.site")!,
+                        gradient: [Color.purple, Color.pink.opacity(0.8)]
                     )
                     .frame(maxWidth: .infinity)
+                    .frame(height: 160) // Make the bottom card taller for better visual balance
                 }
-                
-                // Bottom row - centered Instagram card
-                socialMediaCard(
-                    platform: "Instagram",
-                    username: "@100days.site",
-                    systemIcon: "camera.circle.fill",
-                    url: URL(string: "https://instagram.com/100days.site") ?? URL(string: "https://100days.site")!,
-                    gradient: [Color.purple, Color.pink.opacity(0.8)]
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 160) // Make the bottom card taller for better visual balance
+                .padding(.horizontal, AppSpacing.m)
+                .padding(.vertical, AppSpacing.m)
             }
-            .padding(.horizontal, AppSpacing.m)
             .padding(.vertical, AppSpacing.m)
         }
-        .padding(.vertical, AppSpacing.m)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 8, x: 0, y: 4)
-        )
         .padding(.horizontal, AppSpacing.xs)
     }
     
@@ -509,6 +545,11 @@ struct SocialView: View {
             featureTeaseSection
                 .opacity(cardsAppeared ? 1 : 0)
                 .offset(y: cardsAppeared ? 0 : 40)
+
+            // Quick access to friends
+            quickAccessSection
+                .opacity(cardsAppeared ? 1 : 0)
+                .offset(y: cardsAppeared ? 0 : 40)
             
             // Social media follow section
             socialFollowSection
@@ -577,6 +618,11 @@ struct SocialView: View {
             .padding(.horizontal, AppSpacing.screenHorizontalPadding)
             .opacity(cardsAppeared ? 1 : 0)
             .offset(y: cardsAppeared ? 0 : 30)
+
+            // Quick access to friends (also shown on feed)
+            quickAccessSection
+                .opacity(cardsAppeared ? 1 : 0)
+                .offset(y: cardsAppeared ? 0 : 30)
         }
     }
 }

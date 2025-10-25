@@ -18,8 +18,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     static var firebaseConfigured = false
     static var revenueCatConfigured = false
     
-    // Add memory monitoring timer
-    private var memoryMonitorTimer: Timer?
+    // Memory monitoring is handled via system notifications only (no polling)
     
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // Configure Firebase at the very beginning
@@ -39,10 +38,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Set up network connectivity monitoring after Firebase is configured
         startNetworkMonitoring()
-        
-        // Start memory monitoring
-        startMemoryMonitoring()
-        
+
+        // Register memory warning observer (no polling)
+        registerMemoryWarningObserver()
+
         // Enhanced app state monitoring
         setupAppStateMonitoring()
         
@@ -95,7 +94,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         #endif
         
         Purchases.configure(
-            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+            with: Configuration.Builder(withAPIKey: Constants.RevenueCat.apiKey)
                 .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
                 .with(observerMode: false)
                 .with(userDefaults: UserDefaults.standard)
@@ -110,7 +109,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         AppDelegate.revenueCatConfigured = true
         
         #if DEBUG
-        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
+        print("🔐 RevenueCat: Configured successfully")
         print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
         #endif
         
@@ -164,30 +163,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return sceneConfig
     }
     
-    // Start memory monitoring to prevent crashes
-    private func startMemoryMonitoring() {
-        // Register for memory warnings
+    // Register for memory warning notifications (system-triggered only, no polling)
+    private func registerMemoryWarningObserver() {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleMemoryWarning),
             name: UIApplication.didReceiveMemoryWarningNotification,
             object: nil
         )
-        
-        // Start a timer to periodically check memory usage
-        memoryMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
-            // Log current memory usage
-            let memoryUsage = MemoryManager.shared.formattedMemoryUsage()
-            print("Current memory usage: \(memoryUsage)")
-            
-            // Check if memory usage is high and clear caches if needed
-            if MemoryManager.shared.checkMemoryUsage() {
-                print("Memory usage is high, clearing caches")
-                self.clearCaches()
-            }
-        }
+        print("✅ Memory warning observer registered (no polling)")
     }
     
     @objc private func handleMemoryWarning() {
@@ -309,15 +293,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     deinit {
         networkMonitor.cancel()
-        memoryMonitorTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 }
 
-// Add Notification.Name extension if it's not defined elsewhere
-extension Notification.Name {
-    static let networkStatusChanged = Notification.Name("NetworkStatusChanged")
-}
+// Notification names are now defined in Constants.swift
 
 // MARK: - Main App Structure
 @main

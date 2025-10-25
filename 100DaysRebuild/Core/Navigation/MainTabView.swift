@@ -12,7 +12,8 @@ class MainTabViewModel: ObservableObject {
 struct MainTabView: View {
     @StateObject private var router = NavigationRouter()
     @StateObject private var challengesViewModel = ChallengesViewModel()
-    @StateObject private var subscriptionService = SubscriptionService.shared
+    @StateObject private var subscriptionStore = SubscriptionStore.shared
+    @StateObject private var entitlementsAdapter = EntitlementsAdapter.shared
     @StateObject private var viewModel = MainTabViewModel()
     
     var body: some View {
@@ -41,7 +42,9 @@ struct MainTabView: View {
                     
                     // Social Tab
                     NavigationView {
-                        Text("Social Tab")
+                        SocialFeedView()
+                            .environmentObject(subscriptionStore)
+                            .environmentObject(entitlementsAdapter)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(Color.theme.background)
                             .navigationTitle("Social")
@@ -187,17 +190,18 @@ struct MainTabView: View {
                             await MainActor.run {
                                 viewModel.showNewChallengeSheet = false
                             }
-                            
+
                             // Create the challenge using our viewModel
                             await challengesViewModel.createChallenge(title: title, isTimed: isTimed)
-                            
+
                             // Make sure we're on the challenges tab to see the new challenge
                             await MainActor.run {
                                 router.selectedTab = 0
                             }
                         }
                     }
-                    .environmentObject(subscriptionService)
+                    .environmentObject(subscriptionStore)
+                    .environmentObject(entitlementsAdapter)
                     .environmentObject(ThemeManager.shared)
                     .frame(maxWidth: UIScreen.main.bounds.width * 0.92)
                     .frame(maxHeight: UIScreen.main.bounds.height * 0.8)
@@ -240,7 +244,8 @@ struct MainTabView: View {
                         viewModel.showCheckInSheet = false
                     }
                 )
-                .environmentObject(subscriptionService)
+                .environmentObject(subscriptionStore)
+                .environmentObject(entitlementsAdapter)
                 }
                 .transition(.identity) // Use identity transition for immediate appearance
                 .zIndex(100)
@@ -484,7 +489,7 @@ extension View {
     
     // New modifier for content above tab bar
     func contentPaddingForTabBar() -> some View {
-        self.padding(.bottom, 90) // Fixed extra padding to ensure content isn't hidden by tab bar
+        self.padding(.bottom, 75) // Reduced padding for better spacing
     }
 }
 

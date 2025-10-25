@@ -8,7 +8,8 @@ struct ChallengeDetailView: View {
     @State private var showHistoryView = false
     @State private var showTimerSession = false
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     
     var body: some View {
         ScrollView {
@@ -162,7 +163,8 @@ struct ChallengeDetailView: View {
                     showCheckInSheet = false
                 }
             )
-            .environmentObject(subscriptionService)
+            .environmentObject(subscriptionStore)
+            .environmentObject(entitlementsAdapter)
             .transition(.opacity)
         }
         .onAppear {
@@ -298,26 +300,6 @@ struct ChallengeDetailView: View {
     }
 }
 
-struct ProgressBar: View {
-    var value: Double
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Rectangle()
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .opacity(0.2)
-                    .foregroundColor(.theme.accent)
-                
-                Rectangle()
-                    .frame(width: min(CGFloat(self.value) * geometry.size.width, geometry.size.width), height: geometry.size.height)
-                    .foregroundColor(.theme.accent)
-                    .animation(.linear, value: value)
-            }
-            .cornerRadius(45)
-        }
-    }
-}
 
 struct ProgressCircle: View {
     var progress: Double

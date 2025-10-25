@@ -308,3 +308,21 @@ If you encounter frozen UI:
 - If problems persist, try restarting your device
 
 These optimizations significantly improve stability while maintaining the app's responsiveness and visual polish.
+
+## Running social feature tests locally
+
+This project uses Firestore for social features (friend requests, friend lists). To run tests that interact with Firestore locally, use the Firebase Emulator Suite.
+
+1. Install Firebase CLI:
+
+   npm install -g firebase-tools
+
+2. Start the emulator in the repo root:
+
+   firebase emulators:start --only firestore
+
+3. In Xcode or your test runner, point your Firestore initialization to the emulator host (typically localhost:8080) using the Firebase SDK emulator setup.
+
+4. Run the unit/integration tests in Xcode or via `xcodebuild`.
+
+Note: Some test scaffolding is added in `Tests/FriendServiceTests` as placeholders — replace with proper emulator-backed tests in CI.

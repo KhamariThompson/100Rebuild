@@ -1,33 +1,29 @@
 import SwiftUI
 
 /// Manager for handling ad-related functionality and logic in the app
+/// NOTE: Ads are now DISABLED in the new Pro-only model
 @MainActor
 class AdManager: ObservableObject {
     static let shared = AdManager()
-    
+
     @Published private(set) var isShowingAds = false
-    
-    // Remove direct reference to SubscriptionService to break circular dependency
-    // Instead, we'll check subscription status on-demand
-    
+
     private init() {
-        // Set initial state - default to showing ads
-        isShowingAds = true
-        
-        // Update state based on current subscription status
-        updateAdState()
+        // New model: Everyone is Pro after completing funnel + subscribing
+        // No ads are shown
+        isShowingAds = false
     }
-    
+
     /// Updates the internal ad state based on Pro status
     func updateAdState() {
-        // Access SubscriptionService on-demand to avoid circular reference
-        isShowingAds = !SubscriptionService.shared.isProUser
+        // Always false - no ads in Pro-only model
+        isShowingAds = false
     }
-    
+
     /// Should we show ads to this user?
     func shouldShowAds() -> Bool {
-        // Access SubscriptionService on-demand to avoid circular reference
-        return !SubscriptionService.shared.isProUser
+        // Always false - everyone is Pro
+        return false
     }
     
     /// Call this method when subscription status changes to update ad state
@@ -42,7 +38,8 @@ class AdManager: ObservableObject {
 
 /// View that shows ads for non-Pro users
 struct DummyAdBannerView: View {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @StateObject private var adManager = AdManager.shared
     
     var body: some View {
@@ -56,7 +53,7 @@ struct DummyAdBannerView: View {
                     Spacer()
                     
                     Button(action: {
-                        subscriptionService.showPaywall = true
+                        // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
                     }) {
                         Text("Upgrade")
                             .font(.footnote)
@@ -81,7 +78,7 @@ struct DummyAdBannerView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     // Ad tap action would go here
-                    subscriptionService.showPaywall = true
+                    // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
                 }
             }
             .background(Color.theme.surface.opacity(0.8))
@@ -99,7 +96,8 @@ struct DummyAdBannerView: View {
 
 /// Banner that offers Pro to users who are seeing ads
 struct ProUpgradeBanner: View {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @StateObject private var adManager = AdManager.shared
     
     var body: some View {
@@ -121,7 +119,7 @@ struct ProUpgradeBanner: View {
                     .foregroundColor(.theme.subtext)
                 
                 Button(action: {
-                    subscriptionService.showPaywall = true
+                    // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
                 }) {
                     HStack {
                         Text("Go Pro")

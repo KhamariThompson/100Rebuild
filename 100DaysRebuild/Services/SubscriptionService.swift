@@ -14,9 +14,25 @@ class SubscriptionService: NSObject, ObservableObject {
     @Published var errorLoadingOfferings = false
     @Published var offeringsLoaded = false
     @Published var fallbackPricing: String = "$5.99" // Updated fallback price
-    
+
+    // Migration manager for legacy user access
+    private let migrationManager = MigrationManager.shared
+
     // Add a property to track the current RevenueCat user ID
     @Published private(set) var currentRevenueCatUID: String = ""
+
+    /// Computed property that returns true if user has Pro access
+    /// This includes:
+    /// 1. Active RevenueCat subscription
+    /// 2. Legacy user in grace period
+    var hasProAccess: Bool {
+        return hasActiveSubscription || migrationManager.isInLegacyGracePeriod()
+    }
+
+    /// Check if user has an active RevenueCat subscription
+    var hasActiveSubscription: Bool {
+        return isProUser
+    }
     
     // Flag to disable purchases during App Review
     @Published var isPurchasingEnabled = true
@@ -30,22 +46,16 @@ class SubscriptionService: NSObject, ObservableObject {
     private var offeringsRetryCount = 0
     private let maxOfferingsRetries = 3
     
-    // RevenueCat API key
-    private var apiKey: String {
-        // Production SDK API key (not secret key)
-        return "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
-    }
-    
     // Product identifiers
-    private let monthlyProductID = "com.KhamariThompson.100Days.monthlyv2"
-    
+    private let monthlyProductID = Constants.Products.monthlySubscription
+
     @Published private(set) var offerings: Offerings?
     @Published private(set) var customerInfo: CustomerInfo?
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
     
     private var products: [Product] = []
-    private let productIds = ["com.KhamariThompson.100Days.monthlyv2"]
+    private let productIds = [Constants.Products.monthlySubscription]
     
     // Add property to track deleted account cases
     @Published var isDeletedAccountDetected: Bool = false
@@ -896,7 +906,7 @@ class SubscriptionService: NSObject, ObservableObject {
         }
         
         guard let currentUser = Auth.auth().currentUser else {
-            throw SubscriptionError.userNotSignedIn
+            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not signed in"]))
         }
         
         #if DEBUG
@@ -943,11 +953,12 @@ class SubscriptionService: NSObject, ObservableObject {
                 print("🔐 RevenueCat: User successfully identified with UID: \(currentUser.uid)")
                 print("🔐 RevenueCat: Original AppUserID: \(loginResult.customerInfo.originalAppUserId)")
                 #endif
-            } catch {
+            } catch let identifyError {
                 #if DEBUG
-                print("🔐 RevenueCat: Failed to identify user before purchase: \(error.localizedDescription)")
+                print("🔐 RevenueCat: Failed to identify user before purchase: \(identifyError.localizedDescription)")
                 #endif
-                throw SubscriptionError.purchaseFailed
+                let wrappedError: SubscriptionError = .purchaseFailed(underlying: identifyError)
+                throw wrappedError
             }
         }
         
@@ -961,7 +972,7 @@ class SubscriptionService: NSObject, ObservableObject {
         let purchaseTimeout = Task {
             try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
             print("🔐 RevenueCat: Purchase timed out after \(timeoutSeconds) seconds")
-            throw SubscriptionError.timeout
+            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 408, userInfo: [NSLocalizedDescriptionKey: "Request timeout"]))
         }
         
         do {
@@ -1029,40 +1040,40 @@ class SubscriptionService: NSObject, ObservableObject {
                         let nsError = error as NSError
                         if nsError.domain == "ASDErrorDomain" && nsError.code == 509 {
                             print("🔐 RevenueCat: User not signed into App Store")
-                            throw SubscriptionError.notSignedIntoAppStore
+                            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 509, userInfo: [NSLocalizedDescriptionKey: "Not signed into App Store"]))
                         } else if error.localizedDescription.contains("cancelled") || error.localizedDescription.contains("canceled") {
                             // Check for cancellation in the error description
                             print("🔐 RevenueCat: User cancelled the purchase")
-                            throw SubscriptionError.userCancelled
+                            throw SubscriptionError.purchaseCancelled
                         } else if nsError.domain == "RevenueCat.ErrorCode" {
                             // Check RevenueCat error codes
                             let errorCode = nsError.code
                             
                             if errorCode == 7 { // Payment Pending
-                                throw SubscriptionError.purchasePending
+                                throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 7, userInfo: [NSLocalizedDescriptionKey: "Payment pending"]))
                             } else if errorCode == 5 { // Receipt Already In Use
-                                throw SubscriptionError.receiptInUse
+                                throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 409, userInfo: [NSLocalizedDescriptionKey: "Receipt already in use"]))
                             } else if errorCode == 6 { // Unknown
                                 print("🔐 RevenueCat: Unknown RevenueCat error: \(nsError)")
-                                throw SubscriptionError.unknown
+                                throw SubscriptionError.purchaseFailed(underlying: error)
                             } else {
                                 print("🔐 RevenueCat: Other RevenueCat error: \(nsError)")
-                                throw SubscriptionError.purchaseFailed
+                                throw SubscriptionError.purchaseFailed(underlying: error)
                             }
                         } else {
                             print("🔐 RevenueCat: Purchase failed with error: \(error.localizedDescription)")
-                            throw SubscriptionError.purchaseFailed
+                            throw SubscriptionError.purchaseFailed(underlying: error)
                         }
                     }
                 } else {
                     purchaseTimeout.cancel()
                     print("🔐 RevenueCat: No matching package found for product ID: \(productID)")
-                    throw SubscriptionError.productNotFound
+                    throw SubscriptionError.packageNotFound
                 }
             } else {
                 purchaseTimeout.cancel()
                 print("🔐 RevenueCat: No offerings available")
-                throw SubscriptionError.productNotFound
+                throw SubscriptionError.packageNotFound
             }
         } catch {
             // Cancel the timeout task if any other error occurred
@@ -1072,9 +1083,9 @@ class SubscriptionService: NSObject, ObservableObject {
             if let subscriptionError = error as? SubscriptionError {
                 throw subscriptionError
             } else if error is CancellationError {
-                throw SubscriptionError.timeout
+                throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 408, userInfo: [NSLocalizedDescriptionKey: "Request timeout"]))
             } else {
-                throw SubscriptionError.purchaseFailed
+                throw SubscriptionError.purchaseFailed(underlying: error)
             }
         }
     }
@@ -1107,7 +1118,7 @@ class SubscriptionService: NSObject, ObservableObject {
         }
         
         guard let currentUser = Auth.auth().currentUser else {
-            throw SubscriptionError.userNotSignedIn
+            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not signed in"]))
         }
         
         #if DEBUG
@@ -1219,7 +1230,7 @@ class SubscriptionService: NSObject, ObservableObject {
                     )
                 }
                 
-                throw SubscriptionError.accountMismatch
+                throw SubscriptionError.restoreFailed(underlying: NSError(domain: "SubscriptionService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Account mismatch"]))
             }
             
             // If StoreKit shows active but RevenueCat doesn't, we have a sync issue
@@ -1319,7 +1330,7 @@ class SubscriptionService: NSObject, ObservableObject {
         
         guard let currentFirebaseUID = currentFirebaseUID else {
             print("🔐 RevenueCat: No Firebase user found during restore")
-            throw SubscriptionError.userNotSignedIn
+            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not signed in"]))
         }
         
         // Make sure the RevenueCat ID matches the Firebase ID
@@ -1337,7 +1348,7 @@ class SubscriptionService: NSObject, ObservableObject {
                 UserDefaults.standard.removeObject(forKey: "cachedExpirationDate")
             }
             
-            throw SubscriptionError.accountMismatch
+            throw SubscriptionError.restoreFailed(underlying: NSError(domain: "SubscriptionService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Account mismatch"]))
         }
         
         // Check if the restored purchases were originally made by this Firebase user
@@ -1380,7 +1391,7 @@ class SubscriptionService: NSObject, ObservableObject {
                 }
                 
                 // Throw a specialized error
-                throw SubscriptionError.accountMismatch
+                throw SubscriptionError.restoreFailed(underlying: NSError(domain: "SubscriptionService", code: 403, userInfo: [NSLocalizedDescriptionKey: "Account mismatch"]))
             } else {
                 print("🔐 RevenueCat: No Pro entitlements in restored purchases, no action needed")
             }
@@ -1417,7 +1428,7 @@ class SubscriptionService: NSObject, ObservableObject {
     
     private func handleRestoreError(_ error: Error) {
         print("🔐 RevenueCat: Failed to restore purchases: \(error.localizedDescription)")
-        self.lastRestoreError = .restoreFailed
+        self.lastRestoreError = .restoreFailed(underlying: error)
         self.showRestoreErrorAlert = true
     }
     
@@ -1496,7 +1507,7 @@ class SubscriptionService: NSObject, ObservableObject {
         let timeoutTask = Task {
             try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             task.cancel()
-            throw SubscriptionError.timeout
+            throw SubscriptionError.purchaseFailed(underlying: NSError(domain: "SubscriptionService", code: 408, userInfo: [NSLocalizedDescriptionKey: "Request timeout"]))
         }
         
         do {
@@ -1620,14 +1631,15 @@ class SubscriptionService: NSObject, ObservableObject {
                 subscriptionError = subError
             } else {
                 // Convert generic errors to our custom error type
-                subscriptionError = .restoreFailed
+                subscriptionError = .restoreFailed(underlying: error)
             }
             
             // Store the error for UI display
             self.lastRestoreError = subscriptionError
             
             // Handle deleted account case specially
-            if subscriptionError == .accountMismatch && isDeletedAccountDetected {
+            if case .restoreFailed(let underlying) = subscriptionError,
+               underlying.localizedDescription.contains("Account mismatch") && isDeletedAccountDetected {
                 print("🔐 RevenueCat: Showing deleted account recovery guidance to user")
                 // UI would show specialized messaging here
             }
@@ -2171,54 +2183,4 @@ extension SubscriptionService: PurchasesDelegate {
 
 enum StoreError: Error {
     case failedVerification
-}
-
-enum SubscriptionError: Error {
-    case purchaseFailed
-    case notSignedIntoAppStore
-    case restoreFailed
-    case timeout
-    case unknown
-    case networkOffline
-    case networkError
-    case purchasePending
-    case receiptInUse
-    case productNotFound
-    case verificationFailed
-    case userCancelled
-    case accountMismatch
-    case userNotSignedIn
-    
-    var localizedDescription: String {
-        switch self {
-        case .purchaseFailed:
-            return "The purchase failed to complete."
-        case .notSignedIntoAppStore:
-            return "You're not signed in to the App Store. Please sign in to your Apple ID."
-        case .restoreFailed:
-            return "Failed to restore purchases."
-        case .timeout:
-            return "The operation timed out. Please try again."
-        case .unknown:
-            return "An unknown error occurred."
-        case .networkOffline:
-            return "You're offline. Please check your internet connection."
-        case .networkError:
-            return "A network error occurred. Please try again."
-        case .purchasePending:
-            return "Your purchase is pending approval."
-        case .receiptInUse:
-            return "This receipt is already in use with another account."
-        case .productNotFound:
-            return "The product was not found."
-        case .verificationFailed:
-            return "Purchase verification failed."
-        case .userCancelled:
-            return "The purchase was cancelled."
-        case .accountMismatch:
-            return "This subscription belongs to a different account. Please log in with the original account that purchased Pro."
-        case .userNotSignedIn:
-            return "You must be signed in to perform this action."
-        }
-    }
 } 

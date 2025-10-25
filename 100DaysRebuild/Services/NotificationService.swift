@@ -471,4 +471,64 @@ class NotificationService: NSObject, ObservableObject {
             try await scheduleStreakExpirationWarning()
         }
     }
+
+    // MARK: - Social Notification Helpers (used by Social features)
+
+    /// Schedule a simple encouragement notification sent from one user to another
+    func scheduleEncouragementNotification(fromUser: String, message: String) async throws {
+        guard isAuthorized else { throw NotificationError.notAuthorized }
+
+        let content = createNotificationContent(title: "Encouragement from @\(fromUser)", body: message)
+        let request = UNNotificationRequest(identifier: "encouragement-\(UUID().uuidString)", content: content, trigger: nil)
+
+        try await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Schedule a notification when someone reacts to a post
+    func scheduleReactionNotification(friendName: String, emoji: String, challengeTitle: String) async throws {
+        guard isAuthorized else { throw NotificationError.notAuthorized }
+
+        let title = "\(friendName) reacted to your post"
+        let body = "\(friendName) reacted with \(emoji) on \(challengeTitle)"
+        let content = createNotificationContent(title: title, body: body)
+        let request = UNNotificationRequest(identifier: "reaction-\(UUID().uuidString)", content: content, trigger: nil)
+
+        try await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Schedule a notification when a friend checks in
+    func scheduleFriendCheckInNotification(friendName: String, challengeTitle: String) async throws {
+        guard isAuthorized else { throw NotificationError.notAuthorized }
+
+        let title = "\(friendName) checked in"
+        let body = "\(friendName) checked in for \(challengeTitle) — cheer them on!"
+        let content = createNotificationContent(title: title, body: body)
+        let request = UNNotificationRequest(identifier: "friendCheckIn-\(UUID().uuidString)", content: content, trigger: nil)
+
+        try await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Schedule a notification for milestone achievements
+    func scheduleMilestoneNotification(friendName: String, milestone: Int, challengeTitle: String) async throws {
+        guard isAuthorized else { throw NotificationError.notAuthorized }
+
+        let title = "\(friendName) hit a milestone!"
+        let body = "\(friendName) reached day \(milestone) of \(challengeTitle) — celebrate their progress!"
+        let content = createNotificationContent(title: title, body: body)
+        let request = UNNotificationRequest(identifier: "milestone-\(UUID().uuidString)", content: content, trigger: nil)
+
+        try await UNUserNotificationCenter.current().add(request)
+    }
+
+    /// Schedule a notification for challenge completion
+    func scheduleChallengeCompletionNotification(friendName: String, challengeTitle: String) async throws {
+        guard isAuthorized else { throw NotificationError.notAuthorized }
+
+        let title = "\(friendName) completed a challenge!"
+        let body = "\(friendName) completed \(challengeTitle). Congratulate them!"
+        let content = createNotificationContent(title: title, body: body)
+        let request = UNNotificationRequest(identifier: "challengeComplete-\(UUID().uuidString)", content: content, trigger: nil)
+
+        try await UNUserNotificationCenter.current().add(request)
+    }
 } 

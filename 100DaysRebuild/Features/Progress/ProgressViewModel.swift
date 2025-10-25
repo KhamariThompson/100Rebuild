@@ -1173,6 +1173,14 @@ class ProgressDashboardViewModel: ObservableObject {
             }
         }
     }
+
+    // Expose helper to trigger feature computations when data updates
+    @MainActor
+    func triggerFeatureComputations() {
+        // Recompute momentum and forecast when challenge data updates
+        MomentumService.shared.computeInBackground()
+        ForecastService.shared.computeIfNeeded()
+    }
     
     // Load user stats directly from UserStatsService
     private func loadUserStats() async throws {

@@ -19,6 +19,8 @@ class CheckInViewModel: ObservableObject {
     @Published var error: Error?
     @Published var showError = false
     @Published var errorMessage = ""
+    /// Show the milestone share modal
+    @Published var showMilestoneShare: Bool = false
     
     // Check-in flow state
     @Published var currentQuote: Quote?
@@ -58,8 +60,10 @@ class CheckInViewModel: ObservableObject {
     @Published var currentPrompt: String = ""
     
     private var challengeId: String = ""
-    private var currentDay: Int = 0
-    private var challengeTitle: String = ""
+
+    // Public read, private write so views can read these but only the VM can modify them
+    @Published public private(set) var currentDay: Int = 0
+    @Published public private(set) var challengeTitle: String = ""
     
     // Image data for check-in photos
     @Published var photoData: Data?
@@ -70,6 +74,11 @@ class CheckInViewModel: ObservableObject {
            let savedQuote = try? JSONDecoder().decode(Quote.self, from: savedQuoteData) {
             self.lastQuote = savedQuote
         }
+    }
+
+    /// Dismiss the milestone share modal
+    func dismissMilestoneShare() {
+        showMilestoneShare = false
     }
     
     // MARK: - Public Methods

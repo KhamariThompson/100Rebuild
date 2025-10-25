@@ -1,0 +1,116 @@
+import XCTest
+@testable import _00DaysRebuild
+
+class RoutingTests: XCTestCase {
+    var mockUserSession: MockUserSession!
+    var mockEntitlements: MockEntitlements!
+    
+    override func setUp() {
+        super.setUp()
+        mockUserSession = MockUserSession()
+        mockEntitlements = MockEntitlements()
+    }
+    
+    override func tearDown() {
+        mockUserSession = nil
+        mockEntitlements = nil
+        super.tearDown()
+    }
+    
+    func testNotSignedInShowsAuth() {
+        // Given
+        mockUserSession.isAuthenticated = false
+        
+        // When
+        let destination = determineDestination(
+            isAuthenticated: mockUserSession.isAuthenticated,
+            isProUser: mockEntitlements.isProUser,
+            hasCompletedFunnel: mockUserSession.hasCompletedFunnel
+        )
+        
+        // Then
+        XCTAssertEqual(destination, .auth)
+    }
+    
+    func testSignedInAndProShowsHome() {
+        // Given
+        mockUserSession.isAuthenticated = true
+        mockEntitlements.isProUser = true
+        
+        // When
+        let destination = determineDestination(
+            isAuthenticated: mockUserSession.isAuthenticated,
+            isProUser: mockEntitlements.isProUser,
+            hasCompletedFunnel: mockUserSession.hasCompletedFunnel
+        )
+        
+        // Then
+        XCTAssertEqual(destination, .home)
+    }
+    
+    func testSignedInNotProOnboardingCompleteShowsPaywall() {
+        // Given
+        mockUserSession.isAuthenticated = true
+        mockEntitlements.isProUser = false
+        mockUserSession.hasCompletedFunnel = true
+        
+        // When
+        let destination = determineDestination(
+            isAuthenticated: mockUserSession.isAuthenticated,
+            isProUser: mockEntitlements.isProUser,
+            hasCompletedFunnel: mockUserSession.hasCompletedFunnel
+        )
+        
+        // Then
+        XCTAssertEqual(destination, .paywall)
+    }
+    
+    func testSignedInNotProOnboardingNotCompleteShowsOnboarding() {
+        // Given
+        mockUserSession.isAuthenticated = true
+        mockEntitlements.isProUser = false
+        mockUserSession.hasCompletedFunnel = false
+        
+        // When
+        let destination = determineDestination(
+            isAuthenticated: mockUserSession.isAuthenticated,
+            isProUser: mockEntitlements.isProUser,
+            hasCompletedFunnel: mockUserSession.hasCompletedFunnel
+        )
+        
+        // Then
+        XCTAssertEqual(destination, .onboarding)
+    }
+    
+    // Helper function to simulate routing logic
+    private func determineDestination(
+        isAuthenticated: Bool,
+        isProUser: Bool,
+        hasCompletedFunnel: Bool
+    ) -> AppDestination {
+        if !isAuthenticated {
+            return .auth
+        } else if isProUser {
+            return .home
+        } else if hasCompletedFunnel {
+            return .paywall
+        } else {
+            return .onboarding
+        }
+    }
+}
+
+// Mock classes for testing
+class MockUserSession {
+    var isAuthenticated = false
+    var hasCompletedFunnel = false
+    var hasCompletedOnboarding = false
+}
+
+class MockEntitlements {
+    var isProUser = false
+}
+
+enum AppDestination {
+    case auth, onboarding, paywall, home
+}

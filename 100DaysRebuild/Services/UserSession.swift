@@ -5,11 +5,26 @@ import Network
 import Firebase
 import RevenueCat
 
-enum AuthState {
+enum AuthState: Equatable {
     case loading
     case signedIn(FirebaseAuth.User)
     case signedOut
     case error(Error)
+    
+    static func == (lhs: AuthState, rhs: AuthState) -> Bool {
+        switch (lhs, rhs) {
+        case (.loading, .loading):
+            return true
+        case (.signedIn(let lhsUser), .signedIn(let rhsUser)):
+            return lhsUser.uid == rhsUser.uid
+        case (.signedOut, .signedOut):
+            return true
+        case (.error(let lhsError), .error(let rhsError)):
+            return lhsError.localizedDescription == rhsError.localizedDescription
+        default:
+            return false
+        }
+    }
 }
 
 @MainActor
@@ -35,6 +50,9 @@ class UserSession: ObservableObject {
     private var stateListener: AuthStateDidChangeListenerHandle?
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "UserSession.NetworkMonitor")
+
+    // Migration manager for subscription model transition
+    private let migrationManager = MigrationManager.shared
     
     private init() {
         setupNetworkMonitoring()
@@ -142,6 +160,14 @@ class UserSession: ObservableObject {
                     self.authState = .signedIn(user)
                     self.lastSignInTime = Date()
                     await self.loadUserProfile()
+
+                    // Check and perform migration for the subscription model
+                    do {
+                        try await self.migrationManager.checkAndMigrate(for: user.uid)
+                        print("✅ UserSession: Migration check completed for user \(user.uid)")
+                    } catch {
+                        print("❌ UserSession: Migration check failed: \(error.localizedDescription)")
+                    }
                 } else {
                     print("UserSession: No active user")
                     self.authState = .signedOut
@@ -231,23 +257,23 @@ class UserSession: ObservableObject {
                 print("UserSession: Profile document exists")
                 self.username = data["username"] as? String
                 self.displayName = data["displayName"] as? String
-                
+
                 // Add debug logging for hasCompletedOnboarding
                 let hasCompletedValue = data["hasCompletedOnboarding"] as? Bool ?? false
                 print("DEBUG: Loading hasCompletedOnboarding from Firestore: \(hasCompletedValue)")
                 self.hasCompletedOnboarding = hasCompletedValue
-                
+
                 if let photoURLString = data["photoURL"] as? String,
                    let url = URL(string: photoURLString) {
                     self.photoURL = url
                     print("UserSession: Loaded profile photo URL: \(url)")
                 }
-                
+
                 if let username = self.username {
                     print("UserSession: Loaded username: \(username)")
                 } else {
                     print("UserSession: Profile exists but username is nil, will create one")
-                    
+
                     // Profile exists but username is missing - need to fix it
                     try await createDefaultProfileDocument(for: userId)
                 }
@@ -258,7 +284,7 @@ class UserSession: ObservableObject {
                 self.displayName = nil
                 self.photoURL = nil
                 self.hasCompletedOnboarding = false
-                
+
                 // For new users, create a default profile document
                 try await createDefaultProfileDocument(for: userId)
             }
@@ -477,9 +503,9 @@ class UserSession: ObservableObject {
             print("DEBUG: UserSession: RevenueCat sign out error - \(error.localizedDescription)")
         }
         
-        // 6. Reset SubscriptionService completely
-        await SubscriptionService.shared.reset()
-        print("DEBUG: UserSession: Reset SubscriptionService state")
+        // 6. Reset SubscriptionStore completely
+        await SubscriptionStore.shared.reset()
+        print("DEBUG: UserSession: Reset SubscriptionStore state")
         
         // 7. Perform Firebase sign-out
         do {
@@ -953,20 +979,20 @@ class UserSession: ObservableObject {
     /// Update the user's display name - separate from username
     func updateDisplayName(_ newDisplayName: String) async throws {
         guard let userId = currentUser?.uid else {
-            throw NSError(domain: "UserSession", code: 101, 
+            throw NSError(domain: "UserSession", code: 101,
                          userInfo: [NSLocalizedDescriptionKey: "No user is signed in."])
         }
-        
+
         do {
             // Update Firestore with new display name
             try await firestore
                 .collection("users")
                 .document(userId)
                 .updateData(["displayName": newDisplayName])
-            
+
             // Update local state
             self.displayName = newDisplayName
-            
+
             // Post notification that user profile was updated
             NotificationCenter.default.post(
                 name: NSNotification.Name("UserProfileUpdated"),

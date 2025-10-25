@@ -1,0 +1,12 @@
+ #if canImport(XCTest)
+import XCTest
+
+@testable import _00DaysRebuild
+
+final class FriendServiceTests: XCTestCase {
+    func testPlaceholder() async throws {
+        // Placeholder test - replace with emulator-backed tests in CI
+        XCTAssertTrue(true)
+    }
+}
+#endif

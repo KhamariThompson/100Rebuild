@@ -27,7 +27,8 @@ struct NewChallengeView: View {
     private let descriptionCharLimit = 200
     
     // Environment
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var userSession: UserSession
     
@@ -387,9 +388,9 @@ struct NewChallengeView: View {
                         }
                         .offset(y: animateElements ? 0 : 20)
                         .opacity(animateElements ? 1 : 0)
-                        
+
                         // Pro limit warning
-                        if !subscriptionService.isProUser {
+                        if !entitlementsAdapter.hasProAccess {
                             proLimitWarning
                                 .padding(.horizontal)
                                 .offset(y: animateElements ? 0 : 20)
@@ -724,7 +725,8 @@ struct NewChallengeView_Previews: PreviewProvider {
             challengeTitle: .constant(""),
             onCreateChallenge: { _, _ in }
         )
-        .environmentObject(SubscriptionService.shared)
+        .environmentObject(SubscriptionStore.shared)
+        .environmentObject(EntitlementsAdapter.shared)
         .environmentObject(ThemeManager.shared)
     }
 } 

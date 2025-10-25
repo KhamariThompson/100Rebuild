@@ -666,15 +666,9 @@ struct WelcomeView: View {
                 }
             }
             
-            // Disable showing paywall immediately after authentication
-            // This prevents the paywall from showing right after login
-            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let subscriptionService = windowScene.windows.first?.rootViewController?.view.window?.windowScene?.windows.first?.rootViewController?.view.window?.rootViewController as? EnvironmentObject<SubscriptionService> {
-                DispatchQueue.main.async {
-                    // Ensure we don't show the paywall immediately
-                    subscriptionService.wrappedValue.showPaywall = false
-                }
-            }
+            // TODO: Remove dead code - paywall triggering is handled through navigation now
+            // This code was attempting to prevent paywall showing after login
+            // but showPaywall property no longer exists in the new architecture
             
         } catch {
             print("Error signing in with Apple: \(error.localizedDescription)")

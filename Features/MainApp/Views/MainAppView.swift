@@ -1,7 +1,7 @@
 struct MainApp_SocialTabView: View {
     var body: some View {
         NavigationView {
-            SocialView()
+            SocialFeedView()
                 .navigationTitle("Social")
         }
         .navigationViewStyle(StackNavigationViewStyle())

@@ -247,7 +247,7 @@ struct ChangeUsernameView: View {
 
 // MARK: - Supporting Views
 
-struct LoadingView: View {
+struct UsernameLoadingView: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.3)

@@ -7,8 +7,9 @@ struct ProUpgradeSheetView: View {
     let features: [String]
     let onUpgrade: () -> Void
     let onDismiss: () -> Void
-    
-    @EnvironmentObject var subscriptionService: SubscriptionService
+
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dismiss) private var dismiss
     
@@ -36,14 +37,10 @@ struct ProUpgradeSheetView: View {
                     )
                     
                     // Subscription status
-                    ProSubscriptionStatusView(
-                        subscriptionService: subscriptionService,
-                        animate: animateContent
-                    )
-                    
+                    ProSubscriptionStatusView(animate: animateContent)
+
                     // Action buttons
                     ProActionButtonsView(
-                        subscriptionService: subscriptionService,
                         animate: animateContent,
                         onUpgrade: onUpgrade,
                         onDismiss: {
@@ -201,19 +198,20 @@ struct ProFeatureRow: View {
 
 // Subscription status component
 struct ProSubscriptionStatusView: View {
-    let subscriptionService: SubscriptionService
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     let animate: Bool
-    
+
     var body: some View {
         Group {
-            if subscriptionService.isProUser {
+            if entitlementsAdapter.hasProAccess {
                 // Already a Pro user
                 VStack(spacing: 8) {
                     Text("You're already a Pro user!")
                         .font(.headline)
                         .foregroundColor(.green)
-                    
-                    if let expiryDate = subscriptionService.renewalDate {
+
+                    if let expiryDate = subscriptionStore.state.renewalDate {
                         Text("Your subscription is active until \(expiryDate.formatted(date: .abbreviated, time: .omitted))")
                             .font(.subheadline)
                             .foregroundColor(.theme.subtext)
@@ -266,14 +264,14 @@ struct ProSubscriptionStatusView: View {
 
 // Action buttons component
 struct ProActionButtonsView: View {
-    let subscriptionService: SubscriptionService
+    @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     let animate: Bool
     let onUpgrade: () -> Void
     let onDismiss: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 16) {
-            if subscriptionService.isProUser {
+            if entitlementsAdapter.hasProAccess {
                 Button(action: onDismiss) {
                     Text("Continue")
                         .font(.headline)
@@ -343,5 +341,6 @@ struct ProActionButtonsView: View {
         onUpgrade: {},
         onDismiss: {}
     )
-    .environmentObject(SubscriptionService.shared)
+    .environmentObject(SubscriptionStore.shared)
+    .environmentObject(EntitlementsAdapter.shared)
 } 

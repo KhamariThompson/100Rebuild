@@ -24,12 +24,13 @@ struct SimpleCheckInSheet: View {
     @State private var showingSuccessAnimation = false
     @State private var isLoadingImage = false
     
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @Environment(\.colorScheme) private var colorScheme
-    
+
     // Photo limit based on subscription status
     private var photoLimit: Int {
-        subscriptionService.isProUser ? 3 : 1
+        entitlementsAdapter.hasProAccess ? 3 : 1
     }
     
     private var photosRemaining: Int {
@@ -343,7 +344,7 @@ struct SimpleCheckInSheet: View {
                         }
                     }
                 }
-            } else if !subscriptionService.isProUser && selectedImages.count >= 1 {
+            } else if !entitlementsAdapter.hasProAccess && selectedImages.count >= 1 {
                 // Upgrade prompt for non-Pro users who hit the limit
                 Button {
                     showUpgradePrompt = true
@@ -366,7 +367,7 @@ struct SimpleCheckInSheet: View {
                 .alert("Upgrade to Pro", isPresented: $showUpgradePrompt) {
                     Button("Not Now", role: .cancel) { }
                     Button("Upgrade") {
-                        subscriptionService.presentSubscriptionSheet()
+                        // TODO: Trigger paywall via navigation
                     }
                 } message: {
                     Text("Pro users can add up to 3 photos per check-in. Upgrade to unlock this feature!")
@@ -555,7 +556,8 @@ struct SimpleCheckInSheet_Previews: PreviewProvider {
                 onCheckIn: { _, _ in },
                 onDismiss: {}
             )
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
+            .environmentObject(EntitlementsAdapter.shared)
         }
         .preferredColorScheme(.dark)
     }

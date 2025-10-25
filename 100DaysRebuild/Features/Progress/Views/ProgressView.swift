@@ -323,6 +323,22 @@ struct ProgressView: View {
                         .foregroundColor(Color.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
+
+                // Momentum badge (feature gated)
+                if FeatureGateService.shared.isEnabled("momentum_predictor"),
+                   let momentum = MomentumService.shared.currentState {
+                    VStack(alignment: .center, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(momentum.emoji)
+                            Text(momentum.label)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.top, 4)
+                    .transition(.opacity)
+                    .frame(maxWidth: .infinity)
+                }
                 
                 // Percent complete - use global completion percentage from userStatsService
                 VStack(alignment: .center, spacing: 4) {
@@ -1064,6 +1080,51 @@ struct ProgressView: View {
                         .fill(Color.theme.surface)
                         .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
                 )
+            }
+        }
+    }
+
+    // 4.5 Progress Forecast Card (feature gated)
+    private var progressForecastCard: some View {
+        Group {
+            if FeatureGateService.shared.isEnabled("progress_forecast"),
+               let forecast = ForecastService.shared.latest {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "calendar.badge.clock")
+                            .foregroundColor(.blue)
+                        Text("Progress Forecast")
+                            .font(.headline)
+                        Spacer()
+                        Text("Confidence: \(Int(forecast.confidence * 100))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Text("At this pace, you’ll reach Day 100 on \(forecast.predictedDate.formatted(.dateTime.month().day()))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    if subscriptionService.isProUser {
+                        // Chart for Pro users
+                        let trend = ForecastService.shared.trendPointsSync(limitDays: 30)
+                        Chart {
+                            ForEach(trend) { p in
+                                LineMark(
+                                    x: .value("Day", p.day),
+                                    y: .value("Completion", p.percent)
+                                )
+                            }
+                        }
+                        .frame(height: 120)
+                        .chartYScale(domain: 0...1)
+                        .chartXAxis(.hidden)
+                    }
+                }
+                .padding()
+                .background(DS.Colors.surface)
+                .cornerRadius(DS.Spacing.cardCornerRadius)
+                .transition(.opacity)
             }
         }
     }
