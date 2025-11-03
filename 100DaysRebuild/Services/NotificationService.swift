@@ -479,9 +479,18 @@ class NotificationService: NSObject, ObservableObject {
         guard isAuthorized else { throw NotificationError.notAuthorized }
 
         let content = createNotificationContent(title: "Encouragement from @\(fromUser)", body: message)
-        let request = UNNotificationRequest(identifier: "encouragement-\(UUID().uuidString)", content: content, trigger: nil)
+        let identifier = "encouragement-\(UUID().uuidString)"
 
-        try await UNUserNotificationCenter.current().add(request)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 
     /// Schedule a notification when someone reacts to a post
@@ -491,9 +500,18 @@ class NotificationService: NSObject, ObservableObject {
         let title = "\(friendName) reacted to your post"
         let body = "\(friendName) reacted with \(emoji) on \(challengeTitle)"
         let content = createNotificationContent(title: title, body: body)
-        let request = UNNotificationRequest(identifier: "reaction-\(UUID().uuidString)", content: content, trigger: nil)
+        let identifier = "reaction-\(UUID().uuidString)"
 
-        try await UNUserNotificationCenter.current().add(request)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 
     /// Schedule a notification when a friend checks in
@@ -503,9 +521,18 @@ class NotificationService: NSObject, ObservableObject {
         let title = "\(friendName) checked in"
         let body = "\(friendName) checked in for \(challengeTitle) — cheer them on!"
         let content = createNotificationContent(title: title, body: body)
-        let request = UNNotificationRequest(identifier: "friendCheckIn-\(UUID().uuidString)", content: content, trigger: nil)
+        let identifier = "friendCheckIn-\(UUID().uuidString)"
 
-        try await UNUserNotificationCenter.current().add(request)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 
     /// Schedule a notification for milestone achievements
@@ -515,9 +542,18 @@ class NotificationService: NSObject, ObservableObject {
         let title = "\(friendName) hit a milestone!"
         let body = "\(friendName) reached day \(milestone) of \(challengeTitle) — celebrate their progress!"
         let content = createNotificationContent(title: title, body: body)
-        let request = UNNotificationRequest(identifier: "milestone-\(UUID().uuidString)", content: content, trigger: nil)
+        let identifier = "milestone-\(UUID().uuidString)"
 
-        try await UNUserNotificationCenter.current().add(request)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 
     /// Schedule a notification for challenge completion
@@ -527,8 +563,17 @@ class NotificationService: NSObject, ObservableObject {
         let title = "\(friendName) completed a challenge!"
         let body = "\(friendName) completed \(challengeTitle). Congratulate them!"
         let content = createNotificationContent(title: title, body: body)
-        let request = UNNotificationRequest(identifier: "challengeComplete-\(UUID().uuidString)", content: content, trigger: nil)
+        let identifier = "challengeComplete-\(UUID().uuidString)"
 
-        try await UNUserNotificationCenter.current().add(request)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume(returning: ())
+                }
+            }
+        }
     }
 } 

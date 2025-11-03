@@ -15,24 +15,17 @@ public struct FunnelHeroHeader: View {
 
     public var body: some View {
         VStack(spacing: DS.Spacing.sm) {
-            // Gradient-masked title
-            LinearGradient(
-                colors: [DS.Colors.gradientA, DS.Colors.gradientB],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .mask(
-                Text(title)
-                    .font(DS.Typo.titleXL)
-                    .multilineTextAlignment(.center)
-            )
-            .frame(minHeight: 44)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(.isHeader)
+            // Solid color title for better readability
+            Text(title)
+                .font(AppTypography.largeTitle(.bold))
+                .foregroundStyle(DS.Colors.accent)
+                .multilineTextAlignment(.center)
+                .accessibilityLabel(title)
+                .accessibilityAddTraits(.isHeader)
 
             Text(subtitle)
-                .font(DS.Typo.body)
-                .foregroundStyle(DS.Colors.onSurface.opacity(0.75))
+                .font(AppTypography.body())
+                .foregroundStyle(DS.Colors.onSurface.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -104,12 +97,12 @@ public struct BenefitsGrid: View {
                 // Text content
                 VStack(alignment: .leading, spacing: 4) {
                     Text(benefit.title)
-                        .font(DS.Typo.headline)
+                        .font(AppTypography.headline())
                         .foregroundStyle(DS.Colors.onSurface)
                         .lineLimit(1)
 
                     Text(benefit.caption)
-                        .font(DS.Typo.subhead)
+                        .font(AppTypography.subhead())
                         .foregroundStyle(DS.Colors.onSurfaceSecondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -232,7 +225,7 @@ public struct TrustSection: View {
     @ViewBuilder
     private func trustBadge(icon: String, text: String) -> some View {
         Label(text, systemImage: icon)
-            .font(DS.Typo.footnote)
+            .font(AppTypography.footnote())
             .foregroundStyle(DS.Colors.onSurfaceSecondary)
             .padding(.horizontal, DS.Spacing.xl)
     }
@@ -250,7 +243,7 @@ public struct MetaFootnote: View {
 
     public var body: some View {
         Text(text)
-            .font(DS.Typo.footnote)
+            .font(AppTypography.footnote())
             .foregroundStyle(DS.Colors.onSurfaceSecondary)
             .multilineTextAlignment(.center)
             .padding(.horizontal, DS.Spacing.xl)
@@ -324,11 +317,11 @@ public struct QuickActionCard: View {
                     // Content
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
-                            .font(DS.Typo.headline)
+                            .font(AppTypography.headline())
                             .foregroundStyle(DS.Colors.onSurface)
 
                         Text(subtitle)
-                            .font(DS.Typo.subhead)
+                            .font(AppTypography.subhead())
                             .foregroundStyle(DS.Colors.onSurfaceSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -336,7 +329,7 @@ public struct QuickActionCard: View {
 
                     // Chevron
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(AppTypography.subhead(.semibold))
                         .foregroundStyle(DS.Colors.onSurfaceSecondary)
                 }
             }

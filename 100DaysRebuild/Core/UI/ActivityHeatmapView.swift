@@ -154,15 +154,15 @@ struct ActivityHeatmapView: View {
                 // Day of week labels
                 VStack(spacing: cellSpacing * 2 + cellSize) {
                     Text("M")
-                        .font(.system(size: 9))
+                        .font(AppTypography.caption2())
                         .foregroundColor(.theme.subtext)
                     
                     Text("W")
-                        .font(.system(size: 9))
+                        .font(AppTypography.caption2())
                         .foregroundColor(.theme.subtext)
                     
                     Text("F")
-                        .font(.system(size: 9))
+                        .font(AppTypography.caption2())
                         .foregroundColor(.theme.subtext)
                 }
                 .padding(.top, cellSize / 2)
@@ -191,7 +191,7 @@ struct ActivityHeatmapView: View {
                         HStack(alignment: .top, spacing: 0) {
                             ForEach(monthLabels()) { label in
                                 Text(label.text)
-                                    .font(.system(size: 9))
+                                    .font(AppTypography.caption2())
                                     .foregroundColor(.theme.subtext)
                                     .frame(width: 30, alignment: .leading)
                                     .offset(x: CGFloat(label.weekIndex) * (cellSize + cellSpacing))

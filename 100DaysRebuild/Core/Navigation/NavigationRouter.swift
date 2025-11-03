@@ -2,13 +2,14 @@ import SwiftUI
 import Combine
 
 /// Central router for navigating between app screens with controlled transitions
+@MainActor
 class NavigationRouter: ObservableObject {
     @Published var selectedTab: Int = 0
     @Published var tabIsChanging: Bool = false
     @Published var isShowingNewChallengeSheet: Bool = false
     
     // Used to prevent rapid tab changes that can cause flickering
-    private var changeTabDebouncer: AnyCancellable?
+    nonisolated(unsafe) private var changeTabDebouncer: AnyCancellable?
     private var lastTabChangeTime: Date = Date()
     private let minimumTabChangeInterval: TimeInterval = 0.3
     
@@ -48,13 +49,16 @@ class NavigationRouter: ObservableObject {
             // Keep tab unchanged but set to changing state to trigger opacity animation
         }
         
-        // After brief fade out, change tab
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        // After brief fade out, change tab on the main queue
+        let tabToSelect = tab
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self = self else { return }
             // Change tab without animation
-            self.selectedTab = tab
-            
+            self.selectedTab = tabToSelect
+
             // After tab change, fade in new tab
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                guard let self = self else { return }
                 withAnimation(.easeIn(duration: 0.15)) {
                     self.tabIsChanging = false
                 }
@@ -68,7 +72,8 @@ class NavigationRouter: ObservableObject {
         changeTab(to: 0)
         
         // Then after a small delay, set the flag to show the new challenge sheet
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self = self else { return }
             withAnimation {
                 self.isShowingNewChallengeSheet = true
             }

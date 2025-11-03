@@ -2,7 +2,7 @@ import SwiftUI
 import FirebaseCore
 import FirebaseAuth
 import GoogleSignIn
-import UIKit
+@preconcurrency import UIKit
 import AuthenticationServices
 import Network
 import FirebaseFirestore
@@ -23,22 +23,25 @@ import StoreKit
 struct OfflineBanner: View {
     var body: some View {
         VStack {
-            HStack {
+            HStack(spacing: DS.Spacing.xs) {
                 Image(systemName: "wifi.slash")
+                    .font(AppTypography.subhead())
                 Text("You're offline")
+                    .font(AppTypography.subhead(.medium))
                 Spacer()
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, DS.Spacing.md)
+            .padding(.vertical, DS.Spacing.xs)
             .background(Color.yellow.opacity(0.8))
-            .foregroundColor(.black)
-            
+            .foregroundStyle(.black)
+
             Spacer()
         }
     }
 }
 
 // Explicitly conform to UIApplicationDelegate protocol
+@preconcurrency
 class AppDelegate: NSObject, UIApplicationDelegate {
     private var networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "NetworkMonitor")
@@ -46,18 +49,26 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     static var firebaseConfigured = false
     static var revenueCatConfigured = false
     
+    // Public helper to ensure RevenueCat (Purchases) is configured as early as possible.
+    // This is intentionally static so it can be called from App init before other
+    // objects (like SubscriptionStore) are constructed which might access Purchases.shared.
+    static func configureRevenueCatIfNeeded() {
+        // Delegate to the centralized manager which ensures a single configure call
+        RevenueCatManager.configureIfNeeded()
+
+        // Keep the AppDelegate-level flag in sync for backwards compatibility
+        AppDelegate.revenueCatConfigured = RevenueCatManager.isConfigured
+    }
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        print("App100Days init - Using AppDelegate for Firebase initialization")
-        
         // IMPORTANT: Configure Firebase at the very beginning, before any other Firebase-related code runs
         configureFirebase()
-        
+
         // Configure RevenueCat after Firebase
         configureRevenueCat()
-        
+
         // Initialize Google AdMob SDK
         MobileAds.initialize()
-        print("MobileAds initialized")
         
         // Fix for navigation layout constraints
         setupNavigationBarAppearance()
@@ -87,8 +98,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     
     // Handle memory warnings by clearing caches and non-essential data
     @objc private func handleMemoryWarning() {
-        print("⚠️ Memory warning received - clearing caches")
-
         // Clear image caches
         URLCache.shared.removeAllCachedResponses()
 
@@ -102,83 +111,35 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     private func configureFirebase() {
         // Only configure Firebase if it hasn't been configured yet
         if !AppDelegate.firebaseConfigured && FirebaseApp.app() == nil {
+            #if DEBUG
+            print("🔥 Configuring Firebase...")
+            #endif
+
             // Explicitly configure Firebase with the default GoogleService-Info.plist first
             FirebaseApp.configure()
-            print("✅ Firebase configured")
-            
+
             // Now that Firebase is configured but before any Firestore method is called,
             // we can set the Firestore settings
             let settings = FirestoreSettings()
-            
+
             // Replace deprecated properties with new cacheSettings API
             let cacheSettings = PersistentCacheSettings(sizeBytes: NSNumber(value: 100 * 1024 * 1024)) // 100MB cache size
             settings.cacheSettings = cacheSettings
-            
+
             // Apply these settings to the Firestore instance before any other Firestore method is called
             Firestore.firestore().settings = settings
-            
+
             // Set a flag to indicate Firebase is initialized
             UserDefaults.standard.set(true, forKey: "firebase_initialized")
             // Set our static flag
             AppDelegate.firebaseConfigured = true
-            print("Firestore offline persistence configured")
-        } else {
-            print("Firebase already configured, skipping initialization")
         }
     }
     
     // Extract RevenueCat configuration to a separate method
     private func configureRevenueCat() {
-        // Skip if already configured
-        guard !AppDelegate.revenueCatConfigured else {
-            #if DEBUG
-            print("🔐 RevenueCat: Already configured, skipping initialization")
-            #endif
-            return
-        }
-        
-        // Get the current Firebase user ID if available
-        let currentUserId = Auth.auth().currentUser?.uid
-        
-        #if DEBUG
-        print("🔐 RevenueCat: Initial configuration with Firebase UID: \(currentUserId ?? "none")")
-        #endif
-        
-        // Configure RevenueCat with proper production settings
-        #if DEBUG
-        Purchases.logLevel = .debug // More verbose logging in debug builds
-        #else
-        Purchases.logLevel = .error // Only log errors in production
-        #endif
-        
-        Purchases.configure(
-            with: Configuration.Builder(withAPIKey: "appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
-                .with(appUserID: currentUserId) // Use Firebase UID or null at configuration time
-                .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
-                .with(userDefaults: UserDefaults.standard)
-                .with(usesStoreKit2IfAvailable: true)
-                .build()
-        )
-
-        // Note: Delegate will be set by SubscriptionStore when initialized
-
-        // Mark as configured to ensure it only happens once
-        AppDelegate.revenueCatConfigured = true
-
-        #if DEBUG
-        print("🔐 RevenueCat: Configured with key: appl_BmXAuCdWBmPoVBAOgxODhJddUvc")
-        print("🔐 RevenueCat: Current appUserID: \(Purchases.shared.appUserID)")
-        #endif
-
-        // Check and log the current environment
-        let storeEnvironment: String
-        if #available(iOS 15.0, *) {
-            // StoreKit 2 is available on iOS 15+
-            storeEnvironment = "StoreKit 2"
-        } else {
-            storeEnvironment = "StoreKit 1"
-        }
-        print("🔐 RevenueCat: Current store environment: \(storeEnvironment)")
+        // Delegate to the static configurator so callers can configure early (from App.init)
+        AppDelegate.configureRevenueCatIfNeeded()
     }
     
     func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
@@ -191,24 +152,29 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         return sceneConfig
     }
     
+    private var lastNetworkStatus: Bool?
+
     private func startNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
-            print("Network connectivity changed: \(isConnected ? "Connected" : "Disconnected")")
-            
+
             // Notify Firebase service about network status change
-            if isConnected {
-                // Post notification to let app components know network is back
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("NetworkStatusChanged"),
-                        object: nil,
-                        userInfo: ["isConnected": true]
-                    )
+            DispatchQueue.main.async { [weak self] in
+                // Only post notification when status actually changes to prevent spam
+                guard self?.lastNetworkStatus != isConnected else {
+                    return
                 }
+
+                self?.lastNetworkStatus = isConnected
+
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("NetworkStatusChanged"),
+                    object: nil,
+                    userInfo: ["isConnected": isConnected]
+                )
             }
         }
-        
+
         networkMonitor.start(queue: networkQueue)
     }
     
@@ -340,24 +306,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Fix for keyboard issues without disrupting text entry
         // Remove the problematic handlers that were calling resignFirstResponder/becomeFirstResponder
         
-        // Register for keyboard appearance notifications for statistics only
-        NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardWillShowNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            // Just log keyboard appearance without disrupting focus
-            print("Keyboard will show")
-        }
-        
-        NotificationCenter.default.addObserver(
-            forName: UIResponder.keyboardWillHideNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            // Just log keyboard dismissal without disrupting focus
-            print("Keyboard will hide")
-        }
+        // Keyboard notifications removed for production
     }
     
     private func fixLayoutConstraintIssues() {
@@ -416,7 +365,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Check for SystemInputAssistantView
         let viewName = NSStringFromClass(type(of: view))
         if viewName.contains("SystemInputAssistantView") {
-            print("Found SystemInputAssistantView, fixing constraints")
             
             // Lower the priority of constraints rather than completely removing them
             for constraint in view.constraints {
@@ -432,7 +380,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Check for ASAuthorizationAppleIDButton constraint issues
         if viewName.contains("ASAuthorizationAppleIDButton") {
-            print("Found ASAuthorizationAppleIDButton, fixing constraints")
             
             // Remove any width constraints that could cause conflicts
             let constraintsToRemove = view.constraints.filter { constraint in
@@ -501,6 +448,7 @@ class SceneDelegate: NSObject, UIWindowSceneDelegate {
 }
 
 // Simplified InputAssistantManager that focuses on safely handling constraints
+@MainActor
 class InputAssistantManager {
     static let shared = InputAssistantManager()
     
@@ -521,7 +469,10 @@ class InputAssistantManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.fixConstraintsInWindows(assistantViewClass: assistantViewClass)
+            // Ensure the call runs on the main actor since InputAssistantManager is @MainActor
+            Task { @MainActor in
+                await self?.fixConstraintsInWindows(assistantViewClass: assistantViewClass)
+            }
         }
     }
     
@@ -601,6 +552,7 @@ class InputAssistantManager {
 }
 
 // Helper class to safely modify constraints at runtime
+@MainActor
 class ConstraintSwizzler {
     private let classType: AnyClass
     
@@ -615,7 +567,9 @@ class ConstraintSwizzler {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.fixAssistantViewConstraints()
+            Task { @MainActor in
+                await self?.fixAssistantViewConstraints()
+            }
         }
         
         // Also register for keyboard notifications
@@ -624,7 +578,9 @@ class ConstraintSwizzler {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.fixAssistantViewConstraints()
+            Task { @MainActor in
+                await self?.fixAssistantViewConstraints()
+            }
         }
     }
     
@@ -704,13 +660,13 @@ struct App100Days: App {
     @StateObject private var userStatsService = UserStatsService.shared
     @StateObject private var navigationRouter = NavigationRouter()
     @StateObject private var badgeService = BadgeService.shared
+    @StateObject private var analyticsService = AnalyticsService.shared
 
     init() {
         // Perform early Firebase configuration here (inside init) rather than
         // at top-level so we remain within a valid declaration context.
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
-            print("✅ Firebase configured (early init)")
 
             // Apply Firestore settings immediately to avoid race conditions
             let settings = FirestoreSettings()
@@ -720,15 +676,16 @@ struct App100Days: App {
 
             UserDefaults.standard.set(true, forKey: "firebase_initialized")
             AppDelegate.firebaseConfigured = true
-            print("Firestore offline persistence configured (early init)")
         }
+        
+    // Ensure RevenueCat (Purchases) is configured early so any downstream
+    // objects (SubscriptionStore / repositories) that access Purchases.shared
+    // during initialization do not trigger the "Purchases has not been configured" fatal error.
+    AppDelegate.configureRevenueCatIfNeeded()
 
-        print("App100Days init - Using AppDelegate for Firebase initialization")
-
-        // Initialize SubscriptionStore and EntitlementsAdapter with shared instance
-        let store = SubscriptionStore(repository: RevenueCatSubscriptionRepository())
-        _subscriptionStore = StateObject(wrappedValue: store)
-        _entitlementsAdapter = StateObject(wrappedValue: EntitlementsAdapter(store: store))
+    // Use shared singleton SubscriptionStore instance
+        _subscriptionStore = StateObject(wrappedValue: SubscriptionStore.shared)
+        _entitlementsAdapter = StateObject(wrappedValue: EntitlementsAdapter(store: SubscriptionStore.shared))
     }
     
     var body: some Scene {
@@ -745,6 +702,7 @@ struct App100Days: App {
                 .environmentObject(userStatsService)
                 .environmentObject(navigationRouter)
                 .environmentObject(badgeService)
+                .environmentObject(analyticsService)
                 .preferredColorScheme(themeManager.effectiveColorScheme())
                 .onAppear {
                     setupApp()
@@ -802,8 +760,12 @@ struct AppContentView: View {
     @EnvironmentObject var userStatsService: UserStatsService
     @EnvironmentObject var badgeService: BadgeService
     @StateObject private var navigationRouter = NavigationRouter()
+    @StateObject private var appRouter = AppRouter()
     @State private var isInitializing = true
     @State private var forceWelcomeView = false
+    @State private var subscriptionLoaded = false
+    @State private var accountCreatedAt: Date? = nil
+    @State private var completedOnboarding = false
 
     // Track previous auth state to prevent flickering
     @State private var previousAuthState: Bool? = nil
@@ -818,66 +780,177 @@ struct AppContentView: View {
                 .ignoresSafeArea()
             
             // Content based on state with controlled transitions
-            if isInitializing || (userSession.authState == .loading && !isAuthResolved) {
-                // Initial splash screen - also wait for auth to resolve
+            // Keep splash visible until BOTH auth is resolved AND (user is logged out OR subscription data loaded)
+            // This prevents flashing a stale screen while subscription data loads after login
+            let shouldShowSplash = isInitializing ||
+                                   (userSession.authState == .loading && !isAuthResolved) ||
+                                   (userSession.isAuthenticated && !subscriptionLoaded && isAuthResolved)
+
+            if shouldShowSplash {
+                // Show splash screen while auth resolves or subscription data loads
                 SplashScreen()
                     .transition(.opacity)
                     .onAppear {
-                        // Delay to show splash screen briefly
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                            // Capture auth state before finishing initialization
-                            previousAuthState = userSession.isAuthenticated
-                            
-                            withAnimation(Animation.easeInOut(duration: 0.4)) {
-                                isInitializing = false
-                                
-                                // Check if auth is already resolved
-                                if userSession.authState != .loading {
+                        // Quick check (0.3s) to see if auth is already resolved
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            if userSession.authState != .loading {
+                                withAnimation(Animation.easeInOut(duration: 0.4)) {
+                                    previousAuthState = userSession.isAuthenticated
+                                    isInitializing = false
                                     isAuthResolved = true
                                 }
                             }
                         }
-                        
-                        // Add a timeout to prevent infinite waiting for auth
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                            withAnimation {
+
+                        // Maximum timeout (2s) to prevent infinite waiting
+                        // Extended to give subscription data time to load
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            withAnimation(Animation.easeInOut(duration: 0.4)) {
+                                previousAuthState = userSession.isAuthenticated
+                                isInitializing = false
                                 isAuthResolved = true
                             }
                         }
                     }
             } else {
-                // Authentication → Funnel → Hard Paywall flow
+                // Use centralized routing logic
+                let route = appRouter.computeRoute(
+                    isAuthenticated: userSession.isAuthenticated,
+                    accountCreatedAt: accountCreatedAt,
+                    completedOnboarding: completedOnboarding,
+                    isPro: subscriptionStore.isPro,
+                    entitlementsLoaded: subscriptionLoaded
+                )
+
                 Group {
-                    // Step 1: Check if user is signed in
-                    if !userSession.isAuthenticated {
-                        // Not signed in - show auth screen
-                        AuthView()
+                    switch route {
+                    case .splash:
+                        SplashScreen()
                             .transition(.opacity)
-                    } else if entitlementsAdapter.effectiveIsProUser {
-                        // Step 2: User is signed in and pro - go directly to main app
-                        MainAppView()
+
+                    case .auth:
+                        WelcomeView()
                             .transition(.opacity)
-                    } else {
-                        // Step 3 & 4: User is signed in, not pro - show OnboardingFlowOrchestrator
-                        // This orchestrates: Migration → Funnel → Founder's Paywall based on user type
-                        OnboardingFlowOrchestrator {
-                            // Onboarding completed - user either subscribed or is legacy user
-                            // Refresh subscription status to reflect changes
+
+                    case .loading:
+                        // Show splash screen instead of separate loading screen
+                        // This prevents the jarring "Loading..." screen flash
+                        SplashScreen()
+                            .transition(.opacity)
+
+                    case .funnel:
+                        ImprovedFunnelView {
+                            // Funnel completed - mark as complete and refresh
                             Task {
-                                await subscriptionStore.load()
+                                if let userId = Auth.auth().currentUser?.uid {
+                                    do {
+                                        try await MigrationManager.shared.markOnboardingCompleted(userId: userId)
+                                        print("[Onboarding] completedOnboardingAt set: \(Date())")
+
+                                        // Update local state
+                                        completedOnboarding = true
+
+                                        // Refresh subscription status
+                                        await subscriptionStore.load()
+                                    } catch {
+                                        print("❌ Failed to mark onboarding complete: \(error)")
+                                    }
+                                }
                             }
                         }
                         .transition(.opacity)
+
+                    case .mainPro:
+                        MainAppView()
+                            .transition(.opacity)
+
+                    case .mainFree:
+                        MainAppView()
+                            .transition(.opacity)
                     }
                 }
                 .environmentObject(navigationRouter)
+                .animation(Animation.easeInOut(duration: 0.3), value: route)
                 .animation(Animation.easeInOut(duration: 0.3), value: userSession.isAuthenticated)
-                .animation(Animation.easeInOut(duration: 0.3), value: userSession.hasCompletedOnboarding)
                 .animation(Animation.easeInOut(duration: 0.3), value: forceWelcomeView)
                 .onReceive(userSession.$authState) { state in
                     if state != .loading {
                         withAnimation {
                             isAuthResolved = true
+                        }
+                    }
+                }
+                .onChange(of: subscriptionLoaded) { loaded in
+                    // Update router timer state when subscription loads
+                    Task { @MainActor in
+                        if loaded {
+                            appRouter.markEntitlementsLoaded()
+                        } else if userSession.isAuthenticated {
+                            appRouter.startEntitlementsTimer()
+                        }
+                    }
+                }
+                .onChange(of: userSession.accountCreatedAt) { newValue in
+                    // Sync local accountCreatedAt with UserSession
+                    accountCreatedAt = newValue
+                    // Check if we should mark as loaded
+                    checkIfDataLoaded()
+                }
+                .onChange(of: userSession.hasCompletedOnboarding) { newValue in
+                    // Sync local completedOnboarding with UserSession
+                    completedOnboarding = newValue
+                    // Check if we should mark as loaded
+                    checkIfDataLoaded()
+                }
+                .onChange(of: subscriptionStore.isPro) { _ in
+                    // Check if we should mark as loaded
+                    checkIfDataLoaded()
+                }
+                .onChange(of: subscriptionStore.state.isGrandfatherActive) { _ in
+                    // Check if we should mark as loaded (important for grandfathered users)
+                    checkIfDataLoaded()
+                }
+                .onAppear {
+                    // Initial sync when view appears
+                    accountCreatedAt = userSession.accountCreatedAt
+                    completedOnboarding = userSession.hasCompletedOnboarding
+                    // Check if already loaded
+                    checkIfDataLoaded()
+                }
+                .onChange(of: userSession.isAuthenticated) { isAuth in
+                    // When user authenticates, identify with RevenueCat and load subscription status
+                    if isAuth, let userId = Auth.auth().currentUser?.uid {
+                        Task {
+                            // Run migration and RevenueCat identity in parallel for faster loading
+                            async let migration = MigrationManager.shared.checkAndMigrate(for: userId)
+                            async let identity = subscriptionStore.identifyUser(userId)
+
+                            // Wait for both to complete
+                            do {
+                                try await migration
+                            } catch {
+                                print("❌ Migration failed: \(error.localizedDescription)")
+                            }
+                            await identity
+
+                            // UserSession automatically loads profile via auth state listener
+                            // Local state will sync via onChange observers above
+
+                            // Load subscription status after identity is set
+                            await subscriptionStore.load()
+
+                            // Check if data is loaded (accountCreatedAt + subscription status)
+                            await MainActor.run {
+                                checkIfDataLoaded()
+                            }
+                        }
+                    } else {
+                        // Reset when user signs out
+                        subscriptionLoaded = false
+                        accountCreatedAt = nil
+                        completedOnboarding = false
+                        Task {
+                            await subscriptionStore.reset()
                         }
                     }
                 }
@@ -905,41 +978,30 @@ struct AppContentView: View {
             previousAuthState = newValue
         }
         .onAppear {
-            // Listen for force navigation to welcome screen
-            NotificationCenter.default.addObserver(
-                forName: NSNotification.Name("ForceNavigateToWelcome"),
-                object: nil,
-                queue: .main
-            ) { _ in
-                withAnimation(Animation.easeInOut(duration: 0.3)) {
-                    // First set the flag to trigger view transition
-                    forceWelcomeView = true
-                    
-                    // Reset all view models and services in a specific order
-                    Task { @MainActor in
-                        // First reset UI-related services
-                        navigationRouter.reset()
-                        
-                        // Reset view models
-                        progressDashboardViewModel.reset()
-                        
-                        // Wait a bit to ensure view changes have time to propagate
-                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-                        
-                        // Reset remaining services
-                        userStatsService.reset()
-                        badgeService.reset()
-                        notificationService.reset()
-                        
-                        // Reset after a short delay to prepare for future sign-ins
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                            // Only reset the flag if we're still in the welcome state
-                            // This prevents showing main app during transition
-                            if !userSession.isAuthenticated {
-                                forceWelcomeView = false
-                            }
-                        }
-                    }
+            // No-op here; we handle ForceNavigateToWelcome via onReceive to safely mutate view state
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ForceNavigateToWelcome"))) { _ in
+            withAnimation(Animation.easeInOut(duration: 0.3)) {
+                // Trigger the transition to the welcome view
+                forceWelcomeView = true
+            }
+
+            // Reset services/view models on the main actor
+            Task { @MainActor in
+                navigationRouter.reset()
+                progressDashboardViewModel.reset()
+
+                // Give views time to update
+                try? await Task.sleep(nanoseconds: 200_000_000) // 0.2s
+
+                userStatsService.reset()
+                badgeService.reset()
+                notificationService.reset()
+
+                // Wait briefly then clear the flag if the user is still signed out
+                try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s
+                if !userSession.isAuthenticated {
+                    forceWelcomeView = false
                 }
             }
         }
@@ -949,9 +1011,35 @@ struct AppContentView: View {
     private var shouldShowWelcomeView: Bool {
         return !userSession.isAuthenticated || forceWelcomeView
     }
+
+    // Helper to check if all data is loaded and mark subscriptionLoaded
+    private func checkIfDataLoaded() {
+        // Only mark as loaded if authenticated and not already loaded
+        guard userSession.isAuthenticated, !subscriptionLoaded else {
+            return
+        }
+
+        // Check if SubscriptionStore has computed the isPro status
+        // We know it's ready when it has set isPro to a meaningful value
+        // IMPORTANT: For grandfathered users, we need accountCreatedAt to be loaded
+        // to compute grandfather status, so check that as well
+        let hasAccountData = accountCreatedAt != nil
+        let hasSubscriptionData = subscriptionStore.isPro || subscriptionStore.state.rcIsPro || subscriptionStore.state.isGrandfatherActive
+
+        // Mark as loaded if we have EITHER:
+        // 1. Subscription data (RC Pro or Grandfather Pro is computed), OR
+        // 2. Account data is loaded AND subscription state has been initialized (even if false)
+        //    This handles the case where user is not Pro and not grandfathered
+        let isReady = hasSubscriptionData || (hasAccountData && subscriptionStore.state != .default)
+
+        if isReady {
+            subscriptionLoaded = true
+        }
+    }
 }
 
 // Add this class after AppContentView and before the helper functions
+@MainActor
 class AuthUtilities {
     // Store a strong reference to the delegate and provider to prevent deallocation
     private static var delegate = DummyAuthDelegate.shared
@@ -967,16 +1055,13 @@ class AuthUtilities {
             let appleIDProvider = ASAuthorizationAppleIDProvider()
             let request = appleIDProvider.createRequest()
             request.requestedScopes = []
-            
+
             // Store strong reference to provider
             provider = DummyPresentationProvider(window: window)
-            
+
             let authController = ASAuthorizationController(authorizationRequests: [request])
             authController.delegate = delegate
             authController.presentationContextProvider = provider
-            
-            // Don't actually present it - just initialize the controller
-            print("Pre-initialized Apple authentication controller")
         }
     }
 }
@@ -1017,21 +1102,20 @@ struct ErrorView: View {
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 70))
+                .font(AppTypography.font(size: 70))
                 .foregroundColor(.yellow)
             
             Text("Something went wrong")
-                .font(.title)
-                .fontWeight(.bold)
+                .font(AppTypography.title1(.bold))
             
             Text(message)
-                .font(.body)
+                .font(AppTypography.body())
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            
+
             Button(action: retryAction) {
                 Text("Try Again")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
                     .padding()
                     .background(Color.blue)
@@ -1048,39 +1132,66 @@ struct SplashScreen: View {
     @State private var opacity = 0.0
     @State private var scale = 0.9
     @State private var rotation = 0.0
-    
+
     var body: some View {
         ZStack {
-            // Clean background
-            Color.theme.background.ignoresSafeArea()
-            
-            VStack(spacing: 24) {
+            // Background gradient matching other screens
+            LinearGradient(
+                colors: [
+                    DS.Colors.gradientA,
+                    DS.Colors.gradientB
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: DS.Spacing.xl) {
                 // Clean, minimalist logo
                 ZStack {
+                    // Outer glow
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.primary.opacity(0.2),
+                                    Color.primary.opacity(0.08),
+                                    .clear
+                                ],
+                                center: .center,
+                                startRadius: 30,
+                                endRadius: 90
+                            )
+                        )
+                        .frame(width: 180, height: 180)
+                        .blur(radius: 20)
+
                     // Outer circle with gradient
                     Circle()
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)]),
+                                colors: [
+                                    Color.primary.opacity(0.18),
+                                    Color.primary.opacity(0.08)
+                                ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 110, height: 110)
-                        .shadow(color: Color.theme.accent.opacity(0.2), radius: 10, x: 0, y: 5)
-                    
+                        .frame(width: 120, height: 120)
+                        .shadow(color: .black.opacity(0.1), radius: 10, x: 0, y: 5)
+
                     // Inner checkmark
                     Image(systemName: "checkmark")
-                        .font(.system(size: 50, weight: .bold))
-                        .foregroundColor(.white)
+                        .font(AppTypography.display())
+                        .foregroundStyle(.white)
                         .rotationEffect(.degrees(rotation))
                 }
-                
-                // App name with clean typography
+
+                // App name with proper typography
                 Text("100Days")
-                    .font(.system(size: 38, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .tracking(1) // Slightly increased letter spacing for cleaner look
+                    .font(AppTypography.largeTitle(.bold))
+                    .foregroundStyle(Color.primary)
             }
             .scaleEffect(scale)
             .opacity(opacity)
@@ -1090,7 +1201,7 @@ struct SplashScreen: View {
                     opacity = 1.0
                     scale = 1.0
                 }
-                
+
                 // Subtle rotation animation for the checkmark
                 withAnimation(Animation.easeInOut(duration: 1.2)) {
                     rotation = 360

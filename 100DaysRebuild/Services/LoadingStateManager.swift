@@ -3,6 +3,7 @@ import SwiftUI
 import Combine
 
 /// Central manager for loading states across the app
+@MainActor
 class LoadingStateManager: ObservableObject {
     /// Shared instance for global access
     static let shared = LoadingStateManager()
@@ -217,7 +218,7 @@ struct LoadingOverlay: ViewModifier {
                             loadingManager.dismissError()
                         }) {
                             Image(systemName: "xmark")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(AppTypography.caption1(.bold))
                                 .foregroundColor(.white.opacity(0.8))
                         }
                     }
@@ -267,12 +268,7 @@ extension View {
 // MARK: - Function to safely run UI updates on the main thread
 
 /// Run a closure on the main thread
-func onMainThread(_ action: @escaping () -> Void) {
-    if Thread.isMainThread {
-        action()
-    } else {
-        DispatchQueue.main.async {
-            action()
-        }
-    }
+@MainActor
+func onMainThread(_ action: @escaping @MainActor () -> Void) {
+    action()
 } 

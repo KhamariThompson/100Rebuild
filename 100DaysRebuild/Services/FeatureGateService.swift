@@ -2,8 +2,8 @@ import Foundation
 
 /// Lightweight on-device feature gate service
 /// Allows registering simple feature flags with defaults and checking if enabled.
-final class FeatureGateService {
-    static let shared = FeatureGateService()
+final class FeatureGateService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = FeatureGateService()
 
     private let storageKey = "feature_gates"
     private var flags: [String: Bool] = [:]

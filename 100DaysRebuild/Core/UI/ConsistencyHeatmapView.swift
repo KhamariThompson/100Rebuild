@@ -232,7 +232,7 @@ public struct ConsistencyHeatmapView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Consistency Heatmap")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(AppTypography.headline(.semibold))
                             .foregroundColor(.theme.text)
                         
                         Button(action: {
@@ -242,11 +242,11 @@ public struct ConsistencyHeatmapView: View {
                         }) {
                             HStack(spacing: 4) {
                                 Text(formattedDateRange())
-                                    .font(.system(size: 12, weight: .medium))
+                                    .font(AppTypography.caption1(.medium))
                                     .foregroundColor(.theme.accent)
                                 
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(AppTypography.caption2(.semibold))
                                     .foregroundColor(.theme.accent)
                                     .rotationEffect(Angle(degrees: showHistoryPicker ? 180 : 0))
                             }
@@ -276,11 +276,11 @@ public struct ConsistencyHeatmapView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(selectedTimeRange.title)
-                                .font(.system(size: 12, weight: .medium))
+                                .font(AppTypography.caption1(.medium))
                                 .foregroundColor(.theme.subtext)
                             
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 10))
+                                .font(AppTypography.caption2())
                                 .foregroundColor(.theme.subtext)
                         }
                         .padding(.horizontal, 8)
@@ -301,7 +301,7 @@ public struct ConsistencyHeatmapView: View {
                                 if let months = groupedMonths[year]?.sorted(by: { $0.month > $1.month }) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("\(year)")
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .font(AppTypography.subhead(.semibold))
                                             .foregroundColor(.theme.text)
                                             .padding(.top, 4)
                                         
@@ -311,14 +311,14 @@ public struct ConsistencyHeatmapView: View {
                                             }) {
                                                 HStack {
                                                     Text(yearMonth.displayString)
-                                                        .font(.system(size: 13))
+                                                        .font(AppTypography.caption1())
                                                         .foregroundColor(.theme.text)
                                                     
                                                     Spacer()
                                                     
                                                     if YearMonth.from(date: currentStartDate) == yearMonth {
                                                         Image(systemName: "checkmark")
-                                                            .font(.system(size: 12))
+                                                            .font(AppTypography.caption1())
                                                             .foregroundColor(.theme.accent)
                                                     }
                                                 }
@@ -354,7 +354,7 @@ public struct ConsistencyHeatmapView: View {
                     // Previous period button
                     Button(action: navigateToPrevious) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AppTypography.subhead(.semibold))
                             .foregroundColor(.theme.accent)
                             .padding(6)
                             .background(
@@ -387,7 +387,7 @@ public struct ConsistencyHeatmapView: View {
                         }
                     }) {
                         Text("Today")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(AppTypography.caption1(.medium))
                             .foregroundColor(.theme.accent)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -400,7 +400,7 @@ public struct ConsistencyHeatmapView: View {
                     // Next period button
                     Button(action: navigateToNext) {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AppTypography.subhead(.semibold))
                             .foregroundColor(.theme.accent)
                             .padding(6)
                             .background(
@@ -425,7 +425,7 @@ public struct ConsistencyHeatmapView: View {
                 HStack(spacing: 3) {
                     ForEach(0..<7, id: \.self) { index in
                         Text(weekdayLabels[index])
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .frame(maxWidth: .infinity)
                     }
@@ -448,7 +448,7 @@ public struct ConsistencyHeatmapView: View {
                                 let date = currentGridData[weekIndex][0].date
                                 let month = Calendar.current.component(.month, from: date)
                                 Text(monthLabel(for: month))
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(.theme.subtext)
                                     .frame(width: 35, alignment: .leading)
                             } else {
@@ -489,7 +489,7 @@ public struct ConsistencyHeatmapView: View {
                             .frame(width: 24, height: 12)
                         
                         Text("No Check-in")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                     }
                     
@@ -500,7 +500,7 @@ public struct ConsistencyHeatmapView: View {
                             .frame(width: 24, height: 12)
                         
                         Text("Check-in")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -513,7 +513,7 @@ public struct ConsistencyHeatmapView: View {
                         .frame(width: 8, height: 8)
                     
                     Text("Today")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
             }

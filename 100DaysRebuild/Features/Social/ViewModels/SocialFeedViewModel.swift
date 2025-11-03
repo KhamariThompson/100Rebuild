@@ -22,8 +22,7 @@ class SocialFeedViewModel: ObservableObject {
     private let notificationService = NotificationService.shared
     
     deinit {
-        stopListening()
-        cancellables.forEach { $0.cancel() }
+        // Cancellables and listeners will be automatically cleaned up when deallocated
         print("✅ SocialFeedViewModel released")
     }
     

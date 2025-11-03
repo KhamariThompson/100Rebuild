@@ -125,7 +125,7 @@ struct MainTabView: View {
                                     }
                                 }) {
                                     Label("Start New Challenge", systemImage: "plus.circle.fill")
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(.theme.accent)
                                 }
                                 
@@ -149,7 +149,7 @@ struct MainTabView: View {
                                     }
                                 }) {
                                     Label("Check In", systemImage: "checkmark.circle.fill")
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(.theme.accent)
                                 }
                                 
@@ -160,7 +160,7 @@ struct MainTabView: View {
                                     }
                                 }) {
                                     Label("Cancel", systemImage: "xmark.circle.fill")
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(.theme.subtext)
                                 }
                             }
@@ -381,7 +381,7 @@ struct ChallengeSelectorView: View {
             // Header
             HStack {
                 Text("Check In")
-                    .font(.title2)
+                    .font(AppTypography.title2())
                     .fontWeight(.bold)
                     .foregroundColor(.theme.text)
                 
@@ -389,7 +389,7 @@ struct ChallengeSelectorView: View {
                 
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(AppTypography.title2())
                         .foregroundColor(.theme.subtext)
                 }
             }
@@ -405,7 +405,7 @@ struct ChallengeSelectorView: View {
             
             // Instructions text
             Text("Select a challenge to check in")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .padding(.top, 16)
                 .padding(.bottom, 8)
@@ -430,12 +430,12 @@ struct ChallengeSelectorView: View {
                                 // Challenge info
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(challenge.title)
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(.theme.text)
                                         .lineLimit(1)
                                     
                                     Text("Day \(challenge.daysCompleted + 1) of 100")
-                                        .font(.subheadline)
+                                        .font(AppTypography.subhead())
                                         .foregroundColor(.theme.subtext)
                                 }
                                 
@@ -444,7 +444,7 @@ struct ChallengeSelectorView: View {
                                 // Chevron
                                 Image(systemName: "chevron.right")
                                     .foregroundColor(.theme.subtext)
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(AppTypography.subhead(.semibold))
                             }
                             .padding()
                             .background(

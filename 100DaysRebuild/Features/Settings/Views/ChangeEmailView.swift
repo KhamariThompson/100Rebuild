@@ -1,5 +1,5 @@
 import SwiftUI
-import FirebaseAuth
+@preconcurrency import FirebaseAuth
 
 struct ChangeEmailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -131,7 +131,7 @@ struct ChangeEmailView: View {
                 
                 // Step 1: Re-authenticate with current credentials
                 let credential = EmailAuthProvider.credential(withEmail: currentEmail, password: password)
-                try await user.reauthenticate(with: credential)
+                let _: AuthDataResult = try await user.reauthenticate(with: credential)
                 
                 // Step 2: Send verification email for the new address
                 try await user.sendEmailVerification(beforeUpdatingEmail: newEmail)

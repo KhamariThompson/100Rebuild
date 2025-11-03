@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 // MARK: - Improved Funnel View with Smart Conversion
 //
@@ -26,7 +27,7 @@ struct ImprovedFunnelView: View {
     @State private var showMicroWin = false
     @Environment(\.dismiss) var dismiss
 
-    private let totalSteps = 8
+    private let totalSteps = 10
 
     // Social proof numbers (rotate these from real data)
     private let socialProofStats = [
@@ -130,12 +131,12 @@ struct ImprovedFunnelView: View {
         VStack(spacing: DS.Spacing.sm) {
             // Step-specific messaging
             Text(headerTitle)
-                .font(DS.Typo.titleXL)
+                .font(AppTypography.largeTitle(.bold))
                 .foregroundStyle(DS.Colors.onSurface)
                 .multilineTextAlignment(.center)
 
             Text(headerSubtitle)
-                .font(DS.Typo.body)
+                .font(AppTypography.body())
                 .foregroundStyle(DS.Colors.onSurfaceSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -210,13 +211,13 @@ struct ImprovedFunnelView: View {
             // Progress text with emotional language
             HStack {
                 Text(progressText)
-                    .font(DS.Typo.caption1)
+                    .font(AppTypography.caption1())
                     .foregroundStyle(DS.Colors.onSurfaceSecondary)
 
                 Spacer()
 
                 Text("\(currentStep) of \(totalSteps)")
-                    .font(DS.Typo.caption1.bold())
+                    .font(AppTypography.caption1(.bold))
                     .foregroundStyle(DS.Colors.accent)
             }
         }
@@ -232,11 +233,13 @@ struct ImprovedFunnelView: View {
         let percentage = Int((Double(currentStep) / Double(totalSteps)) * 100)
 
         switch currentStep {
+        case 0:
+            return "Let's get to know you..."
         case 1, 2:
             return "Getting started..."
         case 3, 4, 5:
             return "\(percentage)% done — you're invested now"
-        case 6, 7:
+        case 6, 7, 8:
             return "Almost done! Don't lose this progress"
         case totalSteps:
             return "Complete! 🎉"
@@ -251,15 +254,15 @@ struct ImprovedFunnelView: View {
         HStack(spacing: DS.Spacing.md) {
             Image(systemName: "person.3.fill")
                 .foregroundStyle(DS.Colors.accent)
-                .font(.system(size: 20))
+                .font(AppTypography.title3())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(socialProofStats[currentStep % socialProofStats.count])
-                    .font(DS.Typo.subhead.bold())
+                    .font(AppTypography.subhead(.bold))
                     .foregroundStyle(DS.Colors.onSurface)
 
                 Text("You're not alone in this")
-                    .font(DS.Typo.caption1)
+                    .font(AppTypography.caption1())
                     .foregroundStyle(DS.Colors.onSurfaceSecondary)
             }
 
@@ -287,7 +290,7 @@ struct ImprovedFunnelView: View {
     private var benefitsSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
             Text(benefitsTitle)
-                .font(DS.Typo.title3)
+                .font(AppTypography.title3())
                 .foregroundStyle(DS.Colors.onSurface)
                 .padding(.horizontal, DS.Spacing.xl)
 
@@ -320,12 +323,12 @@ struct ImprovedFunnelView: View {
             // Question text
             VStack(alignment: .leading, spacing: DS.Spacing.xs) {
                 Text(question.question)
-                    .font(DS.Typo.titleL)
+                    .font(AppTypography.title1())
                     .foregroundStyle(DS.Colors.onSurface)
 
                 if let subtitle = question.subtitle {
                     Text(subtitle)
-                        .font(DS.Typo.subhead)
+                        .font(AppTypography.subhead())
                         .foregroundStyle(DS.Colors.onSurfaceSecondary)
                 }
             }
@@ -364,7 +367,7 @@ struct ImprovedFunnelView: View {
         }) {
             HStack {
                 Text(option)
-                    .font(DS.Typo.body)
+                    .font(AppTypography.body())
                     .foregroundStyle(isSelected ? DS.Colors.accent : DS.Colors.onSurface)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -389,22 +392,41 @@ struct ImprovedFunnelView: View {
     @ViewBuilder
     private func textInputOption(_ question: FunnelQuestion) -> some View {
         VStack(alignment: .leading, spacing: DS.Spacing.xs) {
-            TextField("Enter your commitment...", text: $funnelModel.answers.freeTextAnswer)
-                .font(DS.Typo.body)
-                .padding(DS.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
-                        .fill(DS.Colors.surface)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
-                                .stroke(DS.Colors.border, lineWidth: 1)
-                        )
-                )
-                .padding(.horizontal, DS.Spacing.xl)
+            if question.id == 0 {
+                // Name question
+                TextField("Your name...", text: $funnelModel.answers.userName)
+                    .font(AppTypography.body())
+                    .padding(DS.Spacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
+                            .fill(DS.Colors.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
+                                    .stroke(DS.Colors.border, lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, DS.Spacing.xl)
+                    .textContentType(.name)
+                    .autocapitalization(.words)
+            } else if question.id == 8 {
+                // Commitment name question
+                TextField("Enter your commitment...", text: $funnelModel.answers.customCommitmentName)
+                    .font(AppTypography.body())
+                    .padding(DS.Spacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
+                            .fill(DS.Colors.surface)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: DS.Spacing.cardCornerRadius)
+                                    .stroke(DS.Colors.border, lineWidth: 1)
+                            )
+                    )
+                    .padding(.horizontal, DS.Spacing.xl)
+            }
 
             if let subtitle = question.subtitle {
                 Text(subtitle)
-                    .font(DS.Typo.caption1)
+                    .font(AppTypography.caption1())
                     .foregroundStyle(DS.Colors.onSurfaceSecondary)
                     .padding(.horizontal, DS.Spacing.xl)
             }
@@ -419,7 +441,7 @@ struct ImprovedFunnelView: View {
             Button(action: handlePrimaryAction) {
                 HStack {
                     Text(primaryCTAText)
-                        .font(DS.Typo.body.bold())
+                        .font(AppTypography.body(.bold))
 
                     if currentStep < totalSteps {
                         Image(systemName: "arrow.right")
@@ -439,7 +461,7 @@ struct ImprovedFunnelView: View {
             if currentStep > 1 {
                 Button(action: handleBackAction) {
                     Text("Back")
-                        .font(DS.Typo.body)
+                        .font(AppTypography.body())
                         .foregroundStyle(DS.Colors.onSurfaceSecondary)
                 }
             }
@@ -448,7 +470,7 @@ struct ImprovedFunnelView: View {
             if currentStep > 2 {
                 Button(action: handleExitIntent) {
                     Text("Exit (lose progress)")
-                        .font(DS.Typo.caption1)
+                        .font(AppTypography.caption1())
                         .foregroundStyle(DS.Colors.onSurfaceSecondary.opacity(0.6))
                 }
             }
@@ -509,7 +531,7 @@ struct ImprovedFunnelView: View {
                 .frame(width: 60, height: 60)
 
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 28))
+                .font(AppTypography.title2())
                 .foregroundStyle(DS.Colors.accent)
         }
     }
@@ -517,12 +539,12 @@ struct ImprovedFunnelView: View {
     private var exitDialogHeadline: some View {
         VStack(spacing: DS.Spacing.xs) {
             Text(exitDialogTitle)
-                .font(DS.Typo.titleL)
+                .font(AppTypography.title1())
                 .foregroundStyle(DS.Colors.onSurface)
                 .multilineTextAlignment(.center)
 
             Text(exitDialogSubtitle)
-                .font(DS.Typo.body)
+                .font(AppTypography.body())
                 .foregroundStyle(DS.Colors.onSurfaceSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -532,18 +554,18 @@ struct ImprovedFunnelView: View {
         HStack(spacing: DS.Spacing.md) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Your progress:")
-                    .font(DS.Typo.caption1)
+                    .font(AppTypography.caption1())
                     .foregroundStyle(DS.Colors.onSurfaceSecondary)
 
                 Text("\(currentStep) of \(totalSteps) answered")
-                    .font(DS.Typo.subhead.bold())
+                    .font(AppTypography.subhead(.bold))
                     .foregroundStyle(DS.Colors.onSurface)
             }
 
             Spacer()
 
             Text("\(Int((Double(currentStep) / Double(totalSteps)) * 100))%")
-                .font(DS.Typo.title2.bold())
+                .font(AppTypography.title2(.bold))
                 .foregroundStyle(DS.Colors.accent)
         }
         .padding(DS.Spacing.md)
@@ -561,7 +583,7 @@ struct ImprovedFunnelView: View {
                 }
             }) {
                 Text("Finish what I started")
-                    .font(DS.Typo.body.bold())
+                    .font(AppTypography.body(.bold))
                     .frame(maxWidth: .infinity)
                     .padding(DS.Spacing.md)
                     .background(DS.Colors.accent)
@@ -577,9 +599,23 @@ struct ImprovedFunnelView: View {
                 dismiss()
             }) {
                 Text("Exit anyway")
-                    .font(DS.Typo.body)
+                    .font(AppTypography.body())
                     .foregroundStyle(DS.Colors.onSurfaceSecondary)
             }
+
+            Button(action: {
+                analyticsService.trackEvent("funnel_logout_requested", properties: [
+                    "step": currentStep
+                ])
+                Task {
+                    try await userSession.signOut()
+                }
+            }) {
+                Text("Log Out")
+                    .font(AppTypography.caption1())
+                    .foregroundStyle(DS.Colors.error)
+            }
+            .padding(.top, DS.Spacing.xs)
         }
     }
 
@@ -610,14 +646,14 @@ struct ImprovedFunnelView: View {
     private var microWinCelebration: some View {
         VStack(spacing: DS.Spacing.md) {
             Text("🎉")
-                .font(.system(size: 40))
+                .font(AppTypography.display())
 
             Text("Halfway there!")
-                .font(DS.Typo.title3.bold())
+                .font(AppTypography.title3(.bold))
                 .foregroundStyle(DS.Colors.onSurface)
 
             Text("You're building something real")
-                .font(DS.Typo.body)
+                .font(AppTypography.body())
                 .foregroundStyle(DS.Colors.onSurfaceSecondary)
         }
         .padding(DS.Spacing.xl)
@@ -688,7 +724,7 @@ struct ImprovedFunnelView: View {
         generator.impactOccurred()
 
         withAnimation(.easeOut(duration: 0.25)) {
-            currentStep = max(1, currentStep - 1)
+            currentStep = max(0, currentStep - 1)
             funnelModel.previousStep()
         }
     }
@@ -709,17 +745,46 @@ struct ImprovedFunnelView: View {
     private func completeFunnel() {
         userSession.completeFunnel()
 
+        // Save user's name to Firestore profile
+        if !funnelModel.answers.userName.isEmpty,
+           let userId = userSession.currentUser?.uid {
+            Task {
+                await saveUserName(userId: userId, name: funnelModel.answers.userName)
+            }
+        }
+
         analyticsService.trackEvent("funnel_completed", properties: [
             "total_steps": totalSteps,
-            "time_spent": Date().timeIntervalSince(startTime)
+            "time_spent": Date().timeIntervalSince(startTime),
+            "user_name_provided": !funnelModel.answers.userName.isEmpty
         ])
 
-        // Start the 5-minute welcome offer window
-        subscriptionStore.startFiveMinuteWindow()
+        // Start the 5-minute welcome offer window ONLY for new users (not legacy)
+        let migrationManager = MigrationManager.shared
+        let isLegacy = migrationManager.isInLegacyGracePeriod()
 
-        print("⏱️  ImprovedFunnelView: Started 5-minute window, routing to paywall")
+        if !isLegacy {
+            subscriptionStore.startFiveMinuteWindow()
+            print("⏱️  ImprovedFunnelView: Started 5-minute window for new user")
+        } else {
+            print("⏭️  ImprovedFunnelView: Skipped 5-minute window for legacy user")
+        }
 
         onComplete()
+    }
+
+    private func saveUserName(userId: String, name: String) async {
+        do {
+            let db = Firestore.firestore()
+            try await db.collection("users").document(userId).updateData([
+                "username": name,
+                "displayName": name,
+                "updatedAt": Timestamp(date: Date())
+            ])
+            print("✅ Saved user's name to Firestore: \(name)")
+        } catch {
+            print("❌ Failed to save user's name: \(error.localizedDescription)")
+        }
     }
 }
 

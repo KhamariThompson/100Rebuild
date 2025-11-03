@@ -62,12 +62,12 @@ struct CheckInNotePromptView: View {
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Day \(dayNumber) Reflection")
-                .font(.system(size: 24, weight: .bold))
+                .font(AppTypography.title2(.bold))
                 .foregroundColor(.theme.text)
                 .padding(.top, 8)
             
             Text(challenge.title)
-                .font(.system(size: 18))
+                .font(AppTypography.headline())
                 .foregroundColor(.theme.subtext)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,11 +80,11 @@ struct CheckInNotePromptView: View {
     private var promptCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Today's Prompt")
-                .font(.system(size: 16, weight: .semibold))
+                .font(AppTypography.body(.semibold))
                 .foregroundColor(.theme.subtext)
             
             Text(prompt)
-                .font(.system(size: 22, weight: .medium))
+                .font(AppTypography.title2(.medium))
                 .foregroundColor(.theme.accent)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -98,7 +98,7 @@ struct CheckInNotePromptView: View {
     private var journalInputCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Your Reflection")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(.theme.text)
             
             journalTextEditor
@@ -151,7 +151,7 @@ struct CheckInNotePromptView: View {
     private var photoAttachmentCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Add Photo (Optional)")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(.theme.text)
             
             photoContent
@@ -202,7 +202,7 @@ struct CheckInNotePromptView: View {
                     .frame(width: 30, height: 30)
                 
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(AppTypography.caption1(.bold))
                     .foregroundColor(.white)
             }
         }
@@ -210,22 +210,26 @@ struct CheckInNotePromptView: View {
     }
     
     private var photoPickerButton: some View {
-        PhotosPicker(selection: $photoItem, matching: .images) {
+        // Use a minimal, self-contained label here to avoid capturing
+        // MainActor-isolated computed properties or View instances inside the
+        // PhotosPicker label closure (the closure is treated as @Sendable).
+        // Keep styling simple and local to the closure.
+        return PhotosPicker(selection: $photoItem, matching: .images) {
             VStack {
                 Image(systemName: "camera.fill")
-                    .font(.system(size: 30))
-                    .foregroundColor(.theme.accent.opacity(0.8))
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundColor(.accentColor)
                     .padding(.bottom, 8)
-                
+
                 Text("Add a photo to your reflection")
-                    .font(.system(size: 14))
+                    .font(.subheadline)
                     .multilineTextAlignment(.center)
-                    .foregroundColor(.theme.subtext)
+                    .foregroundColor(.secondary)
             }
             .frame(height: 120)
             .frame(maxWidth: .infinity)
-            .background(photoPickerBackground)
-            .overlay(photoPickerBorder)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Color(.secondarySystemBackground)))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(.systemGray4), lineWidth: 1))
         }
     }
     
@@ -272,12 +276,12 @@ struct CheckInNotePromptView: View {
     private var saveButtonContent: some View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 18))
+                .font(AppTypography.headline())
                 .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                 .padding(.trailing, 6)
             
             Text("Save")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(Color.adaptiveForeground(for: colorScheme))
         }
         .padding(.vertical, 16)
@@ -301,7 +305,7 @@ struct CheckInNotePromptView: View {
             isPresented = false
         }) {
             Text("Skip")
-                .font(.system(size: 16, weight: .medium))
+                .font(AppTypography.body(.medium))
                 .foregroundColor(.theme.subtext)
                 .padding(.vertical, 16)
                 .frame(maxWidth: .infinity)
@@ -313,7 +317,7 @@ struct CheckInNotePromptView: View {
             closeButton
             Spacer()
             Text("Journal")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(.theme.text)
             Spacer()
             // Empty view to balance the layout
@@ -333,7 +337,7 @@ struct CheckInNotePromptView: View {
     private var closeButton: some View {
         Button(action: { isPresented = false }) {
             Image(systemName: "xmark")
-                .font(.system(size: 16, weight: .medium))
+                .font(AppTypography.body(.medium))
                 .foregroundColor(.theme.text)
                 .padding(10)
                 .background(

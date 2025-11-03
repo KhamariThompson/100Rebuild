@@ -15,14 +15,14 @@ struct TooltipView: View {
             // Icon if present
             if let icon = style.icon {
                 Image(systemName: icon)
-                    .font(.system(size: 20))
+                    .font(AppTypography.title3())
                     .foregroundColor(style.iconColor)
                     .padding(.top, 4)
             }
             
             // Text content
             Text(text)
-                .font(.system(size: 14, weight: .medium))
+                .font(AppTypography.subhead(.medium))
                 .foregroundColor(style.textColor)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

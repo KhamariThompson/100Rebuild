@@ -17,7 +17,7 @@ struct BadgeUnlockView: View {
                 
                 Button(action: onDismiss) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(AppTypography.title2())
                         .foregroundColor(.theme.subtext)
                         .padding()
                 }
@@ -48,7 +48,7 @@ struct BadgeUnlockView: View {
                         
                         // Icon
                         Image(systemName: badge.iconName)
-                            .font(.system(size: 80))
+                            .font(AppTypography.displayXL())
                             .foregroundColor(badge.category.color)
                             .scaleEffect(showBadge ? 1.2 : 1.0)
                             .animation(Animation.easeInOut(duration: 0.5).repeatCount(3, autoreverses: true), value: showBadge)
@@ -61,18 +61,18 @@ struct BadgeUnlockView: View {
                 if showDetails {
                     // Badge name
                     Text("Badge Unlocked!")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(AppTypography.title1(.bold))
                         .foregroundColor(.theme.text)
                         .padding(.top, 16)
                     
                     Text(badge.name)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(AppTypography.title2(.bold))
                         .foregroundColor(badge.category.color)
                         .padding(.top, 4)
                     
                     // Description
                     Text(badge.description)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(.theme.subtext)
                         .multilineTextAlignment(.center)
                         .padding(.top, 8)
@@ -81,11 +81,11 @@ struct BadgeUnlockView: View {
                     // Category
                     HStack(spacing: 8) {
                         Image(systemName: badge.category.icon)
-                            .font(.system(size: 16))
+                            .font(AppTypography.body())
                             .foregroundColor(badge.category.color)
                         
                         Text(badge.category.rawValue)
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.subtext)
                     }
                     .padding(.top, 16)
@@ -94,11 +94,11 @@ struct BadgeUnlockView: View {
                     if badge.reward.type != .none {
                         HStack {
                             Image(systemName: "gift.fill")
-                                .font(.system(size: 16))
+                                .font(AppTypography.body())
                                 .foregroundColor(.yellow)
                             
                             Text("Reward: \(badge.reward.description)")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(AppTypography.body(.medium))
                                 .foregroundColor(.yellow)
                         }
                         .padding(.vertical, 6)
@@ -137,7 +137,7 @@ struct BadgeUnlockView: View {
                     // Continue button
                     Button(action: onDismiss) {
                         Text("Continue")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.subtext)
                             .padding(.top, 16)
                     }

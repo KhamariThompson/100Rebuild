@@ -102,7 +102,7 @@ struct ExploreChallengesView: View {
     private var emptyStateView: some View {
         VStack(spacing: AppSpacing.m) {
             Image(systemName: "globe")
-                .font(.system(size: 60))
+                .font(AppTypography.font(size: 60, weight: .bold))
                 .foregroundColor(.theme.accent.opacity(0.7))
             
             Text("No Public Challenges")

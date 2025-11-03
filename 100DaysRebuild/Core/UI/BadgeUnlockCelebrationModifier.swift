@@ -84,13 +84,13 @@ struct BadgeUnlockCelebrationModifier: ViewModifier {
             // Badge icon
             if #available(iOS 17.0, *) {
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 50))
+                    .font(AppTypography.font(size: 50, weight: .bold))
                     .foregroundColor(badge.category.color)
                     .symbolEffect(.bounce, options: .repeating, value: isPresented)
             } else {
                 // Fallback on earlier versions
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 50))
+                    .font(AppTypography.font(size: 50, weight: .bold))
                     .foregroundColor(badge.category.color)
             }
         }
@@ -113,13 +113,13 @@ struct BadgeUnlockCelebrationModifier: ViewModifier {
         VStack(spacing: 16) {
             // Badge unlocked text
             Text("Badge Unlocked!")
-                .font(.system(size: 28, weight: .bold))
+                .font(AppTypography.title1(.bold))
                 .foregroundColor(.white)
                 .opacity(animationProgress)
             
             // Badge name
             Text(badge.name)
-                .font(.system(size: 22, weight: .bold))
+                .font(AppTypography.title2(.bold))
                 .foregroundColor(badge.category.color)
                 .opacity(animationProgress)
             

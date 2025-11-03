@@ -47,7 +47,7 @@ struct DummyAdBannerView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text("Ad-free experience with Pro")
-                        .font(.footnote)
+                        .font(AppTypography.footnote())
                         .foregroundColor(.theme.subtext)
                     
                     Spacer()
@@ -56,7 +56,7 @@ struct DummyAdBannerView: View {
                         // TODO: Trigger paywall through navigation - showPaywall removed from SSOT
                     }) {
                         Text("Upgrade")
-                            .font(.footnote)
+                            .font(AppTypography.footnote())
                             .fontWeight(.semibold)
                             .foregroundColor(.theme.accent)
                     }
@@ -72,7 +72,7 @@ struct DummyAdBannerView: View {
                     
                     Text("Advertisement")
                         .foregroundColor(.theme.subtext)
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                 }
                 .frame(height: 50)
                 .contentShape(Rectangle())
@@ -108,14 +108,14 @@ struct ProUpgradeBanner: View {
                         .foregroundColor(.yellow)
                     
                     Text("Enjoy 100Days Without Ads")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     Spacer()
                 }
                 
                 Text("Upgrade to Pro for an ad-free experience and unlock all premium features.")
-                    .font(.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(.theme.subtext)
                 
                 Button(action: {
@@ -125,7 +125,7 @@ struct ProUpgradeBanner: View {
                         Text("Go Pro")
                             .fontWeight(.semibold)
                         Image(systemName: "arrow.right")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)

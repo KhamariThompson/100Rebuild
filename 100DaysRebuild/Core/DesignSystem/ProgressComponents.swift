@@ -138,7 +138,7 @@ public enum ProgressComponents {
             HStack(spacing: AppSpacing.s) {
                 if showIcon {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: AppSpacing.iconSizeMedium))
+                        .font(AppTypography.title2())
                         .foregroundColor(.orange)
                 }
                 
@@ -189,7 +189,7 @@ public enum ProgressComponents {
                 // Optional icon
                 if let iconName = iconName {
                     Image(systemName: iconName)
-                        .font(.system(size: AppSpacing.iconSizeSmall))
+                        .font(AppTypography.body())
                         .foregroundColor(color)
                         .frame(width: AppSpacing.iconSizeMedium)
                 }

@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 
 /// Momentum predictor: computes a simple momentum score from the last 14 days
-final class MomentumService {
-    static let shared = MomentumService()
+final class MomentumService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = MomentumService()
 
     enum MomentumState: String, Codable {
         case strong

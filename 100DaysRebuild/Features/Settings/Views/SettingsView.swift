@@ -3,7 +3,7 @@ import FirebaseAuth
 import MessageUI
 import StoreKit
 import FirebaseFirestore
-import UserNotifications
+@preconcurrency import UserNotifications
 import FirebaseStorage
 
 // Local spacing constants
@@ -49,6 +49,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var router: NavigationRouter
@@ -123,6 +124,10 @@ struct SettingsView: View {
                     LazyVStack(spacing: 24) {
                         // Sections
                         accountSection
+
+                        // Legacy grace period section (only shown for legacy users)
+                        LegacyGraceSection()
+
                         subscriptionSection
                         dataSection
                         notificationsSection
@@ -226,8 +231,7 @@ struct SettingsView: View {
             // Header with title and dismiss button
             HStack {
                 Text("Settings")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(AppTypography.largeTitle(.bold))
                     .foregroundColor(Color.theme.text)
                 
                 Spacer()
@@ -412,10 +416,10 @@ struct SettingsView: View {
                     Button(action: { dismiss() }) {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(AppTypography.headline(.semibold))
                             
                             Text("Back")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(AppTypography.body(.medium))
                                 .opacity(0.9)
                         }
                         .foregroundColor(Color.theme.accent)
@@ -427,7 +431,7 @@ struct SettingsView: View {
                     Spacer()
                     
                     Text("Settings")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(Color.theme.text)
                     
                     Spacer()
@@ -435,7 +439,7 @@ struct SettingsView: View {
                     // Optional right button (for symmetry, can be hidden)
                     Button(action: { dismiss() }) {
                         Text("Done")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(Color.theme.accent)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -445,7 +449,7 @@ struct SettingsView: View {
                 
                 // Main title (larger)
                 Text("Settings")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 32, weight: .bold, design: .rounded))
                     .foregroundColor(Color.theme.text)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 20)
@@ -615,18 +619,18 @@ struct SettingsView: View {
                 NavigationView {
                     VStack(spacing: 20) {
                         Text("Change Your Name")
-                            .font(.title2)
+                            .font(AppTypography.title2())
                             .fontWeight(.bold)
                             .padding(.top, 20)
                         
                         Text("Your name is used for personalized greetings")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 30)
                         
                         TextField("Your name", text: $displayName)
-                            .font(.title3)
+                            .font(AppTypography.title3())
                             .padding()
                             .background(Color.theme.surface)
                             .cornerRadius(8)
@@ -639,7 +643,7 @@ struct SettingsView: View {
                         
                         if let errorMessage = displayNameErrorMessage {
                             Text(errorMessage)
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.red)
                                 .padding(.top, 4)
                         }
@@ -678,18 +682,18 @@ struct SettingsView: View {
                 NavigationView {
                     VStack(spacing: 20) {
                         Text("Edit Your Bio")
-                            .font(.title2)
+                            .font(AppTypography.title2())
                             .fontWeight(.bold)
                             .padding(.top, 20)
                         
                         Text("Tell others a bit about yourself")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 30)
                         
                         TextField("Your bio", text: $userBio)
-                            .font(.title3)
+                            .font(AppTypography.title3())
                             .padding()
                             .background(Color.theme.surface)
                             .cornerRadius(8)
@@ -701,7 +705,7 @@ struct SettingsView: View {
                             .padding(.top, 20)
                         
                         Text("Keep it short and sweet - it will be displayed on your profile")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
@@ -745,35 +749,57 @@ struct SettingsView: View {
                     // Current plan display
                     HStack {
                         HStack(spacing: 10) {
-                            Image(systemName: subscriptionService.isProUser ? "crown.fill" : "star")
-                                .font(.system(size: 18))
-                                .foregroundColor(subscriptionService.isProUser ? Color.yellow : Color.theme.subtext)
-                            
+                            Image(systemName: subscriptionStore.isPro ? "crown.fill" : "star")
+                                .font(AppTypography.title3())
+                                .foregroundColor(subscriptionStore.isPro ? Color.yellow : Color.theme.subtext)
+
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Current Plan")
-                                    .font(.system(size: 14))
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(Color.theme.subtext)
-                                
-                                Text(subscriptionService.isProUser ? "Pro" : "Free")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(subscriptionService.isProUser ? Color.yellow : Color.theme.text)
+
+                                HStack(spacing: 6) {
+                                    Text(subscriptionStore.isPro ? "Pro" : "Free")
+                                        .font(AppTypography.headline(.semibold))
+                                        .foregroundColor(subscriptionStore.isPro ? Color.yellow : Color.theme.text)
+
+                                    // Show "Grandfathered" badge if applicable
+                                    if subscriptionStore.state.isGrandfatherActive {
+                                        Text("(Grandfathered)")
+                                            .font(AppTypography.caption1(.medium))
+                                            .foregroundColor(Color.theme.accent)
+                                    }
+                                }
                             }
                         }
-                        
+
                         Spacer()
-                        
-                        if subscriptionService.isProUser, let renewalDate = subscriptionService.renewalDate {
+
+                        // Show expiration date
+                        if subscriptionStore.state.isGrandfatherActive, let accountCreatedAt = userSession.accountCreatedAt {
+                            // Calculate expiration (1 year from account creation)
+                            if let expirationDate = Calendar.current.date(byAdding: .year, value: 1, to: accountCreatedAt) {
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("Expires")
+                                        .font(AppTypography.caption2())
+                                        .foregroundColor(Color.theme.subtext)
+                                    Text(expirationDate.formatted(date: .abbreviated, time: .omitted))
+                                        .font(AppTypography.caption1())
+                                        .foregroundColor(Color.theme.accent)
+                                }
+                            }
+                        } else if subscriptionStore.state.rcIsPro, let renewalDate = subscriptionService.renewalDate {
                             Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.subtext)
                         }
                     }
                     .padding(.vertical, 14)
                     
                     Divider()
-                    
-                    // Manage subscription
-                    if subscriptionService.isProUser {
+
+                    // Manage subscription (only show if user has RC subscription, not for grandfather)
+                    if subscriptionStore.state.rcIsPro {
                         Button {
                             AppStoreHelper.openSubscriptionManagement()
                         } label: {
@@ -781,14 +807,30 @@ struct SettingsView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
-                    } else {
+                    } else if subscriptionStore.state.isGrandfatherActive {
+                        // Grandfathered users should be able to upgrade before expiration
                         Button {
                             subscriptionService.presentSubscriptionSheet()
                         } label: {
                             SettingsRow(
-                                icon: "star.circle.fill", 
-                                title: "Upgrade to Pro", 
-                                color: Color.yellow, 
+                                icon: "crown.fill",
+                                title: "Upgrade Now",
+                                color: Color.yellow,
+                                showChevron: true
+                            )
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        // Should not reach here since Pro is required to access app
+                        // But keep as fallback
+                        Button {
+                            subscriptionService.presentSubscriptionSheet()
+                        } label: {
+                            SettingsRow(
+                                icon: "star.circle.fill",
+                                title: "Upgrade to Pro",
+                                color: Color.yellow,
                                 showChevron: true
                             )
                             .contentShape(Rectangle())
@@ -876,17 +918,17 @@ struct SettingsView: View {
                     if !notificationService.isAuthorized {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Notifications Disabled")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                                 .foregroundColor(Color.theme.text)
                             
                             Text("Enable notifications to receive reminders for your challenges.")
-                                .font(.subheadline)
+                                .font(AppTypography.subhead())
                                 .foregroundColor(Color.theme.subtext)
                             
                             Button("Enable Notifications") {
                                 requestNotificationPermission()
                             }
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(colorScheme == .dark ? .black : .white)
                             .padding(.vertical, 10)
                             .padding(.horizontal, 16)
@@ -902,7 +944,7 @@ struct SettingsView: View {
                     // Daily Reminder
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Daily Reminder")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
@@ -933,7 +975,7 @@ struct SettingsView: View {
                     // Streak Reminder
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Streak Reminder")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)
@@ -948,7 +990,7 @@ struct SettingsView: View {
                             .disabled(!notificationService.isAuthorized)
                         
                         Text("Get notified when you're about to break your streak")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.theme.subtext)
                     }
                     .padding(.vertical, 4)
@@ -956,7 +998,7 @@ struct SettingsView: View {
                     // Streak Expiration Warning
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Streak Expiration Warning")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Warn me when streak is about to expire", isOn: $notificationService.isStreakExpirationWarningEnabled)
@@ -973,7 +1015,7 @@ struct SettingsView: View {
                         if notificationService.isStreakExpirationWarningEnabled {
                             HStack {
                                 Text("Warn me")
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(Color.theme.text)
                                 
                                 Picker("", selection: $notificationService.streakExpirationWarningHours) {
@@ -989,13 +1031,13 @@ struct SettingsView: View {
                                 }
                                 
                                 Text("before streak expires")
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(Color.theme.text)
                             }
                         }
                         
                         Text("Receive a notification when your streak is about to expire at the end of the day")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.theme.subtext)
                     }
                     .padding(.vertical, 4)
@@ -1005,7 +1047,7 @@ struct SettingsView: View {
                     // Notification Settings
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Settings")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Toggle("Sound", isOn: $isSoundEnabled)
@@ -1047,7 +1089,7 @@ struct SettingsView: View {
             SettingsCard {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Theme")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(Color.theme.text)
                     
                     // Enhanced theme selector with visual previews
@@ -1072,7 +1114,7 @@ struct SettingsView: View {
                             Image(systemName: "info.circle")
                                 .foregroundColor(Color.theme.accent)
                             Text("System theme follows your device settings")
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.subtext)
                         }
                         .padding(.top, 4)
@@ -1101,13 +1143,13 @@ struct SettingsView: View {
                             .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
                         
                         Image(systemName: theme.iconName)
-                            .font(.system(size: 24, weight: .medium))
+                            .font(AppTypography.title2(.medium))
                             .foregroundColor(themeIconColor)
                     }
                     
                     // Theme name
                     Text(theme.displayName)
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .fontWeight(isSelected ? .semibold : .medium)
                         .foregroundColor(isSelected ? Color.theme.accent : Color.theme.text)
                 }
@@ -1247,7 +1289,7 @@ struct SettingsView: View {
             HStack(spacing: 12) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.accent.opacity(0.7))
                         .frame(width: 24, height: 24)
                         .background(
@@ -1259,11 +1301,11 @@ struct SettingsView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                     
                     Text(value)
-                        .font(.callout)
+                        .font(AppTypography.callout())
                         .fontWeight(.medium)
                         .foregroundColor(Color.theme.text)
                 }
@@ -1306,11 +1348,11 @@ struct SettingsView: View {
     }
     
     private func getAppVersion() -> String {
-        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.6"
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
-    
+
     private func getBuildNumber() -> String {
-        return Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "2"
+        return Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
     }
     
     private func getFormattedDate() -> String {
@@ -1713,7 +1755,7 @@ struct SettingsView: View {
     
     private func checkNotificationAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
+        let settings: UNNotificationSettings = await center.notificationSettings()
         return settings.authorizationStatus == .authorized
     }
     
@@ -2127,7 +2169,7 @@ struct SettingsSection<Content: View>: View {
                 HStack(spacing: 12) {
                     // Icon with enhanced visual appeal
                     Image(systemName: icon)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTypography.headline(.semibold))
                         .foregroundColor(.white)
                         .frame(width: 32, height: 32)
                         .background(
@@ -2142,14 +2184,14 @@ struct SettingsSection<Content: View>: View {
                         .rotationEffect(Angle(degrees: animateIcon ? 10 : 0))
                     
                     Text(title)
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
                         .foregroundColor(Color.theme.text)
                     
                     Spacer()
                     
                     // Chevron indicator with rotation animation
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(AppTypography.subhead(.medium))
                         .foregroundColor(Color.theme.subtext)
                         .rotationEffect(Angle(degrees: isExpanded ? 0 : -90))
                         .animation(.easeInOut, value: isExpanded)
@@ -2234,18 +2276,18 @@ struct SettingsRow: View {
                     .frame(width: 36, height: 36)
                 
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(color)
             }
             
             VStack(alignment: .leading, spacing: subtitle == nil ? 0 : 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(color)
                 
                 if let subtitle = subtitle {
                     Text(subtitle)
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.subtext)
                         .lineLimit(1)
                 }
@@ -2255,7 +2297,7 @@ struct SettingsRow: View {
             
             if showChevron {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(AppTypography.subhead(.semibold))
                     .foregroundColor(Color.theme.subtext.opacity(0.6))
                     .padding(.trailing, 4)
             }

@@ -94,7 +94,7 @@ public struct ColorTheme {
 
 /// Extension to allow access through Color.theme
 public extension Color {
-    static var theme: ColorTheme = ColorTheme()
+    nonisolated(unsafe) static var theme: ColorTheme = ColorTheme()
 }
 
 // MARK: - Color Assets

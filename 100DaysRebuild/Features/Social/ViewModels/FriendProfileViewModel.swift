@@ -13,38 +13,50 @@ class FriendProfileViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var showError = false
     @Published var errorMessage: String?
-    
+
     // Private properties
     private let firestore = Firestore.firestore()
     private let notificationService = NotificationService.shared
     private var cancellables = Set<AnyCancellable>()
-    
+    private var loadTask: Task<Void, Never>?
+
     deinit {
-        cancellables.forEach { $0.cancel() }
+        // Cancellables and tasks will be automatically cleaned up when deallocated
         print("✅ FriendProfileViewModel released")
     }
-    
+
     // MARK: - Public Methods
-    
+
     /// Load friend profile data
     func loadFriendProfile(friendId: String) {
+        // Cancel any existing load
+        loadTask?.cancel()
+
+        // Clear stale data immediately
+        friendProfile = nil
+        activeChallenges = nil
+        recentActivities = nil
         isLoading = true
-        
-        Task {
+
+        loadTask = Task {
             do {
                 // Load profile data
                 let profile = try await loadProfile(friendId: friendId)
                 let challenges = try await loadActiveChallenges(friendId: friendId)
                 let activities = try await loadRecentActivities(friendId: friendId)
-                
+
+                guard !Task.isCancelled else { return }
+
                 await MainActor.run {
                     self.friendProfile = profile
                     self.activeChallenges = challenges
                     self.recentActivities = activities
                     self.isLoading = false
                 }
-                
+
             } catch {
+                guard !Task.isCancelled else { return }
+
                 await MainActor.run {
                     self.showError(message: "Failed to load profile: \(error.localizedDescription)")
                     self.isLoading = false

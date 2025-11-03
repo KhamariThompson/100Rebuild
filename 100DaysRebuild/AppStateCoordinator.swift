@@ -21,6 +21,7 @@ enum AppState: Equatable {
 }
 
 // Central coordinator for app state
+@MainActor
 class AppStateCoordinator: ObservableObject {
     static let shared = AppStateCoordinator()
     
@@ -32,22 +33,17 @@ class AppStateCoordinator: ObservableObject {
     private weak var networkMonitor: NetworkMonitor?
     
     private init() {
-        // Delay setup to reduce initialization pressure
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        // Delay setup to reduce initialization pressure. Use a Task on the main actor
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
             self?.setupObservers()
         }
     }
     
     deinit {
-        cleanup()
+        // Cleanup happens automatically when the object is deallocated
+        // Cannot access main actor-isolated properties from deinit
         print("✅ AppStateCoordinator released")
-    }
-    
-    private func cleanup() {
-        cancellables.forEach { $0.cancel() }
-        cancellables.removeAll()
-        firebaseService = nil
-        networkMonitor = nil
     }
     
     private func setupObservers() {

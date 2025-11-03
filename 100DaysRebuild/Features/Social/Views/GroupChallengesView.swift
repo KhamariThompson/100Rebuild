@@ -38,7 +38,7 @@ struct GroupChallengesView: View {
                                 }
                             }) {
                                 Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 24))
+                                    .font(AppTypography.title2())
                                     .foregroundColor(Color.theme.accent)
                             }
                         }
@@ -104,7 +104,7 @@ struct GroupChallengesView: View {
             if viewModel.createdChallenges.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "flag.fill")
-                        .font(.system(size: 60))
+                        .font(AppTypography.font(size: 60, weight: .bold))
                         .foregroundColor(Color.theme.accent.opacity(0.7))
                         .padding(.top, 60)
                     
@@ -161,7 +161,7 @@ struct GroupChallengesView: View {
             if viewModel.participatingChallenges.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "person.3.fill")
-                        .font(.system(size: 60))
+                        .font(AppTypography.font(size: 60, weight: .bold))
                         .foregroundColor(Color.theme.accent.opacity(0.7))
                         .padding(.top, 60)
                     

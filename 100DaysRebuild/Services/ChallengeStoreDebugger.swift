@@ -2,11 +2,18 @@ import Foundation
 import SwiftUI
 
 /// Utility class for verifying that challenge data is consistent across the app
+@MainActor
 class ChallengeStoreDebugger {
     static let shared = ChallengeStoreDebugger()
-    
-    private let challengeStore = ChallengeStore.shared
-    private let userStatsService = UserStatsService.shared
+
+    private let challengeStore: ChallengeStore
+    private let userStatsService: UserStatsService
+
+    private init() {
+        // Initialize properties
+        self.challengeStore = ChallengeStore.shared
+        self.userStatsService = UserStatsService.shared
+    }
     
     /// Create a debug log of the current state of challenges across the app
     @MainActor

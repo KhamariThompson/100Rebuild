@@ -4,6 +4,7 @@ import Network
 import FirebaseFirestore
 import Foundation
 
+@MainActor
 public class FirebaseAvailabilityService {
     public static let shared = FirebaseAvailabilityService()
     
@@ -20,14 +21,14 @@ public class FirebaseAvailabilityService {
     private var isFirestoreConnected = false
     
     private let networkMonitor = NetworkMonitor.shared
-    private var initTimer: Timer?
-    private var networkStatusObserver: NSObjectProtocol?
+    nonisolated(unsafe) private var initTimer: Timer?
+    nonisolated(unsafe) private var networkStatusObserver: NSObjectProtocol?
     private var initRetryCount = 0
     private let maxRetries = 5
-    
+
     // Add Firestore reconnection timer
-    private var firestoreReconnectTimer: Timer?
-    private var firestoreConnectivityListeners: [ListenerRegistration] = []
+    nonisolated(unsafe) private var firestoreReconnectTimer: Timer?
+    nonisolated(unsafe) private var firestoreConnectivityListeners: [ListenerRegistration] = []
     
     private init() {
         // Check initial state
@@ -64,20 +65,21 @@ public class FirebaseAvailabilityService {
             queue: .main
         ) { [weak self] notification in
             guard let self = self else { return }
-            
-            if let userInfo = notification.userInfo,
-               let isConnected = userInfo["isConnected"] as? Bool {
+            guard let userInfo = notification.userInfo,
+                  let isConnected = userInfo["isConnected"] as? Bool else { return }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
                 if isConnected {
-                    // When network becomes available, ensure Firebase is initialized
-                    self.initRetryCount = 0 // Reset retry count on new connection
+                    // Reset retry count and attempt to initialize on the MainActor
+                    self.initRetryCount = 0
                     self.ensureFirebaseIsInitialized()
-                    
-                    // Also reset Firestore connectivity
+
+                    // Also reset Firestore connectivity if initialized
                     if self.isInitialized {
                         self.setupFirestoreConnectivityMonitoring()
                     }
                 } else {
-                    // Network disconnected but Firebase may still work offline
                     if self.isInitialized {
                         print("Network disconnected but Firebase initialized - offline mode available")
                     } else {
@@ -102,20 +104,29 @@ public class FirebaseAvailabilityService {
         let db = Firestore.firestore()
         
         // Set up a listener to monitor connectivity status changes
-        let metadataListener = db.collection("_connectivity").addSnapshotListener { snapshot, error in
+        let metadataListener = db.collection("_connectivity").addSnapshotListener { [weak self] snapshot, error in
+            guard let self = self else { return }
+
             if let error = error {
-                if error.localizedDescription.contains("firestore.googleapis.com") || 
+                if error.localizedDescription.contains("firestore.googleapis.com") ||
                    error.localizedDescription.contains("lookup error") ||
                    error.localizedDescription.contains("Domain name not found") {
                     print("⚠️ Firestore DNS resolution error detected, attempting recovery...")
-                    self.attemptFirestoreDNSRecovery()
+                    DispatchQueue.main.async { [weak self] in
+                        self?.attemptFirestoreDNSRecovery()
+                        self?.isFirestoreConnected = false
+                    }
                 } else {
                     print("⚠️ Firestore error: \(error.localizedDescription)")
+                    DispatchQueue.main.async { [weak self] in
+                        self?.isFirestoreConnected = false
+                    }
                 }
-                self.isFirestoreConnected = false
             } else {
                 print("✅ Firestore connection established")
-                self.isFirestoreConnected = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.isFirestoreConnected = true
+                }
             }
         }
         
@@ -133,29 +144,36 @@ public class FirebaseAvailabilityService {
                 timer.invalidate()
                 return
             }
-            
-            if self.networkMonitor.isConnected {
-                print("Attempting to reconnect to Firestore...")
-                
-                // Force a clean reconnect by recreating Firestore instances
-                let db = Firestore.firestore()
-                
-                // Use a simple read operation to test connectivity
-                db.collection("users").limit(to: 1).getDocuments { snapshot, error in
-                    if error == nil {
-                        print("✅ Successfully reconnected to Firestore")
-                        self.isFirestoreConnected = true
-                        timer.invalidate()
-                        self.firestoreReconnectTimer = nil
-                        
-                        // Reset the connectivity monitoring
-                        self.setupFirestoreConnectivityMonitoring()
-                    } else {
-                        print("⚠️ Still unable to connect to Firestore: \(error?.localizedDescription ?? "unknown error")")
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                if self.networkMonitor.isConnected {
+                    print("Attempting to reconnect to Firestore...")
+
+                    // Force a clean reconnect by recreating Firestore instances
+                    let db = Firestore.firestore()
+
+                    // Use a simple read operation to test connectivity
+                    db.collection("users").limit(to: 1).getDocuments { [weak self] snapshot, error in
+                        guard let self = self else { return }
+                        if error == nil {
+                            print("✅ Successfully reconnected to Firestore")
+                            DispatchQueue.main.async { [weak self] in
+                                guard let self = self else { return }
+                                self.isFirestoreConnected = true
+                                self.firestoreReconnectTimer?.invalidate()
+                                self.firestoreReconnectTimer = nil
+
+                                // Reset the connectivity monitoring
+                                self.setupFirestoreConnectivityMonitoring()
+                            }
+                        } else {
+                            print("⚠️ Still unable to connect to Firestore: \(error?.localizedDescription ?? "unknown error")")
+                        }
                     }
+                } else {
+                    print("Network still unavailable, waiting for connectivity")
                 }
-            } else {
-                print("Network still unavailable, waiting for connectivity")
             }
         }
     }
@@ -213,12 +231,15 @@ public class FirebaseAvailabilityService {
                 timer.invalidate()
                 return
             }
-            
-            let isCurrentlyAvailable = self.isInitialized
-            if isCurrentlyAvailable {
-                self.isAvailableSubject.send(true)
-                timer.invalidate()
-                self.initTimer = nil
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                let isCurrentlyAvailable = self.isInitialized
+                if isCurrentlyAvailable {
+                    self.isAvailableSubject.send(true)
+                    self.initTimer?.invalidate()
+                    self.initTimer = nil
+                }
             }
         }
     }

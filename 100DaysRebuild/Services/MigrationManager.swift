@@ -8,8 +8,12 @@ import FirebaseAuth
 /// - All users who registered before Jan 1, 2026 get 1 year free Pro
 /// - New users go through funnel → paywall with founder's offer
 /// - All features are now unlocked by default (everyone is "Pro")
+@MainActor
 class MigrationManager: ObservableObject {
-    static let shared = MigrationManager()
+    static let shared: MigrationManager = {
+        let instance = MigrationManager()
+        return instance
+    }()
 
     @Published var migrationStatus: MigrationStatus = .pending
     @Published var legacyUserGracePeriodEnd: Date?
@@ -24,17 +28,16 @@ class MigrationManager: ObservableObject {
         static let legacyUserGracePeriod = "legacy_user_grace_period_end"
         static let migrationCompletedDate = "migration_completed_date"
         static let firstLaunchDate = "app_first_launch_date"
+        static let completedOnboardingAt = "completed_onboarding_at"
+        static let lastFunnelShownVersion = "last_funnel_shown_version"
     }
 
-    private let legacyCutoffDate: Date = {
-        var components = DateComponents()
-        components.year = 2026
-        components.month = 1
-        components.day = 1
-        components.hour = 0
-        components.minute = 0
-        return Calendar.current.date(from: components) ?? Date()
-    }()
+    /// Legacy cutoff date (from centralized Constants)
+    /// Users registered BEFORE this date are grandfathered (1 year free Pro)
+    /// Users registered ON OR AFTER this date are new users (must see funnel)
+    private var legacyCutoffDate: Date {
+        Constants.Onboarding.newFunnelStartDate
+    }
 
     // MARK: - Migration Status
 
@@ -88,14 +91,18 @@ class MigrationManager: ObservableObject {
 
         guard let data = userDoc.data(),
               let createdAtTimestamp = data["createdAt"] as? Timestamp else {
-            // No data means new user
+            // No data means new user - they should NOT get legacy access
+            print("⚠️ MigrationManager: No Firestore data found - treating as NEW USER")
             return .newUser
         }
 
         let registrationDate = createdAtTimestamp.dateValue()
+        print("🔍 MigrationManager: User registration date: \(registrationDate)")
+        print("🔍 MigrationManager: Legacy cutoff date: \(legacyCutoffDate)")
 
-        // Check if registered before cutoff
+        // Check if registered before cutoff (date must be in the PAST)
         if registrationDate < legacyCutoffDate {
+            print("✅ MigrationManager: User registered BEFORE cutoff - granting legacy access")
             // Check if grace period has expired
             if let gracePeriodEnd = legacyUserGracePeriodEnd ?? userDefaults.object(forKey: Keys.legacyUserGracePeriod) as? Date {
                 return gracePeriodEnd > Date() ? .legacyFree : .legacyExpired
@@ -103,6 +110,7 @@ class MigrationManager: ObservableObject {
             return .legacyFree
         }
 
+        print("❌ MigrationManager: User registered AFTER cutoff - treating as NEW USER (requires subscription)")
         return .newUser
     }
 
@@ -140,9 +148,18 @@ class MigrationManager: ObservableObject {
         }
     }
 
-    /// Migrate legacy users - grant 1 year free Pro
+    /// Migrate legacy users - grant 1 year free Pro from account creation date
     private func migrateLegacyUser(userId: String) async throws {
-        let gracePeriodEnd = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+        // Get registration date from Firestore
+        let userDoc = try await db.collection("users").document(userId).getDocument()
+        guard let data = userDoc.data(),
+              let createdAtTimestamp = data["createdAt"] as? Timestamp else {
+            throw NSError(domain: "MigrationManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot get registration date"])
+        }
+
+        let registrationDate = createdAtTimestamp.dateValue()
+        // Grace period is 1 year from REGISTRATION date, not today (using centralized constant)
+        let gracePeriodEnd = registrationDate.addingTimeInterval(Constants.Onboarding.grandfatherDuration)
 
         // Store grace period locally
         userDefaults.set(gracePeriodEnd, forKey: Keys.legacyUserGracePeriod)
@@ -158,7 +175,10 @@ class MigrationManager: ObservableObject {
             "migrationVersion": "v2_funnel"
         ], merge: true)
 
-        print("✅ Legacy user migrated: \(userId) | Grace period until: \(gracePeriodEnd)")
+        print("✅ Legacy user migrated: \(userId)")
+        print("   Registered: \(registrationDate)")
+        print("   Grace period until: \(gracePeriodEnd)")
+        print("   Days remaining: \(Int(gracePeriodEnd.timeIntervalSinceNow / 86400))")
     }
 
     /// Setup new users (they'll go through funnel)
@@ -169,10 +189,11 @@ class MigrationManager: ObservableObject {
             "subscriptionStatus": "trial_pending",
             "subscriptionTier": "none",
             "migratedAt": Timestamp(date: Date()),
-            "migrationVersion": "v2_funnel"
+            "migrationVersion": "v2_funnel",
+            "funnelSchemaVersion": Constants.Onboarding.funnelSchemaVersion
         ], merge: true)
 
-        print("✅ New user setup: \(userId)")
+        print("✅ New user setup: \(userId) - will see funnel on next launch")
     }
 
     /// Handle expired legacy users
@@ -188,11 +209,68 @@ class MigrationManager: ObservableObject {
         print("⏰ Legacy grace period expired: \(userId)")
     }
 
+    /// Mark onboarding as completed (called when user finishes funnel)
+    func markOnboardingCompleted(userId: String) async throws {
+        let now = Date()
+
+        // Store locally
+        userDefaults.set(now, forKey: Keys.completedOnboardingAt)
+        userDefaults.set(Constants.Onboarding.funnelSchemaVersion, forKey: Keys.lastFunnelShownVersion)
+
+        // Store in Firestore
+        try await db.collection("users").document(userId).setData([
+            "completedOnboardingAt": Timestamp(date: now),
+            "lastFunnelShownVersion": Constants.Onboarding.funnelSchemaVersion,
+            "needsFunnelOnboarding": false
+        ], merge: true)
+
+        print("✅ MigrationManager: Marked onboarding complete for \(userId)")
+        print("   Completed at: \(now)")
+        print("   Funnel version: \(Constants.Onboarding.funnelSchemaVersion)")
+    }
+
+    /// Check if user has completed onboarding
+    func hasCompletedOnboarding(userId: String) async -> Bool {
+        // Check local cache first
+        if let localDate = userDefaults.object(forKey: Keys.completedOnboardingAt) as? Date {
+            return true
+        }
+
+        // Check Firestore
+        do {
+            let userDoc = try await db.collection("users").document(userId).getDocument()
+            if let data = userDoc.data(),
+               let _ = data["completedOnboardingAt"] as? Timestamp {
+                return true
+            }
+        } catch {
+            print("⚠️ MigrationManager: Error checking onboarding status: \(error)")
+        }
+
+        return false
+    }
+
+    /// Get account creation date from Firestore
+    func getAccountCreatedAt(userId: String) async -> Date? {
+        do {
+            let userDoc = try await db.collection("users").document(userId).getDocument()
+            if let data = userDoc.data(),
+               let createdAtTimestamp = data["createdAt"] as? Timestamp {
+                return createdAtTimestamp.dateValue()
+            }
+        } catch {
+            print("⚠️ MigrationManager: Error getting account creation date: \(error)")
+        }
+        return nil
+    }
+
     /// Force re-migration (for testing or fixing issues)
     func forceMigration() {
         userDefaults.removeObject(forKey: Keys.hasMigrated)
         userDefaults.removeObject(forKey: Keys.legacyUserGracePeriod)
         userDefaults.removeObject(forKey: Keys.migrationCompletedDate)
+        userDefaults.removeObject(forKey: Keys.completedOnboardingAt)
+        userDefaults.removeObject(forKey: Keys.lastFunnelShownVersion)
         migrationStatus = .pending
         legacyUserGracePeriodEnd = nil
 

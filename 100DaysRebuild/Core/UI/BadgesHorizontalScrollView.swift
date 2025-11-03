@@ -24,7 +24,7 @@ struct BadgesHorizontalScrollView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             Text("Milestones & Badges")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(AppTypography.title3(.bold))
                 .foregroundColor(.theme.text)
             
             if badges.isEmpty && !showLockedBadges {
@@ -101,14 +101,14 @@ struct BadgeCard: View {
                     .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
                 
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 32))
+                    .font(AppTypography.largeTitle())
                     .foregroundColor(.white)
             }
             .padding(.bottom, AppSpacing.xxs)
             
             // Badge title
             Text(badge.title)
-                .font(.system(size: 14, weight: .medium))
+                .font(AppTypography.subhead(.medium))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -140,12 +140,12 @@ struct LockedBadgeCard: View {
                     .frame(width: 70, height: 70)
                 
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 32))
+                    .font(AppTypography.largeTitle())
                     .foregroundColor(.gray.opacity(0.7))
                     .blur(radius: 1)
                 
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 16))
+                    .font(AppTypography.body())
                     .foregroundColor(.white.opacity(0.8))
                     .padding(6)
                     .background(
@@ -158,7 +158,7 @@ struct LockedBadgeCard: View {
             
             // Badge title
             Text(badge.title)
-                .font(.system(size: 14, weight: .medium))
+                .font(AppTypography.subhead(.medium))
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)

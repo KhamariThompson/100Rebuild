@@ -6,12 +6,15 @@ enum SubscriptionPlan: String, CaseIterable, Codable {
     case annual
 
     /// The EXACT product ID from App Store Connect
+    /// Note: For .annual, this returns the intro product by default.
+    /// The PaywallViewModel will determine whether to use annualIntro or annualNoIntro
+    /// based on founders gate state (window, eligibility, campaign date, consumption).
     var productId: String {
         switch self {
         case .monthly:
-            return "com.KhamariThompson.100Days.monthlyv2"
+            return Constants.ProductID.monthly
         case .annual:
-            return "com.KhamariThompson.100Days.annualv1"
+            return Constants.ProductID.annualIntro  // Default; overridden by selection logic
         }
     }
 
@@ -26,6 +29,8 @@ enum SubscriptionPlan: String, CaseIterable, Codable {
     }
 
     /// Standard display price (fallback if StoreKit fails)
+    /// ⚠️ WARNING: These are US prices only. StoreKit provides localized pricing for actual purchases.
+    /// These fallbacks should match the base prices configured in App Store Connect.
     var displayPrice: String {
         switch self {
         case .monthly:

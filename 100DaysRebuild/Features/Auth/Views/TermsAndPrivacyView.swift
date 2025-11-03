@@ -25,7 +25,7 @@ struct TermsAndPrivacyView: View {
                 HStack {
                     Button(action: { dismiss() }) {
                         Image(systemName: "arrow.left")
-                            .font(.system(size: 18, weight: .medium))
+                            .font(AppTypography.headline(.medium))
                             .foregroundColor(.theme.text)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -34,7 +34,7 @@ struct TermsAndPrivacyView: View {
                     Spacer()
                     
                     Text(mode == .terms ? "Terms of Use" : "Privacy Policy")
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(AppTypography.headline(.semibold))
                         .foregroundColor(.theme.text)
                     
                     Spacer()

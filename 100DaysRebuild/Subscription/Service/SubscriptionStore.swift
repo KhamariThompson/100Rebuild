@@ -1,21 +1,46 @@
 import Foundation
 import SwiftUI
 import FirebaseAuth
+import FirebaseFirestore
 import RevenueCat
 
 /// SSOT ObservableObject for subscription state
 /// This is the ONLY place the UI should read subscription information from
 @MainActor
-final class SubscriptionStore: ObservableObject {
+final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
     @Published private(set) var state: SubscriptionState = .default
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: Error?
 
-    private let repository: SubscriptionRepository
-    private var fiveMinuteWindow: FiveMinuteWindow?
+    nonisolated private let repository: SubscriptionRepository
+    private var foundersWindow: FoundersWindowState?
+
+    // MARK: - Grandfather Pro State
+    private var customerInfo: CustomerInfo?
+    private var profile: ProfileData?
+
+    // Persistence keys
+    private let foundersWindowKey = "founders_window_state_v1"
 
     init(repository: SubscriptionRepository) {
         self.repository = repository
+        super.init()
+
+        #if DEBUG
+        print("🔐 SubscriptionStore.init id=\(ObjectIdentifier(self))")
+        #endif
+
+        // Set self as RevenueCat delegate
+        Purchases.shared.delegate = self
+    }
+
+    // MARK: - PurchasesDelegate
+
+    nonisolated func purchases(_ purchases: Purchases, receivedUpdated customerInfo: CustomerInfo) {
+        Task { @MainActor in
+            // Update customer info and recompute state
+            setCustomerInfo(customerInfo)
+        }
     }
 
     // MARK: - Public API
@@ -31,49 +56,43 @@ final class SubscriptionStore: ObservableObject {
         error = nil
 
         do {
-            // Check grandfathered status first
-            if let userId = Auth.auth().currentUser?.uid {
-                let isGrandfathered = try await repository.checkGrandfatheredStatus(userId: userId)
+            // Get customer info from RevenueCat
+            let info = try await Purchases.shared.customerInfo()
+            setCustomerInfo(info)
 
-                if isGrandfathered {
-                    state = .grandfathered
-                    isLoading = false
-                    print("✅ SubscriptionStore: User is grandfathered")
-                    return
-                }
-            }
-
-            // Load normal status from RevenueCat
-            let status = try await repository.loadStatus()
-            updateState(with: status)
-            print("✅ SubscriptionStore: Loaded status - isPro: \(state.isPro)")
+            // Note: Profile (accountCreatedAt) is set by UserSession.loadUserProfile()
+            // This keeps the data flow simple and avoids duplicate Firestore reads
         } catch {
             self.error = error
-            print("❌ SubscriptionStore: Failed to load - \(error)")
         }
 
         isLoading = false
     }
 
-    /// Purchase a subscription plan
-    func purchase(_ plan: SubscriptionPlan) async throws {
+    /// Purchase a subscription plan with optional explicit product ID
+    /// - Parameters:
+    ///   - plan: The plan to purchase
+    ///   - explicitProductId: Optional product ID override (for annual intro vs no-intro selection)
+    /// - Returns: The purchased product ID
+    @discardableResult
+    func purchase(_ plan: SubscriptionPlan, explicitProductId: String? = nil) async throws -> String {
         isLoading = true
         error = nil
 
-        print("🔐 SubscriptionStore: Purchasing \(plan.rawValue)")
+        let targetProduct = explicitProductId ?? plan.productId
 
         do {
-            let status = try await repository.purchase(plan)
-            updateState(with: status)
-            print("✅ SubscriptionStore: Purchase successful")
+            let (status, purchasedProductId) = try await repository.purchase(plan, explicitProductId: explicitProductId)
+            // Get fresh customer info after purchase
+            let info = try await Purchases.shared.customerInfo()
+            setCustomerInfo(info)
+            isLoading = false
+            return purchasedProductId
         } catch {
             self.error = error
             isLoading = false
-            print("❌ SubscriptionStore: Purchase failed - \(error)")
             throw error
         }
-
-        isLoading = false
     }
 
     /// Restore previous purchases
@@ -81,16 +100,14 @@ final class SubscriptionStore: ObservableObject {
         isLoading = true
         error = nil
 
-        print("🔐 SubscriptionStore: Restoring purchases")
-
         do {
             let status = try await repository.restorePurchases()
-            updateState(with: status)
-            print("✅ SubscriptionStore: Restore successful")
+            // Get fresh customer info after restore
+            let info = try await Purchases.shared.customerInfo()
+            setCustomerInfo(info)
         } catch {
             self.error = error
             isLoading = false
-            print("❌ SubscriptionStore: Restore failed - \(error)")
             throw error
         }
 
@@ -101,10 +118,11 @@ final class SubscriptionStore: ObservableObject {
     func refreshEntitlements() async {
         do {
             let status = try await repository.refreshEntitlements()
-            updateState(with: status)
-            print("✅ SubscriptionStore: Refreshed entitlements")
+            // Get fresh customer info after refresh
+            let info = try await Purchases.shared.customerInfo()
+            setCustomerInfo(info)
         } catch {
-            print("⚠️ SubscriptionStore: Failed to refresh - \(error)")
+            // Silent fail for refresh
         }
     }
 
@@ -121,18 +139,12 @@ final class SubscriptionStore: ObservableObject {
         }
 
         do {
-            print("🔐 SubscriptionStore: Identifying RevenueCat user: \(userId)")
             // Use logIn to identify the user and potentially migrate anonymous purchases
             let loginResult = try await Purchases.shared.logIn(userId)
-            // Optionally log transfer info
-            #if DEBUG
-            print("🔐 SubscriptionStore: RevenueCat login created: \(loginResult.created)")
-            print("🔐 SubscriptionStore: RevenueCat originalAppUserId: \(loginResult.customerInfo.originalAppUserId)")
-            #endif
             // Refresh state after identification
             await load()
         } catch {
-            print("⚠️ SubscriptionStore: Failed to identify user with RevenueCat - \(error)")
+            // Silent fail
         }
     }
 
@@ -141,28 +153,51 @@ final class SubscriptionStore: ObservableObject {
         return try await repository.getProductInfo(for: plan)
     }
 
-    // MARK: - Five-Minute Window
+    // MARK: - Founders Window
 
-    /// Start the 5-minute welcome offer window
+    /// Start the 5-minute founders window (only once per user, only for NEW non-legacy users)
     func startFiveMinuteWindow() {
-        fiveMinuteWindow = .start()
-        saveFiveMinuteWindow()
-        print("⏱️  SubscriptionStore: Started 5-minute window")
-    }
+        // Check if window was already started before
+        loadFoundersWindow()
 
-    /// Get the current five-minute window (loads from UserDefaults if not in memory)
-    func getFiveMinuteWindow() -> FiveMinuteWindow? {
-        if fiveMinuteWindow == nil {
-            loadFiveMinuteWindow()
+        if let existing = foundersWindow, existing.startedAt != nil {
+            return
         }
-        return fiveMinuteWindow
+
+        // First time - create window
+        foundersWindow = .start()
+        saveFoundersWindow()
     }
 
-    /// Clear the five-minute window
+    /// Get the current founders window (loads from UserDefaults if not in memory)
+    func getFiveMinuteWindow() -> FoundersWindowState? {
+        if foundersWindow == nil {
+            loadFoundersWindow()
+        }
+        return foundersWindow
+    }
+
+    /// Mark that the user has consumed the founders intro offer
+    func markFoundersOfferConsumed() {
+        loadFoundersWindow()
+
+        if var window = foundersWindow {
+            window.foundersOfferConsumed = true
+            foundersWindow = window
+            saveFoundersWindow()
+        } else {
+            // Create a consumed state even if window never started
+            foundersWindow = FoundersWindowState(version: 1, startedAt: nil, foundersOfferConsumed: true)
+            saveFoundersWindow()
+        }
+    }
+
+    /// Clear the founders window
     func clearFiveMinuteWindow() {
-        fiveMinuteWindow = nil
+        foundersWindow = nil
+        UserDefaults.standard.removeObject(forKey: foundersWindowKey)
+        // Also remove legacy key for backwards compatibility
         UserDefaults.standard.removeObject(forKey: "five_minute_window")
-        print("🗑️  SubscriptionStore: Cleared 5-minute window")
     }
 
     // MARK: - Private
@@ -172,24 +207,41 @@ final class SubscriptionStore: ObservableObject {
         state = SubscriptionState(status: status, isPaywallRequired: isPaywallRequired)
     }
 
-    private func saveFiveMinuteWindow() {
-        if let window = fiveMinuteWindow,
+    private func saveFoundersWindow() {
+        if let window = foundersWindow,
            let data = try? JSONEncoder().encode(window) {
-            UserDefaults.standard.set(data, forKey: "five_minute_window")
+            UserDefaults.standard.set(data, forKey: foundersWindowKey)
         }
     }
 
-    private func loadFiveMinuteWindow() {
-        if let data = UserDefaults.standard.data(forKey: "five_minute_window"),
-           let window = try? JSONDecoder().decode(FiveMinuteWindow.self, from: data) {
-            // Only load if still active, otherwise clear it
-            if window.isActive {
-                fiveMinuteWindow = window
-                print("⏱️  SubscriptionStore: Loaded active 5-minute window")
-            } else {
-                clearFiveMinuteWindow()
+    private func loadFoundersWindow() {
+        // Try new versioned key first
+        if let data = UserDefaults.standard.data(forKey: foundersWindowKey),
+           let window = try? JSONDecoder().decode(FoundersWindowState.self, from: data) {
+            foundersWindow = window
+            return
+        }
+
+        // Fallback: try legacy key for migration
+        if let data = UserDefaults.standard.data(forKey: "five_minute_window") {
+            // Try to decode as old FiveMinuteWindow struct (just had `start: Date`)
+            if let legacyDecoded = try? JSONDecoder().decode(LegacyWindow.self, from: data) {
+                // Migrate to new structure
+                foundersWindow = FoundersWindowState(
+                    version: 1,
+                    startedAt: legacyDecoded.start,
+                    foundersOfferConsumed: false
+                )
+                saveFoundersWindow()
+                // Remove legacy key
+                UserDefaults.standard.removeObject(forKey: "five_minute_window")
             }
         }
+    }
+
+    /// Legacy window structure for migration
+    private struct LegacyWindow: Codable {
+        let start: Date
     }
 
     // MARK: - Reset
@@ -202,6 +254,58 @@ final class SubscriptionStore: ObservableObject {
         state = .default
         // Clear persisted five-minute window
         clearFiveMinuteWindow()
+        // Clear grandfather state
+        customerInfo = nil
+        profile = nil
+    }
+
+    // MARK: - Grandfather Pro Logic
+
+    /// Simple profile data structure for grandfather checks
+    struct ProfileData {
+        let accountCreatedAt: Date?
+    }
+
+    /// Update customer info and recompute state
+    func setCustomerInfo(_ info: CustomerInfo) {
+        #if DEBUG
+        print("🔐 SubscriptionStore.setCustomerInfo id=\(ObjectIdentifier(self))")
+        #endif
+        self.customerInfo = info
+        recomputeState()
+    }
+
+    /// Update profile and recompute state
+    func setProfile(_ profileData: ProfileData) {
+        #if DEBUG
+        print("🔐 SubscriptionStore.setProfile id=\(ObjectIdentifier(self))")
+        #endif
+        self.profile = profileData
+        recomputeState()
+    }
+
+    /// Recompute subscription state by merging RevenueCat Pro + Grandfather Pro
+    private func recomputeState() {
+        // Check RC entitlement using exact case from SubscriptionIDs
+        let rcHasPro: Bool = {
+            guard let info = customerInfo else { return false }
+            if let ent = info.entitlements[SubscriptionIDs.entitlement] {
+                return ent.isActive
+            }
+            return false
+        }()
+
+        // Check grandfather status
+        let grandfather: Bool = {
+            guard let created = profile?.accountCreatedAt else { return false }
+            return SubscriptionPolicy.isGrandfathered(accountCreatedAt: created)
+        }()
+
+        // Update state fields
+        state.rcIsPro = rcHasPro
+        state.isGrandfatherActive = grandfather
+        state.isPro = rcHasPro || grandfather  // EFFECTIVE PRO
+        state.isGrandfathered = grandfather
     }
 }
 

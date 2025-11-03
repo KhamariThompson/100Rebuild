@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 
 /// Theme options supported by the app
-public enum AppThemeMode: String, CaseIterable, Identifiable {
+public enum AppThemeMode: String, CaseIterable, Identifiable, Sendable {
     case light = "light"
     case dark = "dark"
     case system = "system"
@@ -45,7 +45,7 @@ extension Notification.Name {
 /// Central manager for handling application theme
 public class ThemeManager: ObservableObject {
     // Singleton instance
-    public static let shared = ThemeManager()
+    nonisolated(unsafe) public static let shared = ThemeManager()
     
     // Current theme mode
     @Published public private(set) var currentTheme: AppThemeMode {
@@ -72,18 +72,17 @@ public class ThemeManager: ObservableObject {
     
     /// Change the app theme
     /// - Parameter theme: The new theme to apply
+    @MainActor
     public func setTheme(_ theme: AppThemeMode) {
         guard theme != currentTheme else { return }
-        
-        // Use main actor to ensure UI updates are thread-safe
-        DispatchQueue.main.async {
-            self.currentTheme = theme
-            // Post theme change notification
-            NotificationCenter.default.post(name: .appThemeDidChange, object: theme.rawValue)
-        }
+
+        // Running on the main actor — perform the mutation synchronously here.
+        self.currentTheme = theme
+        NotificationCenter.default.post(name: .appThemeDidChange, object: theme.rawValue)
     }
     
     /// Toggle between light and dark modes (skipping system)
+    @MainActor
     public func toggleLightDarkMode() {
         switch currentTheme {
         case .light:
@@ -114,7 +113,7 @@ public class ThemeManager: ObservableObject {
 
 /// Environment key for ThemeManager
 private struct ThemeManagerKey: EnvironmentKey {
-    static let defaultValue = ThemeManager.shared
+    nonisolated(unsafe) static let defaultValue: ThemeManager = ThemeManager.shared
 }
 
 extension EnvironmentValues {

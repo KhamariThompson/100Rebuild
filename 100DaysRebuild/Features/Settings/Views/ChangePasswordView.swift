@@ -1,5 +1,5 @@
 import SwiftUI
-import FirebaseAuth
+@preconcurrency import FirebaseAuth
 
 struct ChangePasswordView: View {
     @Environment(\.dismiss) private var dismiss
@@ -146,7 +146,7 @@ struct ChangePasswordView: View {
                 
                 // Step 1: Re-authenticate with current credentials
                 let credential = EmailAuthProvider.credential(withEmail: email, password: currentPassword)
-                try await user.reauthenticate(with: credential)
+                let _: AuthDataResult = try await user.reauthenticate(with: credential)
                 
                 // Step 2: Update password
                 try await user.updatePassword(to: newPassword)

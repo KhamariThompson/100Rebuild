@@ -14,8 +14,8 @@ struct ZenQuoteAPIResponse: Decodable {
     let h: String?
 }
 
-class QuoteService {
-    static let shared = QuoteService()
+class QuoteService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = QuoteService()
     
     // Updated to use more reliable quote APIs that don't have SSL issues
     // Removing the problematic api.quotable.io that's causing SSL errors

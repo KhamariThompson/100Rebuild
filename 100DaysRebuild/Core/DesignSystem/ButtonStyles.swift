@@ -149,7 +149,7 @@ public struct PrimaryButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium))
+            .font(AppTypography.body(.medium))
             .frame(maxWidth: .infinity, minHeight: height)
             .foregroundColor(isEnabled 
                 ? Color.adaptiveForeground(for: colorScheme)
@@ -188,7 +188,7 @@ public struct SecondaryButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium))
+            .font(AppTypography.body(.medium))
             .frame(maxWidth: .infinity, minHeight: height)
             .foregroundColor(isEnabled ? Color.theme.text : Color.theme.text.opacity(0.5))
             .background(
@@ -224,7 +224,7 @@ public struct TextButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: fontSize, weight: fontWeight))
+            .font(AppTypography.font(size: fontSize, weight: fontWeight))
             .foregroundColor(isEnabled ? Color.theme.accent : Color.theme.accent.opacity(0.5))
             .opacity(configuration.isPressed ? 0.7 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
@@ -271,7 +271,7 @@ public struct ChromeButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .medium))
+            .font(AppTypography.body(.medium))
             .frame(maxWidth: .infinity, minHeight: height)
             .foregroundColor(isEnabled ? Color.theme.text : Color.theme.text.opacity(0.6))
             .background(

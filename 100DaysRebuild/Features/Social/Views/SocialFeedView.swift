@@ -56,7 +56,7 @@ struct SocialFeedView: View {
     private var headerView: some View {
         HStack {
             Text("Activity Feed")
-                .font(.largeTitle)
+                .font(AppTypography.largeTitle())
                 .bold()
                 .foregroundStyle(
                     LinearGradient(
@@ -71,14 +71,14 @@ struct SocialFeedView: View {
             HStack(spacing: 12) {
                 NavigationLink(destination: FriendsView()) {
                     Label("Add Friend", systemImage: "person.badge.plus")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                 }
 
                 Button(action: {
                     showUsernameSheet = true
                 }) {
                     Label("Claim Username", systemImage: "person.crop.circle.badge.checkmark")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                 }
 
                 NavigationLink(destination: ChallengeInvitationsView()) {
@@ -92,7 +92,7 @@ struct SocialFeedView: View {
                     }
                 }) {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                        .font(AppTypography.title2(.semibold))
                         .foregroundColor(.theme.accent)
                 }
                 .buttonStyle(AppScaleButtonStyle())
@@ -112,7 +112,7 @@ struct SocialFeedView: View {
                 .padding()
             
             Text("Loading activity...")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -125,18 +125,18 @@ struct SocialFeedView: View {
                 Spacer()
                 
                 Image(systemName: "person.2.circle")
-                    .font(.system(size: 60))
+                    .font(AppTypography.display())
                     .foregroundColor(Color.theme.accent.opacity(0.7))
                     .padding(.top, 60)
                 
                 VStack(spacing: AppSpacing.s) {
                     Text("No Activity Yet")
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.text)
                     
                     Text("Connect with friends to see their progress and milestones here!")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, AppSpacing.xxl)
@@ -145,11 +145,11 @@ struct SocialFeedView: View {
                 AppComponents.Card {
                     VStack(spacing: AppSpacing.s) {
                         Text("Get Started")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.theme.text)
                         
                         Text("Add friends to see their check-ins and celebrate milestones together")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                     }
@@ -182,7 +182,7 @@ struct SocialFeedView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                         Text("Loading more...")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                     .padding()
@@ -228,19 +228,19 @@ struct SocialFeedItemView: View {
                                 .frame(width: 40, height: 40)
                                 .overlay(
                                     Text(String(item.username.prefix(1)).uppercased())
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .fontWeight(.semibold)
                                         .foregroundColor(.theme.accent)
                                 )
                             
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("@\(item.username)")
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .fontWeight(.semibold)
                                     .foregroundColor(.theme.text)
                                 
                                 Text(item.timestamp.timeAgoDisplay())
-                                    .font(.caption)
+                                    .font(AppTypography.caption1())
                                     .foregroundColor(.theme.subtext)
                             }
                         }
@@ -261,14 +261,14 @@ struct SocialFeedItemView: View {
                             } else if usernameClaimed == false {
                                 // Username not claimed — show disabled indicator
                                 Text("Unavailable")
-                                    .font(.caption2)
+                                    .font(AppTypography.caption2())
                                     .foregroundColor(.theme.subtext)
                                     .padding(8)
                                     .background(RoundedRectangle(cornerRadius: 8).stroke(Color.theme.subtext.opacity(0.3)))
                             } else {
                             if friendService.friends.contains(where: { $0.id == item.userId }) {
                                 Text("Friend")
-                                    .font(.caption2)
+                                    .font(AppTypography.caption2())
                                     .foregroundColor(.theme.success)
                                     .padding(8)
                                     .background(RoundedRectangle(cornerRadius: 8).stroke(Color.theme.success))
@@ -285,7 +285,7 @@ struct SocialFeedItemView: View {
                                     showingCancelConfirmation = true
                                 }) {
                                     Text("Requested")
-                                        .font(.caption2)
+                                        .font(AppTypography.caption2())
                                         .foregroundColor(.white)
                                         .padding(8)
                                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.theme.subtext))
@@ -326,7 +326,7 @@ struct SocialFeedItemView: View {
                                             .padding(6)
                                     } else {
                                         Text("Add")
-                                            .font(.caption2)
+                                            .font(AppTypography.caption2())
                                             .fontWeight(.semibold)
                                             .padding(8)
                                     }
@@ -397,7 +397,7 @@ struct SocialFeedItemView: View {
                 
                 // Activity description
                 Text(item.description)
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.text)
                     .lineSpacing(2)
                 
@@ -405,11 +405,11 @@ struct SocialFeedItemView: View {
                 if let challengeTitle = item.challengeTitle {
                     HStack {
                         Image(systemName: "flag.fill")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.accent)
                         
                         Text(challengeTitle)
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .fontWeight(.medium)
                             .foregroundColor(.theme.accent)
                     }
@@ -438,7 +438,7 @@ struct SocialFeedItemView: View {
                         }
                     }) {
                         Image(systemName: showReactions ? "heart.fill" : "heart")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.accent)
                     }
                     .buttonStyle(AppScaleButtonStyle())
@@ -455,7 +455,7 @@ struct SocialFeedItemView: View {
                                 }
                             }) {
                                 Text(emoji)
-                                    .font(.title2)
+                                    .font(AppTypography.title2())
                                     .scaleEffect(1.2)
                             }
                             .buttonStyle(AppScaleButtonStyle())
@@ -474,10 +474,10 @@ struct SocialFeedItemView: View {
     private func reactionButton(emoji: String, count: Int) -> some View {
         HStack(spacing: 4) {
             Text(emoji)
-                .font(.caption)
+                .font(AppTypography.caption1())
             
             Text("\(count)")
-                .font(.caption)
+                .font(AppTypography.caption1())
                 .fontWeight(.medium)
                 .foregroundColor(.theme.subtext)
         }

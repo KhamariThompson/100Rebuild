@@ -37,24 +37,11 @@ struct AuthView: View {
                 HStack {
                     // Close Button
                     Button(action: {
-                        // Navigate back to WelcomeView instead of just dismissing
+                        // Simply dismiss - this will return to WelcomeView
                         dismiss()
-                        
-                        // Reset UserSession state to ensure Welcome screen is shown
-                        Task {
-                            await userSession.signOutWithoutThrowing()
-                            
-                            // Also post the navigation notification directly to ensure transition
-                            await MainActor.run {
-                                NotificationCenter.default.post(
-                                    name: NSNotification.Name("ForceNavigateToWelcome"),
-                                    object: nil
-                                )
-                            }
-                        }
                     }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .padding(12)
                             .background(
@@ -75,7 +62,7 @@ struct AuthView: View {
                         // Add help action
                     }) {
                         Image(systemName: "questionmark")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(Color.theme.text)
                             .padding(12)
                             .background(
@@ -240,10 +227,10 @@ struct AuthModeSelector: View {
                 }
             }) {
                 Text("Sign In")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignIn ? 
-                        (colorScheme == .dark ? .black : .white) : 
-                        .theme.subtext)
+                    .font(AppTypography.body())
+                    .foregroundStyle(viewModel.authMode == .emailSignIn ?
+                        DS.Colors.primaryButtonFg(colorScheme) :
+                        Color.theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -268,9 +255,9 @@ struct AuthModeSelector: View {
                 }
             }) {
                 Text("Sign Up")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(viewModel.authMode == .emailSignUp ? 
-                        (colorScheme == .dark ? .black : .white) : .theme.subtext)
+                    .font(AppTypography.body())
+                    .foregroundStyle(viewModel.authMode == .emailSignUp ?
+                        DS.Colors.primaryButtonFg(colorScheme) : Color.theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -326,14 +313,14 @@ struct LaunchScreenView: View {
                         
                         // Inner checkmark
                         Image(systemName: "checkmark")
-                            .font(.system(size: 50, weight: .bold))
+                            .font(AppTypography.display(.bold))
                             .foregroundColor(.white)
                             .rotationEffect(.degrees(rotation))
                     }
                     
-                    // App name with clean typography
+                    // App name with clean typography - consistent with home screen
                     Text("100Days")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .font(AppTypography.largeTitle(.bold))
                         .foregroundColor(.theme.text)
                         .tracking(1) // Slightly increased letter spacing for cleaner look
                 }
@@ -408,19 +395,19 @@ private extension AuthView {
         VStack(spacing: 18) {
             // Logo mark with subtle shadow
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 70))
+                .font(AppTypography.display())
                 .foregroundColor(.theme.accent)
                 .shadow(color: Color.theme.accent.opacity(0.2), radius: 10, x: 0, y: 4)
                 .padding(.bottom, 5)
-            
-            // App title
+
+            // App title - consistent with home screen header
             Text("100Days")
-                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .font(AppTypography.largeTitle(.bold))
                 .foregroundColor(.theme.text)
-            
+
             // Tagline
             Text("Build consistency, transform your life")
-                .font(.system(size: 16, weight: .medium, design: .rounded))
+                .font(AppTypography.body(.medium))
                 .foregroundColor(.theme.subtext)
                 .padding(.top, -5)
         }
@@ -454,7 +441,7 @@ private extension AuthView {
                     }
                 } label: {
                     Text("Forgot your password?")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(AppTypography.subhead(.medium))
                         .foregroundColor(.theme.accent)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -468,8 +455,8 @@ private extension AuthView {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 } else {
                     Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Create Account")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .foregroundColor(Color.white)
+                        .font(AppTypography.headline())
+                        .foregroundStyle(DS.Colors.primaryButtonFg(colorScheme))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -489,7 +476,7 @@ private extension AuthView {
             // Email field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 TextField("Your email address", text: $viewModel.email)
@@ -521,7 +508,7 @@ private extension AuthView {
                 
                 if let error = viewModel.emailError, !viewModel.email.isEmpty {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.red)
                 }
             }
@@ -529,7 +516,7 @@ private extension AuthView {
             // Password field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Password")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 SecureField("Your password", text: $viewModel.password)
@@ -564,7 +551,7 @@ private extension AuthView {
                 
                 if let error = viewModel.passwordError, !viewModel.password.isEmpty {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.red)
                 }
             }
@@ -573,7 +560,7 @@ private extension AuthView {
             if viewModel.authMode == .emailSignUp {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Confirm Password")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                         .foregroundColor(.theme.text)
                     
                     SecureField("Confirm your password", text: $viewModel.confirmPassword)
@@ -602,7 +589,7 @@ private extension AuthView {
                     
                     if let error = viewModel.confirmPasswordError, !viewModel.confirmPassword.isEmpty {
                         Text(error)
-                            .font(.system(size: 13))
+                            .font(AppTypography.caption1())
                             .foregroundColor(.red)
                     }
                 }
@@ -617,11 +604,11 @@ private extension AuthView {
     var forgotPasswordForm: some View {
         VStack(spacing: 24) {
             Text("Reset Password")
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(AppTypography.font(size: 22, weight: .semibold, design: .rounded))
                 .foregroundColor(.theme.text)
             
             Text("Enter your email address and we'll send you a link to reset your password")
-                .font(.system(size: 15, weight: .regular, design: .rounded))
+                .font(AppTypography.font(size: 15, weight: .regular, design: .rounded))
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 8)
@@ -629,7 +616,7 @@ private extension AuthView {
             // Email field
             VStack(alignment: .leading, spacing: 8) {
                 Text("Email")
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 TextField("Your email address", text: $viewModel.email)
@@ -655,8 +642,8 @@ private extension AuthView {
             // Reset button
             Button(action: resetPassword) {
                 Text("Send Reset Link")
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(AppTypography.headline())
+                    .foregroundStyle(DS.Colors.primaryButtonFg(colorScheme))
                     .frame(maxWidth: .infinity)
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(
@@ -676,7 +663,7 @@ private extension AuthView {
                     viewModel.authMode = .emailSignIn
                 }
             }
-            .font(.system(size: 15, weight: .medium, design: .rounded))
+            .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
             .foregroundColor(.theme.accent)
             .padding(.top, 8)
         }
@@ -696,7 +683,7 @@ private extension AuthView {
                     .frame(maxWidth: .infinity)
                 
                 Text("Or continue with")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(Color.theme.subtext)
                     .padding(.horizontal, 16)
                     .fixedSize()
@@ -758,11 +745,11 @@ private extension AuthView {
                     }
                 } label: {
                     Text("Continue with Google")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.black) // Always black text
+                        .font(AppTypography.headline())
+                        .foregroundStyle(DS.Colors.primaryButtonFg(.light)) // Light mode coloring (black on white)
                         .frame(maxWidth: .infinity)
                         .frame(height: CalAIDesignTokens.buttonHeight)
-                        .background(Color.white) // Always white background
+                        .background(Color.white)
                         .cornerRadius(CalAIDesignTokens.buttonRadius)
                         .overlay(
                             RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
@@ -790,19 +777,19 @@ private extension AuthView {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     
                     Text("Signing in...")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                         .foregroundColor(.white)
                 } else {
                     Image(systemName: "wifi.slash")
-                        .font(.system(size: 28))
+                        .font(AppTypography.title1())
                         .foregroundColor(.white)
                     
                     Text("Network unavailable")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                         .foregroundColor(.white)
                     
                     Text("Waiting for connection...")
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .font(AppTypography.font(size: 14, weight: .regular, design: .rounded))
                         .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.center)
                 }
@@ -826,7 +813,7 @@ private extension AuthView {
                     .foregroundColor(.white)
                 
                 Text(viewModel.errorMessage)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
                     .foregroundColor(.white)
                 
                 Spacer()
@@ -859,7 +846,7 @@ private extension AuthView {
                     .foregroundColor(.white)
                 
                 Text("No Internet Connection")
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.white)
                 
                 Spacer()
@@ -881,20 +868,20 @@ private extension AuthView {
     var termsAndPrivacyLinks: some View {
         VStack(spacing: 8) {
             Text("By continuing, you agree to our")
-                .font(.system(size: 13, weight: .regular, design: .rounded))
+                .font(AppTypography.font(size: 13, weight: .regular, design: .rounded))
                 .foregroundColor(.theme.subtext)
             
             HStack(spacing: 4) {
                 Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.accent)
                 
                 Text("and")
-                    .font(.system(size: 13, weight: .regular, design: .rounded))
+                    .font(AppTypography.font(size: 13, weight: .regular, design: .rounded))
                     .foregroundColor(.theme.subtext)
                 
                 Link("Privacy Policy", destination: URL(string: "https://100days.site/privacy")!)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 13, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.accent)
             }
         }

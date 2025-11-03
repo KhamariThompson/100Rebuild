@@ -115,7 +115,7 @@ struct MainTabBarView: View {
 
                     // Plus icon with contrast
                     Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(AppTypography.title2(.semibold))
                         .foregroundColor(colorScheme == .light ? .white : .black)
                 }
                 .scaleEffect(1.0)
@@ -174,7 +174,7 @@ struct MainTabBarView: View {
                                 .frame(width: 18, height: 18)
                                 .overlay(
                                     Text("\(min(badge, 99))")
-                                        .font(.system(size: 10, weight: .bold))
+                                        .font(AppTypography.caption2(.bold))
                                         .foregroundColor(.white)
                                 )
                         }
@@ -184,14 +184,14 @@ struct MainTabBarView: View {
                     
                     // Tab icon
                     Image(systemName: icon)
-                        .font(.system(size: isSelected ? 22 : 20, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(isSelected ? Color.theme.accent : Color.theme.subtext)
                         .frame(height: 24)
                 }
                 
                 // Tab label
                 Text(label)
-                    .font(.system(size: 11, weight: isSelected ? .medium : .regular))
+                    .font(AppTypography.caption1(isSelected ? .medium : .regular))
                     .foregroundColor(isSelected ? Color.theme.accent : Color.theme.subtext)
             }
             .frame(maxWidth: .infinity)

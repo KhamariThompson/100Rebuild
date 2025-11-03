@@ -7,13 +7,13 @@ struct GroupChallengeDetailView: View {
     @StateObject private var viewModel = GroupChallengeViewModel()
     @Environment(\.presentationMode) private var presentationMode
     @EnvironmentObject private var subscriptionService: SubscriptionService
-    
+
     var body: some View {
         ZStack {
             // Background
             Color.theme.background.ignoresSafeArea()
-            
-            if viewModel.isLoading {
+
+            if viewModel.isLoading || viewModel.challenge == nil {
                 ProgressView()
                     .scaleEffect(1.5)
             } else if let challenge = viewModel.challenge {
@@ -28,11 +28,11 @@ struct GroupChallengeDetailView: View {
                         // Description
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Description")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                                 .foregroundColor(Color.theme.text)
                             
                             Text(challenge.description.isEmpty ? "No description provided." : challenge.description)
-                                .font(.body)
+                                .font(AppTypography.body())
                                 .foregroundColor(Color.theme.text)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -45,19 +45,19 @@ struct GroupChallengeDetailView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Text("Participants")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                                     .foregroundColor(Color.theme.text)
                                 
                                 Spacer()
                                 
                                 Text("\(viewModel.participants.count)/\(challenge.maxParticipants)")
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(Color.theme.subtext)
                             }
                             
                             if viewModel.participants.isEmpty {
                                 Text("No participants yet.")
-                                    .font(.subheadline)
+                                    .font(AppTypography.subhead())
                                     .foregroundColor(Color.theme.subtext)
                                     .padding(.vertical, 10)
                             } else {
@@ -76,7 +76,7 @@ struct GroupChallengeDetailView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
                                     Text("Invitations")
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(Color.theme.text)
                                     
                                     Spacer()
@@ -85,7 +85,7 @@ struct GroupChallengeDetailView: View {
                                         viewModel.showInviteFriendSheet = true
                                     }) {
                                         Label("Invite", systemImage: "person.badge.plus")
-                                            .font(.subheadline)
+                                            .font(AppTypography.subhead())
                                             .foregroundColor(Color.theme.accent)
                                     }
                                     .disabled(viewModel.participants.count >= challenge.maxParticipants)
@@ -93,7 +93,7 @@ struct GroupChallengeDetailView: View {
                                 
                                 if viewModel.invitations.isEmpty {
                                     Text("No pending invitations.")
-                                        .font(.subheadline)
+                                        .font(AppTypography.subhead())
                                         .foregroundColor(Color.theme.subtext)
                                         .padding(.vertical, 10)
                                 } else {
@@ -124,11 +124,11 @@ struct GroupChallengeDetailView: View {
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 50))
+                        .font(AppTypography.display())
                         .foregroundColor(Color.theme.error)
                     
                     Text("Challenge not found")
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .foregroundColor(Color.theme.text)
                     
                     Button("Go Back") {
@@ -140,6 +140,7 @@ struct GroupChallengeDetailView: View {
         }
         .navigationTitle("Challenge Details")
         .navigationBarTitleDisplayMode(.inline)
+        .id(challengeId) // Enforce unique identity per challengeId
         .onAppear {
             viewModel.loadChallenge(challengeId: challengeId)
         }
@@ -168,12 +169,12 @@ struct GroupChallengeDetailView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(challenge.title)
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .foregroundColor(Color.theme.text)
                     
                     Text("Created by @\(challenge.creatorUsername)")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.subtext)
                 }
                 
@@ -185,12 +186,12 @@ struct GroupChallengeDetailView: View {
                             .foregroundColor(challenge.isPublic ? Color.theme.success : Color.theme.accent)
                         
                         Text(challenge.isPublic ? "Public" : "Private")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(Color.theme.subtext)
                     }
                     
                     Text("\(Calendar.current.dateComponents([.day], from: Date(), to: challenge.endDate).day ?? 0) days left")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                 }
             }
@@ -218,7 +219,7 @@ struct GroupChallengeDetailView: View {
                     }
                 }) {
                     Text("Delete Challenge")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -236,7 +237,7 @@ struct GroupChallengeDetailView: View {
                     }
                 }) {
                     Text("Leave Challenge")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -255,7 +256,7 @@ struct GroupChallengeDetailView: View {
                         }
                     }) {
                         Text("Decline")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -273,7 +274,7 @@ struct GroupChallengeDetailView: View {
                         }
                     }) {
                         Text("Join Challenge")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding()
@@ -293,7 +294,7 @@ struct GroupChallengeDetailView: View {
                     }
                 }) {
                     Text("Join Challenge")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -347,12 +348,12 @@ struct ParticipantRow: View {
             // User info
             VStack(alignment: .leading, spacing: 2) {
                 Text(participant.displayName ?? "@\(participant.username)")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(Color.theme.text)
                 
                 if participant.displayName != nil {
                     Text("@\(participant.username)")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                 }
             }
@@ -380,11 +381,11 @@ struct InvitationRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text("@\(invitation.toUserId)")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(Color.theme.text)
                 
                 Text("Invited \(invitation.createdAt.timeAgoDisplay())")
-                    .font(.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(Color.theme.subtext)
             }
             
@@ -392,7 +393,7 @@ struct InvitationRow: View {
             
             Button(action: onCancel) {
                 Text("Cancel")
-                    .font(.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(Color.theme.error)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -428,7 +429,7 @@ struct ProgressBar: View {
 struct DetailPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(AppTypography.headline())
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
@@ -442,7 +443,7 @@ struct DetailPrimaryButtonStyle: ButtonStyle {
 struct GroupPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(AppTypography.headline())
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .padding()
@@ -504,15 +505,15 @@ struct InviteFriendView: View {
                         Spacer()
                         VStack(spacing: 12) {
                             Image(systemName: "person.3.sequence")
-                                .font(.system(size: 40))
+                                .font(AppTypography.display())
                                 .foregroundColor(Color.theme.subtext)
                             
                             Text("No friends found")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                                 .foregroundColor(Color.theme.text)
                             
                             Text("Add friends to invite them to challenges")
-                                .font(.subheadline)
+                                .font(AppTypography.subhead())
                                 .foregroundColor(Color.theme.subtext)
                                 .multilineTextAlignment(.center)
                         }
@@ -546,12 +547,12 @@ struct InviteFriendView: View {
                                         // User info
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(friend.displayName ?? "@\(friend.username)")
-                                                .font(.subheadline)
+                                                .font(AppTypography.subhead())
                                                 .foregroundColor(Color.theme.text)
                                             
                                             if friend.displayName != nil {
                                                 Text("@\(friend.username)")
-                                                    .font(.caption)
+                                                    .font(AppTypography.caption1())
                                                     .foregroundColor(Color.theme.subtext)
                                             }
                                         }
@@ -586,13 +587,18 @@ struct InviteFriendView: View {
     }
 }
 
+@MainActor
 class InviteFriendViewModel: ObservableObject {
     @Published var friends: [Friend] = []
     @Published var filteredFriends: [Friend] = []
     @Published var searchText = ""
     @Published var isLoading = false
-    
-    private let friendService = FriendService.shared
+
+    private let friendService: FriendService
+
+    init() {
+        self.friendService = FriendService.shared
+    }
     
     func loadFriends() {
         isLoading = true

@@ -39,7 +39,12 @@ final class EntitlementsAdapter: ObservableObject {
     /// Effective Pro status including legacy grace period
     var effectiveIsProUser: Bool {
         // Keep compatibility: reflect the latest published combined value
-        return hasProAccess
+        let result = hasProAccess
+        print("🔐 EntitlementsAdapter.effectiveIsProUser check:")
+        print("   - RevenueCat isPro: \(isPro)")
+        print("   - Legacy grace period: \(migrationManager.isInLegacyGracePeriod())")
+        print("   - RESULT (hasProAccess): \(result)")
+        return result
     }
 
     /// Refresh subscription status

@@ -6,21 +6,22 @@ import UIKit
 class LaunchIconUtil {
     
     /// Generate and save the LaunchIcon
+    @MainActor
     static func generateAndSaveLaunchIcon() {
         // Create the icon
         let iconView = LaunchIconGenerator()
-        
+
         // Generate images at different scales
         let sizes = [
             ("1x", CGSize(width: 300, height: 300)),
             ("2x", CGSize(width: 600, height: 600)),
             ("3x", CGSize(width: 900, height: 900))
         ]
-        
+
         for (scale, size) in sizes {
             // Generate image
             let image = iconView.asImage(size: size)
-            
+
             // Get the image data
             if let imageData = image.pngData() {
                 // Determine the filename
@@ -55,11 +56,13 @@ extension LaunchIconUtil {
     static func autoGenerateOnFirstLaunch() {
         let defaults = UserDefaults.standard
         let key = "hasGeneratedLaunchIcon"
-        
+
         if !defaults.bool(forKey: key) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                generateAndSaveLaunchIcon()
-                defaults.set(true, forKey: key)
+                Task { @MainActor in
+                    generateAndSaveLaunchIcon()
+                    defaults.set(true, forKey: key)
+                }
             }
         }
     }

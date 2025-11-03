@@ -9,6 +9,12 @@ struct SubscriptionState: Equatable {
     var isGrandfathered: Bool
     var isPaywallRequired: Bool
 
+    // MARK: - Grandfather Pro Fields
+    /// True if user has active RevenueCat Pro entitlement
+    var rcIsPro: Bool = false
+    /// True if user qualifies for grandfather Pro (pre-cutoff + within 1 year)
+    var isGrandfatherActive: Bool = false
+
     init(status: SubscriptionStatus, isPaywallRequired: Bool = false) {
         self.status = status
         self.isPro = status.isPro

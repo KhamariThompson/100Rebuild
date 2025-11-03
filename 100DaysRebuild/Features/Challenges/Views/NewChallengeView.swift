@@ -104,14 +104,14 @@ struct NewChallengeView: View {
                         VStack(alignment: .leading, spacing: AppSpacing.s) {
                             HStack {
                                 Text("What do you want to do for 100 days?")
-                                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                                    .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
                                     .foregroundColor(.theme.text)
                                 
                                 Spacer()
                                 
                                 // Character counter
                                 Text("\(challengeTitle.count)/\(titleCharLimit)")
-                                    .font(.system(size: 12))
+                                    .font(AppTypography.caption1())
                                     .foregroundColor(challengeTitle.count > Int(Double(titleCharLimit) * 0.8) 
                                         ? (challengeTitle.count >= titleCharLimit ? .red : .orange) 
                                         : .theme.subtext)
@@ -128,7 +128,7 @@ struct NewChallengeView: View {
                                     get: { challengeTitle },
                                     set: { challengeTitle = String($0.prefix(titleCharLimit)) }
                                 ))
-                                .font(.system(size: 18))
+                                .font(AppTypography.title3())
                                 .padding(AppSpacing.m)
                                 .frame(minHeight: 44)
                                 .background(Color.theme.surface)
@@ -159,7 +159,7 @@ struct NewChallengeView: View {
                             // Icon selector
                             VStack(alignment: .center, spacing: AppSpacing.xs) {
                                 Text("Icon")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
                                     .foregroundColor(.theme.subtext)
                                 
                                 Button(action: {
@@ -174,7 +174,7 @@ struct NewChallengeView: View {
                                             .frame(width: 60, height: 60)
                                         
                                         Image(systemName: selectedIcon)
-                                            .font(.system(size: 30))
+                                            .font(AppTypography.title1())
                                             .foregroundColor(Color.theme.accent)
                                     }
                                 }
@@ -183,7 +183,7 @@ struct NewChallengeView: View {
                             // Category selector
                             VStack(alignment: .center, spacing: AppSpacing.xs) {
                                 Text("Category")
-                                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                                    .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
                                     .foregroundColor(.theme.subtext)
                                 
                                 Button(action: {
@@ -197,11 +197,11 @@ struct NewChallengeView: View {
                                             .foregroundColor(selectedCategory.color)
                                         
                                         Text(selectedCategory.rawValue)
-                                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                                            .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                                             .foregroundColor(.theme.text)
                                         
                                         Image(systemName: "chevron.down")
-                                            .font(.system(size: 12))
+                                            .font(AppTypography.caption1())
                                             .foregroundColor(.theme.subtext)
                                     }
                                     .padding(.horizontal, AppSpacing.m)
@@ -224,14 +224,14 @@ struct NewChallengeView: View {
                             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                                 HStack {
                                     Text("Description (optional)")
-                                        .font(.footnote)
+                                        .font(AppTypography.footnote())
                                         .foregroundColor(.theme.subtext)
                                     
                                     Spacer()
                                     
                                     // Character counter
                                     Text("\(challengeDescription.count)/\(descriptionCharLimit)")
-                                        .font(.system(size: 12))
+                                        .font(AppTypography.caption1())
                                         .foregroundColor(challengeDescription.count > Int(Double(descriptionCharLimit) * 0.8) 
                                             ? (challengeDescription.count >= descriptionCharLimit ? .red : .orange) 
                                             : .theme.subtext)
@@ -240,7 +240,7 @@ struct NewChallengeView: View {
                                 ZStack(alignment: .topLeading) {
                                     if challengeDescription.isEmpty {
                                         Text("What's your goal? Be specific to stay motivated.")
-                                            .font(.system(size: 15))
+                                            .font(AppTypography.subhead())
                                             .foregroundColor(.theme.subtext.opacity(0.6))
                                             .padding(.top, AppSpacing.m)
                                             .padding(.leading, AppSpacing.m)
@@ -250,7 +250,7 @@ struct NewChallengeView: View {
                                         get: { challengeDescription },
                                         set: { challengeDescription = String($0.prefix(descriptionCharLimit)) }
                                     ))
-                                    .font(.system(size: 15))
+                                    .font(AppTypography.subhead())
                                     .frame(minHeight: 80)
                                     .padding(AppSpacing.xs)
                                     .background(Color.theme.surface)
@@ -280,11 +280,11 @@ struct NewChallengeView: View {
                                             
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text("Require timer to check in")
-                                                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                                                    .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                                                     .foregroundColor(.theme.text)
                                                 
                                                 Text("Great for focused activities like meditation")
-                                                    .font(.system(size: 13))
+                                                    .font(AppTypography.caption1())
                                                     .foregroundColor(.theme.subtext)
                                             }
                                             
@@ -299,7 +299,7 @@ struct NewChallengeView: View {
                                         
                                         VStack(alignment: .leading, spacing: AppSpacing.xs) {
                                             Text("Minimum Session Duration")
-                                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                                .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
                                                 .foregroundColor(.theme.text)
                                             
                                             Picker("Duration", selection: $minDuration) {
@@ -331,11 +331,11 @@ struct NewChallengeView: View {
                                         
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(isPublic ? "Public Challenge" : "Private Challenge")
-                                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                                                .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                                                 .foregroundColor(.theme.text)
                                             
                                             Text(isPublic ? "Others can see your progress" : "Only you can see this challenge")
-                                                .font(.system(size: 13))
+                                                .font(AppTypography.caption1())
                                                 .foregroundColor(.theme.subtext)
                                         }
                                         
@@ -352,7 +352,7 @@ struct NewChallengeView: View {
                         // Popular suggestions
                         VStack(alignment: .leading, spacing: AppSpacing.s) {
                             Text("Popular challenge ideas")
-                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .font(AppTypography.font(size: 16, weight: .semibold, design: .rounded))
                                 .foregroundColor(.theme.text)
                                 .padding(.horizontal)
                             
@@ -368,7 +368,7 @@ struct NewChallengeView: View {
                                                     .foregroundColor(.theme.accent)
                                                 
                                                 Text(suggestion)
-                                                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                                                    .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                                                     .foregroundColor(.theme.text)
                                             }
                                             .padding(.horizontal, AppSpacing.m)
@@ -430,7 +430,7 @@ struct NewChallengeView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("New Challenge")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(.theme.text)
                 }
                 
@@ -476,7 +476,7 @@ struct NewChallengeView: View {
             onCreateChallenge(challengeTitle, isTimed)
         }) {
             Text("Start 100-Day Challenge")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
                 .foregroundColor(themeManager.currentTheme == .dark ? .black : .white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)
@@ -527,7 +527,7 @@ struct NewChallengeView: View {
             
             VStack(alignment: .leading, spacing: AppSpacing.m) {
                 Text("Select Category")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
                     .padding(.top, AppSpacing.m)
                 
@@ -544,12 +544,12 @@ struct NewChallengeView: View {
                             }) {
                                 HStack(spacing: AppSpacing.m) {
                                     Image(systemName: category.icon)
-                                        .font(.system(size: 20))
+                                        .font(AppTypography.title3())
                                         .foregroundColor(category.color)
                                         .frame(width: 24)
                                     
                                     Text(category.rawValue)
-                                        .font(.system(size: 17, design: .rounded))
+                                        .font(AppTypography.headline())
                                         .foregroundColor(.theme.text)
                                     
                                     Spacer()
@@ -592,7 +592,7 @@ struct NewChallengeView: View {
             
             VStack(alignment: .leading, spacing: AppSpacing.m) {
                 Text("Select Icon")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
                     .padding(.top, AppSpacing.m)
                 
@@ -612,7 +612,7 @@ struct NewChallengeView: View {
                                     .frame(width: 56, height: 56)
                                 
                                 Image(systemName: icon)
-                                    .font(.system(size: 24))
+                                    .font(AppTypography.title2())
                                     .foregroundColor(icon == selectedIcon ? Color.theme.accent : .theme.text)
                             }
                             .overlay(
@@ -660,7 +660,7 @@ struct NewChallengeView: View {
                     .foregroundColor(.yellow)
                 
                 Text("Pro Feature")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 16, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.accent)
                 
                 Button(action: {
@@ -671,7 +671,7 @@ struct NewChallengeView: View {
                     // You could add an alert here, but we'll just trigger haptic feedback
                 }) {
                     Image(systemName: "questionmark.circle")
-                        .font(.footnote)
+                        .font(AppTypography.footnote())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -679,11 +679,11 @@ struct NewChallengeView: View {
             }
             
             Text("Free users can create up to 2 active challenges")
-                .font(.system(size: 15, design: .rounded))
+                .font(AppTypography.callout())
                 .foregroundColor(.theme.text)
             
             Text("Upgrade to Pro to create unlimited challenges, access premium icons, and unlock timer features")
-                .font(.system(size: 14))
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .padding(.top, AppSpacing.xxs)
         }

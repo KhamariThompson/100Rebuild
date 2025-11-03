@@ -30,35 +30,36 @@ extension UserSession {
     // MARK: - Funnel Completion Methods
     
     /// Complete the onboarding funnel and mark timestamp
+    /// NOTE: This does NOT grant app access - user must subscribe first
     func completeFunnel() {
         let now = Date()
-        
+
         // Store locally
         UserDefaults.standard.set(now, forKey: StorageKeys.onboardingCompletedAt)
-        
+
         // Update Firestore if user is authenticated
+        // IMPORTANT: We do NOT set hasCompletedOnboarding here
+        // That only happens after successful subscription purchase
         if let userId = currentUser?.uid {
             Task {
                 do {
                     try await Firestore.firestore().collection("users").document(userId).updateData([
                         "onboardingCompletedAt": now,
-                        "hasCompletedOnboarding": true
+                        "funnelCompleted": true
+                        // NOTE: hasCompletedOnboarding is NOT set here
                     ])
-                    
-                    print("✅ UserSession: Funnel completion saved to Firestore")
+
+                    print("✅ UserSession: Funnel completion saved to Firestore (not granting app access)")
                 } catch {
                     print("❌ UserSession: Failed to save funnel completion to Firestore - \(error.localizedDescription)")
                 }
             }
         }
-        
+
         // Sync with RevenueCat subscriber attributes
         syncFunnelAttributesToRevenueCat()
-        
-        // Mark onboarding as completed in UserSession
-        Task {
-            await completeOnboarding()
-        }
+
+        // DO NOT call completeOnboarding() here - that only happens after Pro purchase
     }
     
     /// Reset funnel completion state (for testing)

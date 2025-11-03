@@ -47,7 +47,7 @@ public enum AuthComponents {
             VStack(alignment: .leading, spacing: 8) {
                 // Field label
                 Text(title)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(.theme.text)
                 
                 // Text field
@@ -76,7 +76,7 @@ public enum AuthComponents {
                 // Error message if present
                 if let error = errorMessage, !text.isEmpty {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.red)
                 }
             }
@@ -125,9 +125,9 @@ public enum AuthComponents {
             VStack(alignment: .leading, spacing: 8) {
                 // Field label
                 Text(title)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(.theme.text)
-                
+
                 // Password field with toggle
                 ZStack(alignment: .trailing) {
                     if showPassword {
@@ -179,20 +179,21 @@ public enum AuthComponents {
                 // Error message if present
                 if let error = errorMessage, !text.isEmpty {
                     Text(error)
-                        .font(.system(size: 13))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.red)
                 }
             }
         }
     }
-    
+
     /// Primary button for authentication actions
     public struct AuthPrimaryButton: View {
         let title: String
         let action: () -> Void
         let isEnabled: Bool
         let isLoading: Bool
-        
+        @Environment(\.colorScheme) private var colorScheme
+
         public init(
             title: String,
             isEnabled: Bool = true,
@@ -204,19 +205,19 @@ public enum AuthComponents {
             self.isLoading = isLoading
             self.action = action
         }
-        
+
         public var body: some View {
             Button(action: action) {
                 ZStack {
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.adaptiveForeground(for: colorScheme)))
                     } else {
                         Text(title)
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .font(AppTypography.body(.semibold))
                     }
                 }
-                .foregroundColor(.white)
+                .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                 .frame(maxWidth: .infinity)
                 .frame(height: CalAIDesignTokens.buttonHeight)
                 .background(
@@ -249,7 +250,7 @@ public enum AuthComponents {
         public var body: some View {
             Button(action: action) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.theme.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: CalAIDesignTokens.buttonHeight)
@@ -281,7 +282,7 @@ public enum AuthComponents {
         public var body: some View {
             Button(action: action) {
                 Text(title)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(.theme.accent)
                     .padding(.vertical, 4)
             }
@@ -303,7 +304,7 @@ public enum AuthComponents {
                     .frame(height: 1)
                 
                 Text(text)
-                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .font(AppTypography.caption1(.medium))
                     .foregroundColor(.theme.subtext)
                     .padding(.horizontal, 12)
                 

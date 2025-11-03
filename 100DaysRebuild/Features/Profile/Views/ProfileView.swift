@@ -66,7 +66,7 @@ struct ProfileView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 // Profile title with gradient
                                 Text("Profile")
-                                    .font(.largeTitle)
+                                    .font(AppTypography.largeTitle())
                                     .bold()
                                     .foregroundStyle(profileGradient)
                             }
@@ -76,7 +76,7 @@ struct ProfileView: View {
                             // Settings button
                             Button(action: { isShowingSettings = true }) {
                                 Image(systemName: "gear")
-                                    .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                                    .font(AppTypography.title2(.semibold))
                                     .foregroundColor(.theme.accent)
                             }
                             .buttonStyle(AppScaleButtonStyle())
@@ -250,10 +250,11 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $isShowingSettings) {
             SettingsView()
+                .environmentObject(SubscriptionStore.shared)
         }
         .sheet(isPresented: $isShowingAnalytics) {
             Text("Profile Analytics")
-                .font(.title)
+                .font(AppTypography.title1())
                 .padding()
         }
         .sheet(isPresented: $isShowingNewChallenge) {
@@ -334,7 +335,7 @@ struct ProfileView: View {
             
             // Joined date - displayed under username
             Text("Joined \(formatJoinDate(viewModel.memberSinceDate))")
-                .font(.system(size: 12))
+                .font(AppTypography.caption1())
                 .foregroundColor(.theme.subtext.opacity(0.8))
                 .padding(.top, -2)
             
@@ -376,10 +377,10 @@ struct ProfileView: View {
                 HStack {
                     Image(systemName: "crown.fill")
                         .foregroundColor(.yellow)
-                        .font(.system(size: 12))
+                        .font(AppTypography.caption1())
                     
                     Text("PRO")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(AppTypography.caption1(.bold))
                         .foregroundColor(.yellow)
                 }
                 .padding(.horizontal, 12)
@@ -402,10 +403,10 @@ struct ProfileView: View {
         HStack(spacing: 6) {
             Image(systemName: days >= 100 ? "flame.fill" : "flame")
                 .foregroundColor(days >= 100 ? .orange : .theme.accent)
-                .font(.system(size: 14))
+                .font(AppTypography.subhead())
             
             Text("\(days)-Day Streak Achieved!")
-                .font(.system(size: 13, weight: .semibold))
+                .font(AppTypography.caption1(.semibold))
                 .foregroundColor(days >= 100 ? .orange : .theme.accent)
         }
         .padding(.horizontal, 12)
@@ -533,27 +534,27 @@ struct ProfileView: View {
                         .frame(width: 40, height: 40)
                     
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(getIconColor())
                 }
                 
                 // Value
                 Text(value)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
                     .minimumScaleFactor(0.8)
                     .lineLimit(1)
                 
                 // Label
                 Text(label)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(AppTypography.font(size: 12, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.text)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
                 
                 // Description
                 Text(description)
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
+                    .font(AppTypography.font(size: 10, weight: .regular, design: .rounded))
                     .foregroundColor(.theme.subtext.opacity(0.8))
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
@@ -691,7 +692,7 @@ struct ProfileView: View {
                     if let lastCheckIn = challenge.lastCheckInDate {
                         HStack {
                             Image(systemName: "clock")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.theme.subtext)
                             
                             Text("Last check-in \(timeAgoFormatter.localizedString(for: lastCheckIn, relativeTo: Date()))")
@@ -731,7 +732,7 @@ struct ProfileView: View {
             }) {
                 VStack(spacing: AppSpacing.m) {
                     Image(systemName: "flag.slash")
-                        .font(.system(size: 32))
+                        .font(AppTypography.largeTitle())
                         .foregroundColor(.theme.subtext)
                     
                     Text("Start your first 100-day challenge")
@@ -833,7 +834,7 @@ struct ProfileView: View {
             Button(action: action) {
                 HStack {
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(AppTypography.subhead(.medium))
                     
                     Text(title)
                         .font(AppTypography.footnote())
@@ -865,7 +866,7 @@ struct ProfileView: View {
                 
                 VStack(spacing: AppSpacing.l) {
                     Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 70))
+                        .font(AppTypography.display())
                         .foregroundColor(.theme.accent)
                         .padding(.bottom, AppSpacing.m)
                     

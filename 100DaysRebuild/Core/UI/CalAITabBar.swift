@@ -22,11 +22,11 @@ public struct CalAITabBar: View {
                 }) {
                     VStack(spacing: 4) {
                         Image(systemName: item.icon)
-                            .font(.system(size: 20, weight: selectedTab == index ? .semibold : .regular))
+                            .font(AppTypography.title3(selectedTab == index ? .semibold : .regular))
                             .foregroundColor(selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
                         
                         Text(item.text)
-                            .font(.system(size: 10, weight: selectedTab == index ? .semibold : .medium, design: .rounded))
+                            .font(AppTypography.caption2(selectedTab == index ? .semibold : .medium))
                             .foregroundColor(selectedTab == index ? Color.theme.accent : Color.theme.subtext.opacity(0.8))
                     }
                     .frame(height: 46)
@@ -122,7 +122,7 @@ public struct CalAIFloatingTabBar: View {
                 }
             }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(AppTypography.title2(.semibold))
                     .foregroundColor(.black)
                     .frame(width: 50, height: 50)
                     .background(

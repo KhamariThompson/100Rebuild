@@ -87,7 +87,7 @@ struct ProHeaderView: View {
                 
                 // Crown icon
                 Image(systemName: "crown.fill")
-                    .font(.system(size: 50))
+                    .font(AppTypography.display())
                     .foregroundColor(.yellow)
                     .shadow(color: Color.yellow.opacity(0.5), radius: 10, x: 0, y: 5)
                     .padding(10)
@@ -102,7 +102,7 @@ struct ProHeaderView: View {
             
             // Title with gradient
             Text(title)
-                .font(.system(size: 28, weight: .bold))
+                .font(AppTypography.title1(.bold))
                 .foregroundStyle(
                     LinearGradient(
                         colors: [.yellow, .orange],
@@ -117,7 +117,7 @@ struct ProHeaderView: View {
             
             // Description
             Text(description)
-                .font(.body)
+                .font(AppTypography.body())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
@@ -136,7 +136,7 @@ struct ProFeaturesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("PRO FEATURES")
-                .font(.caption)
+                .font(AppTypography.caption1())
                 .fontWeight(.semibold)
                 .foregroundColor(.theme.subtext)
                 .padding(.horizontal, 32)
@@ -171,10 +171,10 @@ struct ProFeatureRow: View {
         HStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.yellow)
-                .font(.system(size: 20))
+                .font(AppTypography.title3())
             
             Text(feature)
-                .font(.body)
+                .font(AppTypography.body())
                 .foregroundColor(.theme.text)
             
             Spacer()
@@ -208,12 +208,12 @@ struct ProSubscriptionStatusView: View {
                 // Already a Pro user
                 VStack(spacing: 8) {
                     Text("You're already a Pro user!")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.green)
 
                     if let expiryDate = subscriptionStore.state.renewalDate {
                         Text("Your subscription is active until \(expiryDate.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                     }
@@ -228,22 +228,22 @@ struct ProSubscriptionStatusView: View {
                 // Price display
                 VStack(spacing: 8) {
                     Text("Unlock all Pro features")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     HStack(alignment: .bottom, spacing: 4) {
                         Text("$4.99")
-                            .font(.system(size: 32, weight: .bold))
+                            .font(AppTypography.largeTitle(.bold))
                             .foregroundColor(.theme.accent)
                         
                         Text("/ month")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .padding(.bottom, 4)
                     }
                     
                     Text("or $49.99/year (save 20%)")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 .padding()
@@ -274,7 +274,7 @@ struct ProActionButtonsView: View {
             if entitlementsAdapter.hasProAccess {
                 Button(action: onDismiss) {
                     Text("Continue")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -295,7 +295,7 @@ struct ProActionButtonsView: View {
                     onUpgrade()
                 }) {
                     Text("Upgrade to Pro")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
@@ -316,7 +316,7 @@ struct ProActionButtonsView: View {
                 
                 Button(action: onDismiss) {
                     Text("Maybe Later")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
                 .buttonStyle(PlainButtonStyle())

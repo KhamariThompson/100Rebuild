@@ -21,7 +21,7 @@ struct ProgressFeatureStatCard: View {
             HStack(spacing: AppSpacing.xs) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                        .font(AppTypography.title2(.semibold))
                         .foregroundColor(.theme.accent)
                         .opacity(0.8)
                         .frame(width: AppSpacing.iconSizeMedium, height: AppSpacing.iconSizeMedium)
@@ -103,7 +103,7 @@ struct ProgressFeatureBadgeCard: View {
                 
                 // Main icon
                 Image(systemName: badge.iconName)
-                    .font(.system(size: AppSpacing.iconSizeLarge, weight: .semibold))
+                    .font(AppTypography.title1(.semibold))
                     .foregroundColor(.theme.accent)
                     .scaleEffect(animateAppear ? 1.0 : 0.8)
             }
@@ -157,7 +157,7 @@ struct ProgressFeatureLoadingStepIndicator: View {
                 
                 if isCompleted {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(AppTypography.subhead(.bold))
                         .foregroundColor(.green)
                 } else if isAnimating {
                     Circle()

@@ -57,7 +57,7 @@ struct SuccessCheckmarkModifier: ViewModifier {
                         .frame(width: 30, height: 30)
                     
                     Image(systemName: "checkmark")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(AppTypography.headline(.bold))
                         .foregroundColor(.white)
                 }
                 .transition(.scale.combined(with: .opacity))
@@ -110,7 +110,7 @@ struct ScrollOffsetModifier: ViewModifier {
 
 // MARK: - SafeArea Key
 struct SafeAreaKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
+    nonisolated(unsafe) static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = max(value, nextValue())
     }
@@ -213,7 +213,7 @@ struct TooltipModifier: ViewModifier {
     private var tooltipContent: some View {
         VStack(alignment: .center) {
             Text(message)
-                .font(.system(size: 14, weight: .medium))
+                .font(AppTypography.subhead(.medium))
                 .foregroundColor(textColor)
                 .multilineTextAlignment(.center)
                 .padding(.vertical, 8)

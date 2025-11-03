@@ -106,8 +106,8 @@ struct UserProfile: Codable {
     }
 }
 
-class FirebaseService {
-    static let shared = FirebaseService()
+class FirebaseService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = FirebaseService()
     
     private var auth: Auth?
     private var firestore: Firestore?
@@ -648,31 +648,34 @@ class FirebaseService {
                 throw FirebaseError.documentNotFound
             }
             
-            // Run as a transaction to ensure atomicity
-            try await firestore.runTransaction { transaction, errorPointer in
-                // 1. Delete old username reservation
-                let oldUsernameRef = firestore
-                    .collection(CollectionPath.usernames)
-                    .document(currentUsername.lowercased())
-                transaction.deleteDocument(oldUsernameRef)
-                
-                // 2. Create new username reservation
-                let newUsernameRef = firestore
-                    .collection(CollectionPath.usernames)
-                    .document(username.lowercased())
-                transaction.setData(["userId": userId], forDocument: newUsernameRef)
-                
-                // 3. Update user document with new username and timestamp
-                let userRef = firestore
-                    .collection(CollectionPath.users)
-                    .document(userId)
-                transaction.updateData([
-                    "username": username.lowercased(),
-                    "lastUsernameChangeAt": FieldValue.serverTimestamp()
-                ], forDocument: userRef)
-                
-                return nil
-            }
+            // Run as a transaction off the current context to avoid non-Sendable Any? crossing actor boundaries
+            try await Task.detached {
+                let fs = firestore
+                _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                    // 1. Delete old username reservation
+                    let oldUsernameRef = fs
+                        .collection(CollectionPath.usernames)
+                        .document(currentUsername.lowercased())
+                    transaction.deleteDocument(oldUsernameRef)
+
+                    // 2. Create new username reservation
+                    let newUsernameRef = fs
+                        .collection(CollectionPath.usernames)
+                        .document(username.lowercased())
+                    transaction.setData(["userId": userId], forDocument: newUsernameRef)
+
+                    // 3. Update user document with new username and timestamp
+                    let userRef = fs
+                        .collection(CollectionPath.users)
+                        .document(userId)
+                    transaction.updateData([
+                        "username": username.lowercased(),
+                        "lastUsernameChangeAt": FieldValue.serverTimestamp()
+                    ], forDocument: userRef)
+
+                    return nil
+                }
+            }.value
             
         } catch {
             // Rethrow as our custom error type
@@ -760,23 +763,7 @@ class FirebaseService {
             
             // Specific error handling
             let nsError = error as NSError
-            let errorCode = StorageErrorCode(rawValue: nsError.code)
-            switch errorCode {
-            case .unauthenticated:
-                print("Storage error: User is not authenticated for this operation")
-            case .unauthorized:
-                print("Storage error: User does not have permission to access this reference")
-            case .retryLimitExceeded:
-                print("Storage error: Retry limit exceeded")
-            case .cancelled:
-                print("Storage error: User cancelled the operation")
-            case .unknown:
-                print("Storage error: Unknown error occurred")
-            case .none:
-                print("Storage error: \(nsError.localizedDescription)")
-            @unknown default:
-                print("Storage error: Unrecognized error code")
-            }
+            print("Storage error [\(nsError.code)]: \(nsError.localizedDescription)")
             
             throw FirebaseError.storageError(error)
         }

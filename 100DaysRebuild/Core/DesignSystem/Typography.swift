@@ -116,6 +116,14 @@ public enum AppTypography {
     public static func caption2(_ weight: Font.Weight = .regular) -> Font {
         return font(size: FontSize.caption2, weight: weight)
     }
+
+    // MARK: - Special Sizes for Specific Use Cases
+
+    /// Extra large display for special emphasis (80pt) - use sparingly
+    /// Used for: Large numbers, hero displays, celebration screens
+    public static func displayXL(_ weight: Font.Weight = .bold) -> Font {
+        return font(size: 80, weight: weight)
+    }
 }
 
 // MARK: - Font Extensions

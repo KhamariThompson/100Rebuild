@@ -4,7 +4,7 @@ import StoreKit
 import FirebaseFirestore
 
 /// RevenueCat implementation of SubscriptionRepository
-final class RevenueCatSubscriptionRepository: SubscriptionRepository {
+final class RevenueCatSubscriptionRepository: SubscriptionRepository, @unchecked Sendable {
     private let firestore = Firestore.firestore()
 
     // MARK: - Load Status
@@ -16,31 +16,84 @@ final class RevenueCatSubscriptionRepository: SubscriptionRepository {
 
     // MARK: - Purchase
 
-    func purchase(_ plan: SubscriptionPlan) async throws -> SubscriptionStatus {
-        print("🔐 RC: Starting purchase for \(plan.productId)")
+    /// Purchase a subscription by plan
+    /// This method now uses PackageID (from RevenueCat configuration) instead of product IDs
+    /// This ensures alignment with RevenueCat dashboard configuration
+    func purchase(_ plan: SubscriptionPlan, explicitProductId: String?) async throws -> (SubscriptionStatus, String) {
+        print("🔐 RC: Starting purchase for \(plan.rawValue)")
 
         // Get offerings
         let offerings = try await Purchases.shared.offerings()
 
-        guard let offering = offerings.current else {
-            print("❌ RC: No current offering available")
-            throw SubscriptionError.noOfferingAvailable
+        // Determine which package identifier to use based on the plan
+        let packageIdentifier: String
+        let targetProductId: String
+
+        if let explicit = explicitProductId {
+            // Explicit product ID provided (e.g., for annual intro vs no-intro)
+            targetProductId = explicit
+            // Map product ID back to package identifier
+            if explicit == SubscriptionIDs.ProductID.monthly {
+                packageIdentifier = SubscriptionIDs.Package.monthly
+            } else if explicit == SubscriptionIDs.ProductID.annualNoIntro {
+                packageIdentifier = SubscriptionIDs.Package.annualNoIntro
+            } else {
+                packageIdentifier = SubscriptionIDs.Package.annual
+            }
+            print("🔐 RC: Using explicit product ID: \(explicit) → package: \(packageIdentifier)")
+        } else {
+            // Use default mapping from plan
+            switch plan {
+            case .monthly:
+                packageIdentifier = SubscriptionIDs.Package.monthly
+                targetProductId = SubscriptionIDs.ProductID.monthly
+            case .annual:
+                // Default to intro offer
+                packageIdentifier = SubscriptionIDs.Package.annual
+                targetProductId = SubscriptionIDs.ProductID.annualIntro
+            }
+            print("🔐 RC: Using plan default → package: \(packageIdentifier), product: \(targetProductId)")
         }
 
-        // Find the package for this plan
-        guard let package = offering.availablePackages.first(where: {
-            $0.storeProduct.productIdentifier == plan.productId
-        }) else {
-            print("❌ RC: Package not found for \(plan.productId)")
+        // Get the default offering
+        guard let offering = offerings.offering(identifier: SubscriptionIDs.offeringID) ?? offerings.current else {
+            print("❌ RC: No offering found (looking for '\(SubscriptionIDs.offeringID)' or current)")
+            throw SubscriptionError.noOffering
+        }
+
+        print("🔐 RC: Using offering: \(offering.identifier)")
+
+        // Find package by identifier (BEST PRACTICE - uses RevenueCat package identifiers)
+        var selectedPackage = offering.availablePackages.first(where: { $0.identifier == packageIdentifier })
+
+        // Fallback: if not found by identifier, try by product ID
+        if selectedPackage == nil {
+            print("⚠️ RC: Package '\(packageIdentifier)' not found, falling back to product ID search")
+            selectedPackage = offering.availablePackages.first(where: {
+                $0.storeProduct.productIdentifier == targetProductId
+            })
+        }
+
+        guard let package = selectedPackage else {
+            print("❌ RC: Package not found")
+            print("   Looking for: package '\(packageIdentifier)' or product '\(targetProductId)'")
+            print("   Available packages:")
+            for pkg in offering.availablePackages {
+                print("     • \(pkg.identifier) → \(pkg.storeProduct.productIdentifier)")
+            }
             throw SubscriptionError.packageNotFound
         }
 
+        print("✅ RC: Found package: \(package.identifier) → \(package.storeProduct.productIdentifier)")
+
         // Purchase
         let result = try await Purchases.shared.purchase(package: package)
-        print("✅ RC: Purchase successful")
+        let purchasedProductId = package.storeProduct.productIdentifier
+        print("✅ RC: Purchase successful - product: \(purchasedProductId)")
 
         // Map result to status
-        return mapCustomerInfoToStatus(result.customerInfo)
+        let status = mapCustomerInfoToStatus(result.customerInfo)
+        return (status, purchasedProductId)
     }
 
     // MARK: - Restore
@@ -179,6 +232,14 @@ final class RevenueCatSubscriptionRepository: SubscriptionRepository {
     private func mapCustomerInfoToStatus(_ customerInfo: CustomerInfo) -> SubscriptionStatus {
         // Check for pro entitlement
         guard let entitlement = customerInfo.entitlements[Entitlement.pro.identifier] else {
+            // Log available entitlements for debugging
+            let availableEntitlements = customerInfo.entitlements.all.keys.joined(separator: ", ")
+            print("⚠️ RC: Entitlement '\(Entitlement.pro.identifier)' not found.")
+            print("   Available entitlements: \(availableEntitlements.isEmpty ? "none" : availableEntitlements)")
+            print("   This usually means:")
+            print("   1. Entitlement 'pro' not created in RevenueCat dashboard")
+            print("   2. Products not linked to 'pro' entitlement")
+            print("   3. Apple IAP Key not configured (purchases can't sync)")
             return .notPurchased
         }
 
@@ -191,6 +252,7 @@ final class RevenueCatSubscriptionRepository: SubscriptionRepository {
 
         // Active - find which plan
         let plan = findActivePlan(customerInfo)
+        print("✅ RC: Pro entitlement is active, plan: \(plan?.displayName ?? "unknown")")
         return .active(plan: plan ?? .annual, renewalDate: entitlement.expirationDate)
     }
 
@@ -258,6 +320,7 @@ final class RevenueCatSubscriptionRepository: SubscriptionRepository {
 
 enum SubscriptionError: LocalizedError {
     case noOfferingAvailable
+    case noOffering
     case packageNotFound
     case purchaseCancelled
     case purchaseFailed(underlying: Error)
@@ -267,6 +330,8 @@ enum SubscriptionError: LocalizedError {
         switch self {
         case .noOfferingAvailable:
             return "No subscription offerings available"
+        case .noOffering:
+            return "No offering found in RevenueCat"
         case .packageNotFound:
             return "Subscription package not found"
         case .purchaseCancelled:

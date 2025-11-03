@@ -44,18 +44,18 @@ public struct StatCard: View {
             HStack(spacing: AppSpacing.xs) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: AppSpacing.iconSizeSmall))
+                        .font(AppTypography.body())
                         .foregroundColor(color)
                 }
                 
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(Color.theme.subtext)
             }
             
             // Value
             Text(value)
-                .font(.system(size: 22, weight: .bold))
+                .font(AppTypography.title2(.bold))
                 .foregroundColor(Color.theme.text)
         }
         .padding(CalAISpacing.medium)
@@ -105,12 +105,12 @@ public struct MiniStatCard: View {
     public var body: some View {
         VStack(alignment: .center, spacing: AppSpacing.xs) {
             Text(value)
-                .font(.system(size: 20, weight: .bold))
+                .font(AppTypography.title3(.bold))
                 .foregroundColor(Color.theme.text)
             
             if let subtitle = subtitle {
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(AppTypography.caption1(.medium))
                     .foregroundColor(Color.theme.subtext)
             }
         }
@@ -167,18 +167,18 @@ public struct HorizontalStatCard: View {
         HStack(spacing: CalAISpacing.medium) {
             if let icon = icon {
                 Image(systemName: icon)
-                    .font(.system(size: CalAIDesignTokens.iconSize))
+                    .font(AppTypography.title2())
                     .foregroundColor(color)
                     .frame(width: CalAIDesignTokens.iconSize, height: CalAIDesignTokens.iconSize)
             }
             
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(Color.theme.subtext)
                 
                 Text(value)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(AppTypography.headline(.bold))
                     .foregroundColor(Color.theme.text)
             }
             
@@ -249,7 +249,7 @@ public struct CircularStatCard: View {
                     
                     // Value text
                     Text(value)
-                        .font(.system(size: 22, weight: .bold))
+                        .font(AppTypography.title2(.bold))
                         .foregroundColor(.theme.text)
                         .tightText()
                 }
@@ -257,14 +257,14 @@ public struct CircularStatCard: View {
             } else {
                 // Just the value if no progress
                 Text(value)
-                    .font(.system(size: 28, weight: .bold))
+                    .font(AppTypography.title1(.bold))
                     .foregroundColor(.theme.text)
                     .tightText()
             }
             
             // Title
             Text(title)
-                .font(.system(size: AppTypography.FontSize.subhead, weight: .medium))
+                .font(AppTypography.subhead(.medium))
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
         }

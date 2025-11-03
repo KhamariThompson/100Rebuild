@@ -1,9 +1,24 @@
 import SwiftUI
-import FirebaseAuth
-import FirebaseFirestore
+@preconcurrency import FirebaseAuth
+@preconcurrency import FirebaseFirestore
 import Network
-import Firebase
+@preconcurrency import Firebase
 import RevenueCat
+
+// MARK: - AccountCreatedAt Helper Extension
+extension UserSession {
+    /// Ensures `accountCreatedAt` exists in the profile document.
+    /// If missing, backfills from Firebase Auth user.metadata.creationDate and writes it once.
+    func ensureAccountCreatedAtExists(profileRef: DocumentReference) async throws -> Date {
+        let snap = try await profileRef.getDocument()
+        if let ts = snap.data()?["accountCreatedAt"] as? Timestamp {
+            return ts.dateValue()
+        }
+        let authCreated = Auth.auth().currentUser?.metadata.creationDate ?? Date()
+        try await profileRef.updateData(["accountCreatedAt": Timestamp(date: authCreated)])
+        return authCreated
+    }
+}
 
 enum AuthState: Equatable {
     case loading
@@ -38,6 +53,7 @@ class UserSession: ObservableObject {
     @Published private(set) var username: String?
     @Published private(set) var displayName: String?
     @Published private(set) var photoURL: URL?
+    @Published private(set) var accountCreatedAt: Date?
     @Published var isNetworkAvailable = true
     @Published var errorMessage: String?
     @Published var lastSignInTime: Date?
@@ -68,24 +84,23 @@ class UserSession: ObservableObject {
     }
     
     deinit {
+        #if DEBUG
         print("⚠️ UserSession deinit started")
-        if let listener = stateListener {
-            auth.removeStateDidChangeListener(listener)
-            stateListener = nil
-        }
+        #endif
         networkMonitor.cancel()
         NotificationCenter.default.removeObserver(self)
+        #if DEBUG
         print("✅ UserSession cleanup completed")
+        #endif
     }
     
     private func setupNetworkMonitoring() {
-        weak var weakSelf = self
-        networkMonitor.pathUpdateHandler = { path in
+        networkMonitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
-            Task { @MainActor [weak weakSelf] in
-                guard let self = weakSelf else { return }
+            Task { @MainActor in
+                guard let self = self else { return }
                 self.isNetworkAvailable = isConnected
-                
+
                 if isConnected, case .error = self.authState {
                     self.refreshAuthState()
                 }
@@ -138,23 +153,27 @@ class UserSession: ObservableObject {
     }
     
     private func setupAuthStateListener() {
+        #if DEBUG
         print("Setting up auth state listener in UserSession")
-        
+        #endif
+
         // Check for existing listener and remove it
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
             stateListener = nil
         }
-        
+
         // Create a weak reference to self for the listener
         weak var weakSelf = self
-        
+
         stateListener = auth.addStateDidChangeListener { _, user in
             Task { @MainActor [weak weakSelf] in
                 guard let self = weakSelf else { return }
-                
+
                 if let user = user {
+                    #if DEBUG
                     print("UserSession: User authenticated - \(user.uid)")
+                    #endif
                     self.currentUser = user
                     self.isAuthenticated = true
                     self.authState = .signedIn(user)
@@ -164,12 +183,18 @@ class UserSession: ObservableObject {
                     // Check and perform migration for the subscription model
                     do {
                         try await self.migrationManager.checkAndMigrate(for: user.uid)
+                        #if DEBUG
                         print("✅ UserSession: Migration check completed for user \(user.uid)")
+                        #endif
                     } catch {
+                        #if DEBUG
                         print("❌ UserSession: Migration check failed: \(error.localizedDescription)")
+                        #endif
                     }
                 } else {
+                    #if DEBUG
                     print("UserSession: No active user")
+                    #endif
                     self.authState = .signedOut
                     self.currentUser = nil
                     self.isAuthenticated = false
@@ -178,10 +203,10 @@ class UserSession: ObservableObject {
                     self.photoURL = nil
                     self.lastSignInTime = nil
                 }
-                
+
                 // Notify listeners about auth state change using weak reference
                 self.authStateDidChangeHandler?()
-                
+
                 // Post notification for SubscriptionService
                 NotificationCenter.default.post(
                     name: NSNotification.Name("AuthStateChanged"),
@@ -192,14 +217,18 @@ class UserSession: ObservableObject {
     }
     
     private func loadUserProfile() async {
-        guard let userId = currentUser?.uid else { 
+        guard let userId = currentUser?.uid else {
+            #if DEBUG
             print("UserSession: No user ID available for profile loading")
-            return 
+            #endif
+            return
         }
-        
+
         // Clear error message on new profile load attempt
         errorMessage = nil
+        #if DEBUG
         print("UserSession: Loading profile for user \(userId)")
+        #endif
         
         do {
             // Check network availability before making request
@@ -248,20 +277,40 @@ class UserSession: ObservableObject {
             
             // Network is available, make the request
             print("UserSession: Fetching profile from Firestore")
-            let document = try await firestore
-                .collection("users")
-                .document(userId)
-                .getDocument()
-            
+            let profileRef = firestore.collection("users").document(userId)
+            let document = try await profileRef.getDocument()
+
+            // Ensure accountCreatedAt is populated before any routing/subscription logic uses it
+            if document.exists {
+                let createdAt = try await ensureAccountCreatedAtExists(profileRef: profileRef)
+                #if DEBUG
+                print("UserSession: accountCreatedAt = \(createdAt)")
+                #endif
+
+                // Store in published property for UI access
+                self.accountCreatedAt = createdAt
+
+                // Push to SubscriptionStore for grandfather Pro logic
+                await SubscriptionStore.shared.setProfile(SubscriptionStore.ProfileData(accountCreatedAt: createdAt))
+
+                #if DEBUG
+                let gf = SubscriptionPolicy.isGrandfathered(accountCreatedAt: createdAt)
+                print("GrandfatherSanity: created=\(createdAt) result=\(gf)")
+                #endif
+            }
+
             if document.exists, let data = document.data() {
+                #if DEBUG
                 print("UserSession: Profile document exists")
+                #endif
                 self.username = data["username"] as? String
                 self.displayName = data["displayName"] as? String
 
-                // Add debug logging for hasCompletedOnboarding
+                #if DEBUG
                 let hasCompletedValue = data["hasCompletedOnboarding"] as? Bool ?? false
                 print("DEBUG: Loading hasCompletedOnboarding from Firestore: \(hasCompletedValue)")
-                self.hasCompletedOnboarding = hasCompletedValue
+                #endif
+                self.hasCompletedOnboarding = data["hasCompletedOnboarding"] as? Bool ?? false
 
                 if let photoURLString = data["photoURL"] as? String,
                    let url = URL(string: photoURLString) {
@@ -541,7 +590,35 @@ class UserSession: ObservableObject {
         
         print("DEBUG: UserSession: Sign out process completed")
     }
-    
+
+    /// Helper function to perform the username update transaction
+    nonisolated private func performUsernameUpdateTransaction(
+        userId: String,
+        newUsername: String,
+        currentUsername: String?
+    ) async throws {
+        let db = Firestore.firestore()
+        _ = try await db.runTransaction { (transaction, errorPointer) -> Any? in
+            // Update username in users collection
+            let userRef = db.collection("users").document(userId)
+            transaction.updateData([
+                "username": newUsername,
+                "lastUsernameChangeAt": FieldValue.serverTimestamp()
+            ], forDocument: userRef)
+
+            // Delete old username reservation if it exists
+            if let currentUsername = currentUsername, !currentUsername.isEmpty {
+                let oldUsernameRef = db.collection("usernames").document(currentUsername.lowercased())
+                transaction.deleteDocument(oldUsernameRef)
+            }
+
+            // Create new username reservation
+            let newUsernameRef = db.collection("usernames").document(newUsername)
+            transaction.setData(["userId": userId], forDocument: newUsernameRef)
+            return nil
+        }
+    }
+
     func updateUsername(_ newUsername: String) async throws {
         guard !newUsername.isEmpty else {
             throw NSError(domain: "UserSession", code: 106, 
@@ -606,42 +683,27 @@ class UserSession: ObservableObject {
             }
             
             // Get current username for reservation update
-            var currentUsername = userDoc.data()?["username"] as? String
-            
+            let currentUsername = userDoc.data()?["username"] as? String
+            let newUsernameValue = newUsername.lowercased()
+
             // Run transaction to update username and reservation atomically
-            try await firestore.runTransaction { [self] transaction, errorPointer in
-                // Update username in users collection
-                let userRef = firestore.collection("users").document(userId)
-                transaction.updateData([
-                    "username": newUsername.lowercased(),
-                    "lastUsernameChangeAt": FieldValue.serverTimestamp()
-                ], forDocument: userRef)
-                
-                // Delete old username reservation if it exists
-                if let currentUsername = currentUsername, !currentUsername.isEmpty {
-                    let oldUsernameRef = firestore.collection("usernames").document(currentUsername.lowercased())
-                    transaction.deleteDocument(oldUsernameRef)
-                }
-                
-                // Create new username reservation
-                let newUsernameRef = firestore.collection("usernames").document(newUsername.lowercased())
-                transaction.setData(["userId": userId], forDocument: newUsernameRef)
-                
-                return nil
-            }
+            try await performUsernameUpdateTransaction(
+                userId: userId,
+                newUsername: newUsernameValue,
+                currentUsername: currentUsername
+            )
             
             // Update local state
-            await MainActor.run {
-                self.username = newUsername.lowercased()
-                self.hasCompletedOnboarding = true
-                
-                // Notify any observers that the username has been updated
-                NotificationCenter.default.post(
-                    name: NSNotification.Name("UserProfileUpdated"),
-                    object: nil,
-                    userInfo: ["username": newUsername.lowercased()]
-                )
-            }
+            let lowercasedUsername = newUsername.lowercased()
+            self.username = lowercasedUsername
+            self.hasCompletedOnboarding = true
+
+            // Notify any observers that the username has been updated
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserProfileUpdated"),
+                object: nil,
+                userInfo: ["username": lowercasedUsername]
+            )
             
         } catch {
             errorMessage = "Error updating username: \(error.localizedDescription)"

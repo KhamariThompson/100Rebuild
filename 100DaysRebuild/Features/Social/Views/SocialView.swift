@@ -45,7 +45,7 @@ struct SocialView: View {
                 VStack(spacing: AppSpacing.l) {
                     // Title with gradient inside ScrollView
                     Text("Social")
-                        .font(.largeTitle)
+                        .font(AppTypography.largeTitle())
                         .bold()
                         .foregroundStyle(socialGradient)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -153,7 +153,7 @@ struct SocialView: View {
         VStack(spacing: AppSpacing.m) {
             // Emoji header
             Text("🔗")
-                .font(.system(size: 48))
+                .font(AppTypography.display())
                 .padding(.bottom, AppSpacing.xs)
             
             // Title and subtitle
@@ -187,11 +187,11 @@ struct SocialView: View {
                     // Error state
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Username Setup Required")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Text("We couldn't find your username. Please reload the app or contact support if this issue persists.")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.theme.subtext)
                     }
                     .padding()
@@ -218,7 +218,7 @@ struct SocialView: View {
                         showNewChallengeModal = true
                     }) {
                         Image(systemName: "plus.circle")
-                            .font(.system(size: 22))
+                            .font(AppTypography.title2())
                             .foregroundColor(.theme.accent)
                     }
                 }
@@ -270,7 +270,7 @@ struct SocialView: View {
             NavigationLink(destination: FriendsView()) {
                 HStack(spacing: 12) {
                     Image(systemName: "person.2.fill")
-                        .font(.system(size: 22))
+                        .font(AppTypography.title2())
                         .foregroundColor(.white)
                         .padding(8)
                         .background(Color.theme.accent)
@@ -303,7 +303,7 @@ struct SocialView: View {
                 // Header with icon
                 HStack(spacing: 8) {
                     Image(systemName: "globe")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(.theme.accent)
                     
                     Text("Connect With Us")
@@ -371,13 +371,13 @@ struct SocialView: View {
                 // Platform icon
                 HStack(spacing: 8) {
                     Image(systemName: systemIcon)
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(AppTypography.title2(.semibold))
                         .foregroundColor(.white)
                     
                     Spacer()
                     
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(AppTypography.subhead(.medium))
                         .padding(6)
                         .background(Color.white.opacity(0.2))
                         .clipShape(Circle())
@@ -389,11 +389,11 @@ struct SocialView: View {
                 // Platform name and username
                 VStack(alignment: .leading, spacing: 6) {
                     Text(platform)
-                        .font(.system(size: 18, weight: .bold))
+                        .font(AppTypography.title3(.bold))
                         .foregroundColor(.white)
                     
                     Text(username)
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                         .foregroundColor(.white.opacity(0.9))
                         .lineLimit(1)
                 }
@@ -492,18 +492,18 @@ struct SocialView: View {
     private func errorView(message: String) -> some View {
         VStack(spacing: AppSpacing.m) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 40))
+                .font(AppTypography.display())
                 .foregroundColor(.yellow)
                 .padding(.bottom, AppSpacing.s)
             
             Text("Oops! Something went wrong")
-                .font(.title3)
+                .font(AppTypography.title3())
                 .fontWeight(.bold)
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
             
             Text(message)
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, AppSpacing.l)
@@ -515,7 +515,7 @@ struct SocialView: View {
                 }
             } label: {
                 Text("Try Again")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
                     .padding(.horizontal, AppSpacing.xl)
                     .padding(.vertical, AppSpacing.m)
@@ -574,7 +574,7 @@ struct SocialView: View {
             Image(systemName: "wifi.slash")
                 .foregroundColor(.yellow)
             Text("You're offline. Some features may be limited.")
-                .font(.footnote)
+                .font(AppTypography.footnote())
                 .foregroundColor(.secondary)
             Spacer()
         }
@@ -595,7 +595,7 @@ struct SocialView: View {
             // Coming soon message
             VStack(spacing: AppSpacing.m) {
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 40))
+                    .font(AppTypography.display())
                     .foregroundColor(.theme.accent)
                 
                 Text("Social Feed Coming Soon")
@@ -640,11 +640,11 @@ struct UsernameInputView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Choose Your Username")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(Color.theme.text)
             
             Text("This username will be used for social features. It must be unique and contain only letters and numbers.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
             
             // Username input field with local state
@@ -688,7 +688,7 @@ struct UsernameInputView: View {
                     }
                     
                     Text(viewModel.validationMessage)
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(viewModel.validationMessageColor)
                 }
                 .padding(.top, 4)
@@ -710,7 +710,7 @@ struct UsernameInputView: View {
                     }
                     
                     Text("Claim Username")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTypography.headline(.semibold))
                         .foregroundColor(colorScheme == .dark ? .black : .white)
                 }
                 .frame(maxWidth: .infinity)
@@ -768,12 +768,12 @@ struct FeatureTeaseCard: View {
                     .frame(width: 60, height: 60)
                 
                 Image(systemName: iconName)
-                    .font(.system(size: 28))
+                    .font(AppTypography.title1())
                     .foregroundColor(.theme.accent.opacity(0.6))
                 
                 // Lock overlay
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.headline(.semibold))
                     .foregroundColor(.white)
                     .padding(6)
                     .background(

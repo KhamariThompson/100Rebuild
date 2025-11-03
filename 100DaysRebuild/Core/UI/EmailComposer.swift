@@ -31,18 +31,24 @@ struct EmailComposer: UIViewControllerRepresentable {
         Coordinator(self)
     }
     
+    @MainActor
     class Coordinator: NSObject, MFMailComposeViewControllerDelegate {
         let parent: EmailComposer
-        
+
         init(_ parent: EmailComposer) {
             self.parent = parent
         }
-        
-        func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
-            if let completionHandler = parent.completionHandler {
-                completionHandler(result, error)
+
+        nonisolated func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
+            // MFMailComposeViewControllerDelegate methods are invoked on the main thread.
+            // We need to dispatch to MainActor to access main actor-isolated properties.
+            MainActor.assumeIsolated {
+                // Call the completion handler
+                if let completionHandler = self.parent.completionHandler {
+                    completionHandler(result, error)
+                }
+                self.parent.presentationMode.wrappedValue.dismiss()
             }
-            parent.presentationMode.wrappedValue.dismiss()
         }
     }
     

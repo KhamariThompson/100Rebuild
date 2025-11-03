@@ -42,7 +42,7 @@ struct SubscriptionBanner: View {
                 .foregroundColor(.orange)
             
             Text("Billing issue detected. Please update your payment method.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.text)
             
             Spacer()
@@ -88,7 +88,7 @@ struct SubscriptionBanner: View {
                 .foregroundColor(.yellow)
             
             Text("Your subscription expires on \(formattedDate(date))")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.text)
             
             Spacer()

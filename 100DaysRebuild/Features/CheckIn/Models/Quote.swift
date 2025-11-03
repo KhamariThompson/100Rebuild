@@ -1,6 +1,6 @@
 import Foundation
 
-public struct Quote: Identifiable, Codable, Equatable {
+public struct Quote: Identifiable, Codable, Equatable, Sendable {
     public let id: String
     public let text: String
     public let author: String
@@ -18,7 +18,7 @@ public struct Quote: Identifiable, Codable, Equatable {
 
 // Extension to provide sample quotes
 extension Quote {
-    public static let samples: [Quote] = [
+    nonisolated(unsafe) public static let samples: [Quote] = [
         Quote(text: "The secret of getting ahead is getting started.", author: "Mark Twain"),
         Quote(text: "It always seems impossible until it's done.", author: "Nelson Mandela"),
         Quote(text: "Quality is not an act, it is a habit.", author: "Aristotle"),
@@ -27,7 +27,7 @@ extension Quote {
     ]
     
     // Generate the full list of 100+ quotes
-    public static let all: [Quote] = samples + [
+    nonisolated(unsafe) public static let all: [Quote] = samples + [
         Quote(text: "You are never too old to set another goal or to dream a new dream.", author: "C.S. Lewis"),
         Quote(text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt"),
         Quote(text: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt"),

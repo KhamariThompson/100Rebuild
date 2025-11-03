@@ -89,7 +89,7 @@ struct IncludedProView: View {
                     .frame(width: 80, height: 80)
 
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 48))
+                    .font(AppTypography.display())
                     .foregroundStyle(DS.Colors.success)
             }
             .accessibilityLabel("Success")
@@ -112,7 +112,7 @@ struct IncludedProView: View {
                     Image(systemName: "gift.fill")
                         .foregroundStyle(DS.Colors.accent)
                     Text("What's included")
-                        .font(DS.Typo.title3)
+                        .font(AppTypography.title3())
                         .foregroundStyle(DS.Colors.onSurface)
                 }
                 .accessibilityElement(children: .combine)
@@ -134,7 +134,7 @@ struct IncludedProView: View {
     @ViewBuilder
     private func benefitRow(icon: String, text: String) -> some View {
         Label(text, systemImage: icon)
-            .font(DS.Typo.body)
+            .font(AppTypography.body())
             .foregroundStyle(DS.Colors.onSurface)
             .accessibilityLabel(text)
     }
@@ -144,7 +144,7 @@ struct IncludedProView: View {
     private var quickActionsSection: some View {
         VStack(alignment: .leading, spacing: DS.Spacing.md) {
             Text("Next steps")
-                .font(DS.Typo.title3)
+                .font(AppTypography.title3())
                 .foregroundStyle(DS.Colors.onSurface)
                 .padding(.horizontal, DS.Spacing.xl)
                 .accessibilityAddTraits(.isHeader)

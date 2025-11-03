@@ -8,39 +8,41 @@ enum AppStoreHelper {
     static let appStoreId = "6451169428" // Replace with your actual App Store ID when available
     
     /// Opens the App Store review page for the app
+    @MainActor
     static func openAppStoreReview() {
         guard let writeReviewURL = URL(string: "https://apps.apple.com/app/id\(appStoreId)?action=write-review") else {
             return
         }
-        
+
         UIApplication.shared.open(writeReviewURL)
     }
-    
+
     /// Requests an in-app review when appropriate
+    @MainActor
     static func requestReview() {
         guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene else {
             return
         }
-        
-        Task { @MainActor in
-            if #available(iOS 18.0, *) {
-                AppStore.requestReview(in: scene)
-            } else {
-                SKStoreReviewController.requestReview(in: scene)
-            }
+
+        if #available(iOS 18.0, *) {
+            AppStore.requestReview(in: scene)
+        } else {
+            SKStoreReviewController.requestReview(in: scene)
         }
     }
-    
+
     /// Opens the App Store page for the app
+    @MainActor
     static func openAppStorePage() {
         guard let appStoreURL = URL(string: "https://apps.apple.com/app/id\(appStoreId)") else {
             return
         }
-        
+
         UIApplication.shared.open(appStoreURL)
     }
-    
+
     /// Opens the App Store subscription management page
+    @MainActor
     static func openSubscriptionManagement() {
         if let url = URL(string: "itms-apps://apps.apple.com/account/subscriptions") {
             UIApplication.shared.open(url)

@@ -1,6 +1,6 @@
 import Foundation
-import FirebaseFirestore
-import FirebaseAuth
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseAuth
 import Combine
 import SwiftUI
 
@@ -12,12 +12,12 @@ class FriendService: ObservableObject, FriendServiceProtocol {
     @Published private(set) var outgoingRequests: [FriendRequest] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String? = nil
-    
+
     // Singleton instance
     static let shared = FriendService()
     
     // Dependencies
-    private let firestore = Firestore.firestore()
+    nonisolated(unsafe) private let firestore = Firestore.firestore()
     private let userSession = UserSession.shared
     private var cancellables = Set<AnyCancellable>()
     private var friendsListener: ListenerRegistration?
@@ -41,10 +41,10 @@ class FriendService: ObservableObject, FriendServiceProtocol {
     }
     
     deinit {
+        // Clean up listeners synchronously since deinit can't be async
         friendsListener?.remove()
         incomingRequestsListener?.remove()
         outgoingRequestsListener?.remove()
-        cancellables.forEach { $0.cancel() }
     }
     
     // MARK: - Public Methods
@@ -271,85 +271,88 @@ class FriendService: ObservableObject, FriendServiceProtocol {
         )
         
         // Save the request in Firestore using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            do {
-                // Add to target user's incoming requests
-                let incomingRef = self.firestore
-                    .collection("friendRequests")
-                    .document(targetUserId)
-                    .collection("incoming")
-                    .document(requestId)
-                
-                // Add to current user's outgoing requests
-                let outgoingRef = self.firestore
-                    .collection("friendRequests")
-                    .document(currentUserId)
-                    .collection("outgoing")
-                    .document(requestId)
-                
-                // Convert request to dictionary
-                let requestData: [String: Any] = [
-                    "fromUserId": request.fromUserId,
-                    "fromUsername": request.fromUsername,
-                    "fromDisplayName": request.fromDisplayName as Any,
-                    "fromPhotoURL": request.fromPhotoURL?.absoluteString as Any,
-                    "toUserId": request.toUserId,
-                    "status": request.status.rawValue,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "updatedAt": FieldValue.serverTimestamp()
-                ]
-                
-                transaction.setData(requestData, forDocument: incomingRef)
-                transaction.setData(requestData, forDocument: outgoingRef)
-                
-                // Add to sender's friends
-                let senderFriendRef = self.firestore
-                    .collection("friends")
-                    .document(request.fromUserId)
-                    .collection("connections")
-                    .document(currentUserId)
-                
-                // Get current user details - using synchronous document fetch in transaction
-                let currentUserRef = self.firestore
-                    .collection("users")
-                    .document(currentUserId)
-                
-                // Get the document synchronously within the transaction
-                let currentUserDoc = try transaction.getDocument(currentUserRef)
-                
-                let currentUsername = currentUserDoc.data()?["username"] as? String ?? ""
-                let currentDisplayName = currentUserDoc.data()?["displayName"] as? String
-                let currentPhotoURLString = currentUserDoc.data()?["photoURL"] as? String
-                
-                let senderFriendData: [String: Any] = [
-                    "username": currentUsername,
-                    "displayName": currentDisplayName as Any,
-                    "photoURL": currentPhotoURLString as Any,
-                    "status": FriendRequest.RequestStatus.accepted.rawValue,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "updatedAt": FieldValue.serverTimestamp()
-                ]
-                
-                transaction.setData(senderFriendData, forDocument: senderFriendRef)
-                
-                // Update friend counts
-                let currentUserStatsRef = self.firestore.collection("users").document(currentUserId)
-                transaction.updateData([
-                    "friendsCount": FieldValue.increment(Int64(1))
-                ], forDocument: currentUserStatsRef)
-                
-                let senderRef = self.firestore.collection("users").document(request.fromUserId)
-                transaction.updateData([
-                    "friendsCount": FieldValue.increment(Int64(1))
-                ], forDocument: senderRef)
-                
-                return nil
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
+        // Run the Firestore transaction off the actor to avoid crossing the actor boundary with a non-Sendable `Any?`.
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                do {
+                    // Add to target user's incoming requests
+                    let incomingRef = fs
+                        .collection("friendRequests")
+                        .document(targetUserId)
+                        .collection("incoming")
+                        .document(requestId)
+
+                    // Add to current user's outgoing requests
+                    let outgoingRef = fs
+                        .collection("friendRequests")
+                        .document(currentUserId)
+                        .collection("outgoing")
+                        .document(requestId)
+
+                    // Convert request to dictionary
+                    let requestData: [String: Any] = [
+                        "fromUserId": request.fromUserId,
+                        "fromUsername": request.fromUsername,
+                        "fromDisplayName": request.fromDisplayName as Any,
+                        "fromPhotoURL": request.fromPhotoURL?.absoluteString as Any,
+                        "toUserId": request.toUserId,
+                        "status": request.status.rawValue,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ]
+
+                    transaction.setData(requestData, forDocument: incomingRef)
+                    transaction.setData(requestData, forDocument: outgoingRef)
+
+                    // Add to sender's friends
+                    let senderFriendRef = fs
+                        .collection("friends")
+                        .document(request.fromUserId)
+                        .collection("connections")
+                        .document(currentUserId)
+
+                    // Get current user details - using synchronous document fetch in transaction
+                    let currentUserRef = fs
+                        .collection("users")
+                        .document(currentUserId)
+
+                    // Get the document synchronously within the transaction
+                    let currentUserDoc = try transaction.getDocument(currentUserRef)
+
+                    let currentUsername = currentUserDoc.data()?["username"] as? String ?? ""
+                    let currentDisplayName = currentUserDoc.data()?["displayName"] as? String
+                    let currentPhotoURLString = currentUserDoc.data()?["photoURL"] as? String
+
+                    let senderFriendData: [String: Any] = [
+                        "username": currentUsername,
+                        "displayName": currentDisplayName as Any,
+                        "photoURL": currentPhotoURLString as Any,
+                        "status": FriendRequest.RequestStatus.accepted.rawValue,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ]
+
+                    transaction.setData(senderFriendData, forDocument: senderFriendRef)
+
+                    // Update friend counts
+                    let currentUserStatsRef = fs.collection("users").document(currentUserId)
+                    transaction.updateData([
+                        "friendsCount": FieldValue.increment(Int64(1))
+                    ], forDocument: currentUserStatsRef)
+
+                    let senderRef = fs.collection("users").document(request.fromUserId)
+                    transaction.updateData([
+                        "friendsCount": FieldValue.increment(Int64(1))
+                    ], forDocument: senderRef)
+                    return nil
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
             }
-        }
-        
+        }.value
+
         // Notify about the new request
         NotificationCenter.default.post(
             name: Self.friendRequestsDidUpdateNotification,
@@ -382,100 +385,103 @@ class FriendService: ObservableObject, FriendServiceProtocol {
         if !canAdd {
             throw FriendError.friendLimitReached
         }
-        
+
         // Update request status using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            do {
-                // Update incoming request
-                let incomingRef = self.firestore
-                    .collection("friendRequests")
-                    .document(currentUserId)
-                    .collection("incoming")
-                    .document(requestId)
-                
-                transaction.updateData([
-                    "status": FriendRequest.RequestStatus.accepted.rawValue,
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], forDocument: incomingRef)
-                
-                // Update outgoing request
-                let outgoingRef = self.firestore
-                    .collection("friendRequests")
-                    .document(request.fromUserId)
-                    .collection("outgoing")
-                    .document(requestId)
-                
-                transaction.updateData([
-                    "status": FriendRequest.RequestStatus.accepted.rawValue,
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], forDocument: outgoingRef)
-                
-                // Add to current user's friends
-                let currentUserFriendRef = self.firestore
-                    .collection("friends")
-                    .document(currentUserId)
-                    .collection("connections")
-                    .document(request.fromUserId)
-                
-                let currentUserFriendData: [String: Any] = [
-                    "username": request.fromUsername,
-                    "displayName": request.fromDisplayName as Any,
-                    "photoURL": request.fromPhotoURL?.absoluteString as Any,
-                    "status": FriendRequest.RequestStatus.accepted.rawValue,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "updatedAt": FieldValue.serverTimestamp()
-                ]
-                
-                transaction.setData(currentUserFriendData, forDocument: currentUserFriendRef)
-                
-                // Add to sender's friends
-                let senderFriendRef = self.firestore
-                    .collection("friends")
-                    .document(request.fromUserId)
-                    .collection("connections")
-                    .document(currentUserId)
-                
-                // Get current user details - using synchronous document fetch in transaction
-                let currentUserRef = self.firestore
-                    .collection("users")
-                    .document(currentUserId)
-                
-                // Get the document synchronously within the transaction
-                let currentUserDoc = try transaction.getDocument(currentUserRef)
-                
-                let currentUsername = currentUserDoc.data()?["username"] as? String ?? ""
-                let currentDisplayName = currentUserDoc.data()?["displayName"] as? String
-                let currentPhotoURLString = currentUserDoc.data()?["photoURL"] as? String
-                
-                let senderFriendData: [String: Any] = [
-                    "username": currentUsername,
-                    "displayName": currentDisplayName as Any,
-                    "photoURL": currentPhotoURLString as Any,
-                    "status": FriendRequest.RequestStatus.accepted.rawValue,
-                    "createdAt": FieldValue.serverTimestamp(),
-                    "updatedAt": FieldValue.serverTimestamp()
-                ]
-                
-                transaction.setData(senderFriendData, forDocument: senderFriendRef)
-                
-                // Update friend counts
-                let currentUserStatsRef = self.firestore.collection("users").document(currentUserId)
-                transaction.updateData([
-                    "friendsCount": FieldValue.increment(Int64(1))
-                ], forDocument: currentUserStatsRef)
-                
-                let senderRef = self.firestore.collection("users").document(request.fromUserId)
-                transaction.updateData([
-                    "friendsCount": FieldValue.increment(Int64(1))
-                ], forDocument: senderRef)
-                
-                return nil
-            } catch {
-                errorPointer?.pointee = error as NSError
-                return nil
+        // Run the transaction off the actor to avoid returning a non-sendable Any? across the actor boundary.
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                do {
+                    // Update incoming request
+                    let incomingRef = fs
+                        .collection("friendRequests")
+                        .document(currentUserId)
+                        .collection("incoming")
+                        .document(requestId)
+
+                    transaction.updateData([
+                        "status": FriendRequest.RequestStatus.accepted.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: incomingRef)
+
+                    // Update outgoing request
+                    let outgoingRef = fs
+                        .collection("friendRequests")
+                        .document(request.fromUserId)
+                        .collection("outgoing")
+                        .document(requestId)
+
+                    transaction.updateData([
+                        "status": FriendRequest.RequestStatus.accepted.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: outgoingRef)
+
+                    // Add to current user's friends
+                    let currentUserFriendRef = fs
+                        .collection("friends")
+                        .document(currentUserId)
+                        .collection("connections")
+                        .document(request.fromUserId)
+
+                    let currentUserFriendData: [String: Any] = [
+                        "username": request.fromUsername,
+                        "displayName": request.fromDisplayName as Any,
+                        "photoURL": request.fromPhotoURL?.absoluteString as Any,
+                        "status": FriendRequest.RequestStatus.accepted.rawValue,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ]
+
+                    transaction.setData(currentUserFriendData, forDocument: currentUserFriendRef)
+
+                    // Add to sender's friends
+                    let senderFriendRef = fs
+                        .collection("friends")
+                        .document(request.fromUserId)
+                        .collection("connections")
+                        .document(currentUserId)
+
+                    // Get current user details - using synchronous document fetch in transaction
+                    let currentUserRef = fs
+                        .collection("users")
+                        .document(currentUserId)
+
+                    // Get the document synchronously within the transaction
+                    let currentUserDoc = try transaction.getDocument(currentUserRef)
+
+                    let currentUsername = currentUserDoc.data()?["username"] as? String ?? ""
+                    let currentDisplayName = currentUserDoc.data()?["displayName"] as? String
+                    let currentPhotoURLString = currentUserDoc.data()?["photoURL"] as? String
+
+                    let senderFriendData: [String: Any] = [
+                        "username": currentUsername,
+                        "displayName": currentDisplayName as Any,
+                        "photoURL": currentPhotoURLString as Any,
+                        "status": FriendRequest.RequestStatus.accepted.rawValue,
+                        "createdAt": FieldValue.serverTimestamp(),
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ]
+
+                    transaction.setData(senderFriendData, forDocument: senderFriendRef)
+
+                    // Update friend counts
+                    let currentUserStatsRef = fs.collection("users").document(currentUserId)
+                    transaction.updateData([
+                        "friendsCount": FieldValue.increment(Int64(1))
+                    ], forDocument: currentUserStatsRef)
+
+                    let senderRef = fs.collection("users").document(request.fromUserId)
+                    transaction.updateData([
+                        "friendsCount": FieldValue.increment(Int64(1))
+                    ], forDocument: senderRef)
+                    return nil
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
             }
-        }
-        
+        }.value
+
         // Notify about the updated friend list
         NotificationCenter.default.post(
             name: Self.friendsDidUpdateNotification,
@@ -538,36 +544,38 @@ class FriendService: ObservableObject, FriendServiceProtocol {
         guard let request = FriendRequest(from: requestDoc) else {
             throw FriendError.requestNotFound
         }
-        
+
         // Update request status using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            // Update incoming request
-            let incomingRef = self.firestore
-                .collection("friendRequests")
-                .document(currentUserId)
-                .collection("incoming")
-                .document(requestId)
-            
-            transaction.updateData([
-                "status": FriendRequest.RequestStatus.rejected.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: incomingRef)
-            
-            // Update outgoing request
-            let outgoingRef = self.firestore
-                .collection("friendRequests")
-                .document(request.fromUserId)
-                .collection("outgoing")
-                .document(requestId)
-            
-            transaction.updateData([
-                "status": FriendRequest.RequestStatus.rejected.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: outgoingRef)
-            
-            return nil
-        }
-        
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                // Update incoming request
+                let incomingRef = fs
+                    .collection("friendRequests")
+                    .document(currentUserId)
+                    .collection("incoming")
+                    .document(requestId)
+
+                transaction.updateData([
+                    "status": FriendRequest.RequestStatus.rejected.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: incomingRef)
+
+                // Update outgoing request
+                let outgoingRef = fs
+                    .collection("friendRequests")
+                    .document(request.fromUserId)
+                    .collection("outgoing")
+                    .document(requestId)
+
+                transaction.updateData([
+                    "status": FriendRequest.RequestStatus.rejected.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: outgoingRef)
+                return nil
+            }
+        }.value
+
         // Notify about the updated request list
         NotificationCenter.default.post(
             name: Self.friendRequestsDidUpdateNotification,
@@ -582,39 +590,41 @@ class FriendService: ObservableObject, FriendServiceProtocol {
         }
         
         // Remove friend connection using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            // Remove from current user's friends
-            let currentUserFriendRef = self.firestore
-                .collection("friends")
-                .document(currentUserId)
-                .collection("connections")
-                .document(friendId)
-            
-            transaction.deleteDocument(currentUserFriendRef)
-            
-            // Remove from other user's friends
-            let otherUserFriendRef = self.firestore
-                .collection("friends")
-                .document(friendId)
-                .collection("connections")
-                .document(currentUserId)
-            
-            transaction.deleteDocument(otherUserFriendRef)
-            
-            // Update friend counts
-            let currentUserStatsRef = self.firestore.collection("users").document(currentUserId)
-            transaction.updateData([
-                "friendsCount": FieldValue.increment(Int64(-1))
-            ], forDocument: currentUserStatsRef)
-            
-            let friendRef = self.firestore.collection("users").document(friendId)
-            transaction.updateData([
-                "friendsCount": FieldValue.increment(Int64(-1))
-            ], forDocument: friendRef)
-            
-            return nil
-        }
-        
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                // Remove from current user's friends
+                let currentUserFriendRef = fs
+                    .collection("friends")
+                    .document(currentUserId)
+                    .collection("connections")
+                    .document(friendId)
+
+                transaction.deleteDocument(currentUserFriendRef)
+
+                // Remove from other user's friends
+                let otherUserFriendRef = fs
+                    .collection("friends")
+                    .document(friendId)
+                    .collection("connections")
+                    .document(currentUserId)
+
+                transaction.deleteDocument(otherUserFriendRef)
+
+                // Update friend counts
+                let currentUserStatsRef = fs.collection("users").document(currentUserId)
+                transaction.updateData([
+                    "friendsCount": FieldValue.increment(Int64(-1))
+                ], forDocument: currentUserStatsRef)
+
+                let friendRef = fs.collection("users").document(friendId)
+                transaction.updateData([
+                    "friendsCount": FieldValue.increment(Int64(-1))
+                ], forDocument: friendRef)
+                return nil
+            }
+        }.value
+
         // Notify about the updated friend list
         NotificationCenter.default.post(
             name: Self.friendsDidUpdateNotification,

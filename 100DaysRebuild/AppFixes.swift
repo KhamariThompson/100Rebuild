@@ -1,12 +1,13 @@
 import SwiftUI
-import UIKit
+@preconcurrency import UIKit
 import AuthenticationServices
 import RevenueCat
 
 /// Utility class to handle all app-wide fixes
+@MainActor
 class AppFixes {
     static let shared = AppFixes()
-    
+
     private init() {}
     
     /// Apply all fixes at once
@@ -66,7 +67,10 @@ class AppFixes {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.fixVisibleInputConstraints()
+            // Ensure we call the main-actor method on the main actor
+            Task { @MainActor [weak self] in
+                self?.fixVisibleInputConstraints()
+            }
         }
     }
     

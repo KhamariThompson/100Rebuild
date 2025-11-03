@@ -1,8 +1,8 @@
 import Foundation
 
 /// Minimal telemetry/analytics shim for critical events
-final class TelemetryService {
-    static let shared = TelemetryService()
+final class TelemetryService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = TelemetryService()
     private init() {}
 
     func track(event: String, properties: [String: Any]? = nil) {

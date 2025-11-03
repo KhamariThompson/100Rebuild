@@ -1,7 +1,7 @@
 import Foundation
 import Firebase
-import FirebaseAuth
-import GoogleSignIn
+@preconcurrency import FirebaseAuth
+@preconcurrency import GoogleSignIn
 import AuthenticationServices
 import UIKit
 import CryptoKit
@@ -27,7 +27,7 @@ class AuthService {
     func signInWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign in with email: \(email)")
-            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            let result: AuthDataResult = try await Auth.auth().signIn(withEmail: email, password: password)
             print("AuthService: Sign in successful")
             
             // Track successful auth
@@ -61,7 +61,7 @@ class AuthService {
     func signUpWithEmail(email: String, password: String) async -> Bool {
         do {
             print("AuthService: Attempting sign up with email: \(email)")
-            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            let result: AuthDataResult = try await Auth.auth().createUser(withEmail: email, password: password)
             print("AuthService: Sign up successful")
             await userSession.handleAuthSuccess(provider: "password")
             // Determine user cohort after successful auth
@@ -183,8 +183,8 @@ class AuthService {
             UserDefaults.standard.set(true, forKey: "ASWebAuthenticationSessionPrefersEphemeralWebBrowserSession")
             
             // Now perform the Google sign-in directly with the provided view controller
-            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
-            
+            let result: GIDSignInResult = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
+
             guard let idToken = result.user.idToken?.tokenString else {
                 let error = NSError(domain: "AuthService", code: 2, 
                                   userInfo: [NSLocalizedDescriptionKey: "Missing ID token from Google sign-in"])
@@ -199,7 +199,7 @@ class AuthService {
             )
             
             print("AuthService: Authenticating with Firebase using Google credential")
-            try await Auth.auth().signIn(with: credential)
+            let _: AuthDataResult = try await Auth.auth().signIn(with: credential)
             
             print("AuthService: Firebase authentication with Google successful")
             await userSession.handleAuthSuccess(provider: "google.com")
@@ -289,7 +289,7 @@ class AuthService {
         do {
             // Attempt Firebase sign in with Apple credential
             print("AuthService: Signing in to Firebase with Apple credential")
-            let result = try await Auth.auth().signIn(with: authCredential)
+            let result: AuthDataResult = try await Auth.auth().signIn(with: authCredential)
             let firebaseUser = result.user
             
             // Check if this is a new user

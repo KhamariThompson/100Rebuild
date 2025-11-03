@@ -49,10 +49,14 @@ struct AppAnalytics {
 }
 
 /// Service to track analytics events throughout the app
+@MainActor
 class AnalyticsService: ObservableObject {
-    static let shared = AnalyticsService()
-    
-    private init() {
+    nonisolated(unsafe) static let shared: AnalyticsService = {
+        let instance = AnalyticsService()
+        return instance
+    }()
+
+    nonisolated private init() {
         // Private initializer to ensure singleton pattern
         print("AnalyticsService initialized")
     }

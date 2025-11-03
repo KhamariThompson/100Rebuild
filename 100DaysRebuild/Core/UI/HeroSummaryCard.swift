@@ -36,7 +36,7 @@ public struct HeroSummaryCard: View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             // Hero headline
             Text(headline)
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .font(AppTypography.title2(.semibold))
                 .foregroundColor(.theme.text)
                 .padding(.horizontal, AppSpacing.s)
                 .multilineTextAlignment(.leading)
@@ -47,13 +47,13 @@ public struct HeroSummaryCard: View {
                 VStack(alignment: .center, spacing: AppSpacing.xxs) {
                     HStack(spacing: 4) {
                         Text("🔥")
-                            .font(.system(size: 18))
+                            .font(AppTypography.headline())
                         Text("\(streakCount)")
-                            .font(.system(size: 22, weight: .medium, design: .rounded))
+                            .font(AppTypography.title2(.medium))
                             .foregroundColor(.theme.text)
                     }
                     Text("Current Streak")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
@@ -61,10 +61,10 @@ public struct HeroSummaryCard: View {
                 // Percent complete
                 VStack(alignment: .center, spacing: AppSpacing.xxs) {
                     Text("\(Int(completionPercentage * 100))%")
-                        .font(.system(size: 22, weight: .medium, design: .rounded))
+                        .font(AppTypography.title2(.medium))
                         .foregroundColor(.theme.text)
                     Text("Complete")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
@@ -72,10 +72,10 @@ public struct HeroSummaryCard: View {
                 // Active challenges
                 VStack(alignment: .center, spacing: AppSpacing.xxs) {
                     Text("\(challengeCount)")
-                        .font(.system(size: 22, weight: .medium, design: .rounded))
+                        .font(AppTypography.title2(.medium))
                         .foregroundColor(.theme.text)
                     Text("Challenges")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 .frame(maxWidth: .infinity)
@@ -101,11 +101,11 @@ public struct HeroSummaryCard: View {
                 // Center content
                 VStack(spacing: 0) {
                     Text("\(Int(completionPercentage * 100))%")
-                        .font(.system(size: 24, weight: .medium, design: .rounded))
+                        .font(AppTypography.title2(.medium))
                         .foregroundColor(.theme.text)
                     
                     Text("complete")
-                        .font(.system(size: 12, weight: .regular, design: .rounded))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
             }

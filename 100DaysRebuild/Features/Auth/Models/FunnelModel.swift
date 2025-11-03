@@ -21,40 +21,41 @@ struct FunnelQuestion {
 /// User's answers to the funnel questions
 struct FunnelAnswers {
     var answers: [Int: String] = [:]
-    var freeTextAnswer: String = ""
-    
+    var userName: String = ""
+    var customCommitmentName: String = ""
+
     // MARK: - Answer Accessors
-    
+
     var commitment: String {
         answers[1] ?? "Move body"
     }
-    
+
     var motivation: String {
         answers[2] ?? "Need momentum"
     }
-    
+
     var biggestObstacle: String {
         answers[3] ?? "Procrastination"
     }
-    
+
     var dailyTime: String {
         answers[4] ?? "15–20 min"
     }
-    
+
     var preferredTime: String {
         answers[5] ?? "Evening"
     }
-    
+
     var accountabilityStyle: String {
         answers[6] ?? "Streaks/badges"
     }
-    
+
     var motivationTone: String {
         answers[7] ?? "Gentle nudge"
     }
-    
-    var customCommitmentName: String {
-        freeTextAnswer.isEmpty ? commitment : freeTextAnswer
+
+    var finalCommitmentName: String {
+        customCommitmentName.isEmpty ? commitment : customCommitmentName
     }
     
     // MARK: - Persistence
@@ -85,11 +86,19 @@ extension FunnelAnswers: Codable {}
 /// Manages the funnel questions and answers
 class FunnelModel: ObservableObject {
     @Published var answers = FunnelAnswers()
-    @Published var currentStep: Int = 1
+    @Published var currentStep: Int = 0
     
     // MARK: - Questions Definition
-    
+
     let questions: [FunnelQuestion] = [
+        FunnelQuestion(
+            id: 0,
+            question: "What should we call you?",
+            subtitle: "We'll use this to personalize your journey",
+            type: .freeText,
+            options: [],
+            isRequired: true
+        ),
         FunnelQuestion(
             id: 1,
             question: "What are you committing to check in for 100 days?",
@@ -153,6 +162,14 @@ class FunnelModel: ObservableObject {
             type: .freeText,
             options: [],
             isRequired: true
+        ),
+        FunnelQuestion(
+            id: 9,
+            question: "Ready to commit?",
+            subtitle: "You're about to start your transformation",
+            type: .multipleChoice,
+            options: ["Let's do this!", "I'm ready", "Start my journey"],
+            isRequired: true
         )
     ]
     
@@ -173,21 +190,30 @@ class FunnelModel: ObservableObject {
     }
     
     var canProceed: Bool {
-        if currentStep == 8 {
-            return !answers.freeTextAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if currentStep == 0 {
+            // Name question
+            return !answers.userName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        } else if currentStep == 8 {
+            // Commitment name question
+            return !answers.customCommitmentName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         return answers.answers[currentStep] != nil
     }
-    
+
     // MARK: - Actions
-    
+
     func selectAnswer(_ answer: String) {
         answers.answers[currentStep] = answer
         saveAnswers()
     }
-    
-    func setFreeTextAnswer(_ text: String) {
-        answers.freeTextAnswer = text
+
+    func setUserName(_ name: String) {
+        answers.userName = name
+        saveAnswers()
+    }
+
+    func setCustomCommitmentName(_ name: String) {
+        answers.customCommitmentName = name
         saveAnswers()
     }
     
@@ -202,16 +228,16 @@ class FunnelModel: ObservableObject {
     }
     
     func previousStep() {
-        guard currentStep > 1 else { return }
-        
+        guard currentStep > 0 else { return }
+
         withAnimation(.easeInOut(duration: 0.3)) {
             currentStep -= 1
         }
     }
-    
+
     func reset() {
         answers = FunnelAnswers()
-        currentStep = 1
+        currentStep = 0
         FunnelAnswers.clear()
     }
     
@@ -255,7 +281,7 @@ struct StreakConfiguration {
             reminderStyle: reminderStyle,
             backupPlan: backupPlan,
             motivationTone: answers.motivationTone,
-            commitmentName: answers.customCommitmentName
+            commitmentName: answers.finalCommitmentName
         )
     }
     

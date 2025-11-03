@@ -28,14 +28,14 @@ struct ImageCropperView: View {
                             }
                         }
                         .foregroundColor(.white)
-                        .font(.system(size: 17, weight: .medium))
+                        .font(AppTypography.headline(.medium))
                         .disabled(isProcessing)
                         
                         Spacer()
                         
                         Text("Use This Photo?")
                             .foregroundColor(.white)
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(AppTypography.headline(.semibold))
                         
                         Spacer()
                         
@@ -53,7 +53,7 @@ struct ImageCropperView: View {
                             }
                         }
                         .foregroundColor(.white)
-                        .font(.system(size: 17, weight: .medium))
+                        .font(AppTypography.headline(.medium))
                         .disabled(isProcessing)
                     }
                     .padding()

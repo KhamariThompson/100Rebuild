@@ -54,7 +54,7 @@ public struct AppHeader: View {
                 if let icon = trailingIcon {
                     Button(action: icon.action) {
                         Image(systemName: icon.symbol)
-                            .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                            .font(AppTypography.title2(.semibold))
                             .foregroundColor(.theme.accent)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -66,7 +66,7 @@ public struct AppHeader: View {
             // Optional subtitle
             if let subtitle = subtitle {
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.callout(.medium))
                     .foregroundColor(Color.theme.subtext)
             }
         }

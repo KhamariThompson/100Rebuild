@@ -116,7 +116,7 @@ struct DetailedProgressView: View {
             VStack(spacing: 12) {
                 // Main loading text
                 Text("Loading your progress...")
-                    .font(.system(size: 22, weight: .medium, design: .rounded))
+                    .font(AppTypography.title2(.medium))
                     .foregroundColor(.theme.text)
                     .padding(.top, 8)
                 
@@ -159,7 +159,7 @@ struct DetailedProgressView: View {
             // Enhanced section title with icon
             HStack(spacing: AppSpacing.s) {
                 Image(systemName: "chart.bar.fill")
-                    .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                    .font(AppTypography.title2(.semibold))
                     .foregroundColor(.theme.accent)
                 
                 Text("Your Progress")
@@ -196,7 +196,7 @@ struct DetailedProgressView: View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             HStack(spacing: AppSpacing.s) {
                 Image(systemName: "calendar.badge.clock")
-                    .font(.system(size: AppSpacing.iconSizeMedium, weight: .semibold))
+                    .font(AppTypography.title2(.semibold))
                     .foregroundColor(.theme.accent)
                 
                 Text("Activity")
@@ -273,13 +273,13 @@ struct DetailedProgressView: View {
                     .frame(width: 110, height: 110)
                 
                 Image(systemName: "chart.bar")
-                    .font(.system(size: 40))
+                    .font(AppTypography.display())
                     .foregroundColor(Color.theme.accent)
             }
             
             VStack(spacing: 16) {
                 Text("No Progress Data Yet")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(AppTypography.title2(.bold))
                     .multilineTextAlignment(.center)
                 
                 Text("Start tracking your challenges to visualize your progress and journey.")
@@ -302,7 +302,7 @@ struct DetailedProgressView: View {
             }) {
                 HStack(spacing: 12) {
                     Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTypography.body(.semibold))
                     Text("Start a Challenge")
                         .font(.headline)
                 }
@@ -343,13 +343,13 @@ struct DetailedProgressView: View {
                     .frame(width: 110, height: 110)
                 
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 48, weight: .semibold))
+                    .font(AppTypography.display(.semibold))
                     .foregroundColor(.red.opacity(0.8))
             }
             
             VStack(spacing: 16) {
                 Text("Unable to Load Progress")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(AppTypography.title2(.bold))
                     .multilineTextAlignment(.center)
                 
                 Text(message)
@@ -374,7 +374,7 @@ struct DetailedProgressView: View {
                 }) {
                     HStack(spacing: 12) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(AppTypography.body(.semibold))
                         Text("Try Again")
                             .font(.headline)
                     }

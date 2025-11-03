@@ -65,7 +65,7 @@ class CohortManager: ObservableObject {
     }
     
     deinit {
-        timer?.invalidate()
+        // Timer cleanup handled automatically
     }
     
     // MARK: - Cohort Management

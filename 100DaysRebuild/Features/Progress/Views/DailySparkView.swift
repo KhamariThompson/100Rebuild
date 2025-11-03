@@ -51,7 +51,7 @@ struct DailySparkView: View {
         VStack(spacing: 16) {
             HStack {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 24))
+                    .font(AppTypography.title2())
                     .foregroundColor(.yellow)
                 
                 Spacer()
@@ -63,7 +63,7 @@ struct DailySparkView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 20))
+                        .font(AppTypography.title3())
                         .foregroundColor(.theme.accent.opacity(0.8))
                 }
             }

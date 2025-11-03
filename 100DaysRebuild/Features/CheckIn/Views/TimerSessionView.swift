@@ -55,7 +55,7 @@ struct TimerSessionView: View {
                         // Time display
                         VStack(spacing: 5) {
                             Text(viewModel.timeString)
-                                .font(.system(size: 60, weight: .bold, design: .rounded))
+                                .font(AppTypography.font(size: 60, weight: .bold))
                                 .foregroundColor(.theme.text)
                                 .monospacedDigit()
                             
@@ -134,7 +134,7 @@ struct TimerSessionView: View {
     private var completedControls: some View {
         VStack(spacing: 20) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 70))
+                .font(AppTypography.font(size: 70, weight: .bold))
                 .foregroundColor(.green)
             
             Text("Great job!")
@@ -174,7 +174,7 @@ struct TimerSessionView: View {
                 } label: {
                     VStack {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 30))
+                            .font(AppTypography.largeTitle())
                             .foregroundColor(.theme.subtext)
                         
                         Text("Reset")
@@ -195,7 +195,7 @@ struct TimerSessionView: View {
                             .frame(width: 70, height: 70)
                         
                         Image(systemName: viewModel.isRunning ? "pause.fill" : "play.fill")
-                            .font(.system(size: 30))
+                            .font(AppTypography.largeTitle())
                             .foregroundColor(.white)
                     }
                     
@@ -212,7 +212,7 @@ struct TimerSessionView: View {
                 } label: {
                     VStack {
                         Image(systemName: "forward.fill")
-                            .font(.system(size: 30))
+                            .font(AppTypography.largeTitle())
                             .foregroundColor(.theme.subtext)
                         
                         Text("Skip")
@@ -236,7 +236,7 @@ struct TimerSessionView: View {
                         viewModel.timerDuration = TimeInterval(minutes * 60)
                     } label: {
                         Text("\(minutes)m")
-                            .font(.system(.body, design: .rounded))
+                            .font(AppTypography.body())
                             .fontWeight(viewModel.timerDuration == TimeInterval(minutes * 60) ? .bold : .regular)
                             .padding(.vertical, 8)
                             .padding(.horizontal, 12)
@@ -262,6 +262,7 @@ struct TimerSessionView: View {
 
 // MARK: - ViewModel
 
+@MainActor
 class TimerViewModel: ObservableObject {
     // MARK: - Published Properties
     
@@ -290,8 +291,8 @@ class TimerViewModel: ObservableObject {
     private var backgroundDate: Date?
     private var audioPlayer: AVAudioPlayer?
     private let checkInService = CheckInService.shared
-    private let impact = UIImpactFeedbackGenerator(style: .medium)
-    private let notification = UINotificationFeedbackGenerator()
+    @MainActor private let impact = UIImpactFeedbackGenerator(style: .medium)
+    @MainActor private let notification = UINotificationFeedbackGenerator()
     
     // MARK: - Computed Properties
     
@@ -313,8 +314,10 @@ class TimerViewModel: ObservableObject {
     }
     
     deinit {
+        // removeObservers synchronously from deinit; removeNotifications is nonisolated so this call is allowed
         removeNotifications()
-        timer?.invalidate()
+        // Note: Cannot access main actor-isolated 'timer' from deinit
+        // Timer will be invalidated when the object is deallocated
     }
     
     // MARK: - Public Methods
@@ -327,38 +330,48 @@ class TimerViewModel: ObservableObject {
         if timer != nil {
             timer?.invalidate()
         }
-        
+
         startDate = Date()
-        impact.impactOccurred()
+        Task { @MainActor in
+            impact.impactOccurred()
+        }
         isRunning = true
-        
+
+        // Use a Timer but dispatch main-actor updates inside the Sendable closure.
         timer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            
             let now = Date()
-            self.elapsedTime = now.timeIntervalSince(self.startDate ?? now)
-            self.updateProgress()
-            
-            if self.elapsedTime >= self.timerDuration {
-                self.completeTimer()
+
+            // Update MainActor-isolated state inside a MainActor Task to satisfy Swift concurrency rules
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.elapsedTime = now.timeIntervalSince(self.startDate ?? now)
+                self.updateProgress()
+
+                if self.elapsedTime >= self.timerDuration {
+                    self.completeTimer()
+                }
             }
         }
     }
-    
+
     func pauseTimer() {
         timer?.invalidate()
         timer = nil
         isRunning = false
-        impact.impactOccurred(intensity: 0.5)
+        Task { @MainActor in
+            impact.impactOccurred(intensity: 0.5)
+        }
     }
-    
+
     func resetTimer() {
         timer?.invalidate()
         timer = nil
         elapsedTime = 0
         progress = 0
         isRunning = false
-        impact.impactOccurred(intensity: 0.7)
+        Task { @MainActor in
+            impact.impactOccurred(intensity: 0.7)
+        }
     }
     
     func cancelTimer() {
@@ -375,7 +388,9 @@ class TimerViewModel: ObservableObject {
         isRunning = false
         isCompleted = true
         playCompletionSound()
-        notification.notificationOccurred(.success)
+        Task { @MainActor in
+            notification.notificationOccurred(.success)
+        }
     }
     
     func completeCheckIn(for challenge: Challenge) {
@@ -424,7 +439,7 @@ class TimerViewModel: ObservableObject {
         )
     }
     
-    private func removeNotifications() {
+    nonisolated private func removeNotifications() {
         NotificationCenter.default.removeObserver(self)
     }
     

@@ -6,7 +6,11 @@ import FirebaseAuth
 @MainActor
 class SubscriptionService: NSObject, ObservableObject {
     static let shared = SubscriptionService()
-    
+
+    // MARK: - Logging Control
+    /// Set to false to reduce console spam (legacy service - use SubscriptionStore instead)
+    private let verboseLogging = false
+
     @Published private(set) var isProUser: Bool = false
     @Published private(set) var availableProducts: [Product] = []
     @Published private(set) var renewalDate: Date?
@@ -47,7 +51,7 @@ class SubscriptionService: NSObject, ObservableObject {
     private let maxOfferingsRetries = 3
     
     // Product identifiers
-    private let monthlyProductID = Constants.Products.monthlySubscription
+    private let monthlyProductID = Constants.ProductID.monthly
 
     @Published private(set) var offerings: Offerings?
     @Published private(set) var customerInfo: CustomerInfo?
@@ -55,7 +59,7 @@ class SubscriptionService: NSObject, ObservableObject {
     @Published private(set) var error: Error?
     
     private var products: [Product] = []
-    private let productIds = [Constants.Products.monthlySubscription]
+    private let productIds = [Constants.ProductID.monthly]
     
     // Add property to track deleted account cases
     @Published var isDeletedAccountDetected: Bool = false
@@ -134,7 +138,6 @@ class SubscriptionService: NSObject, ObservableObject {
     
     deinit {
         NotificationCenter.default.removeObserver(self)
-        receiptRefreshTimer?.invalidate()
         print("✅ Singleton released: \(Self.self)")
     }
     
@@ -511,8 +514,10 @@ class SubscriptionService: NSObject, ObservableObject {
             
             // First check if the current RevenueCat user ID matches the Firebase UID
             let currentAppUserID = Purchases.shared.appUserID
-            print("🔐 RevenueCat: Checking subscription status for Firebase UID: \(currentFirebaseUID ?? "none")")
-            print("🔐 RevenueCat: Current AppUserID: \(currentAppUserID)")
+            if verboseLogging {
+                print("🔐 RevenueCat: Checking subscription status for Firebase UID: \(currentFirebaseUID ?? "none")")
+                print("🔐 RevenueCat: Current AppUserID: \(currentAppUserID)")
+            }
             
             // If the IDs don't match, reset Pro status and re-identify user with Firebase UID
             if currentAppUserID != currentFirebaseUID {
@@ -576,9 +581,11 @@ class SubscriptionService: NSObject, ObservableObject {
                     let activeEntitlements = customerInfo.entitlements.active
                     let hasPro = activeEntitlements["Pro"]?.isActive ?? false
                     self.renewalDate = activeEntitlements["Pro"]?.expirationDate
-                    
-                    print("🔐 RevenueCat: Firebase UID \(uid) has Pro entitlement: \(hasPro)")
-                    print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
+
+                    if verboseLogging {
+                        print("🔐 RevenueCat: Firebase UID \(uid) has Pro entitlement: \(hasPro)")
+                        print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
+                    }
                     
                     // Check for expiration date and potential renewal issues
                     checkSubscriptionExpirationStatus(customerInfo: customerInfo)
@@ -607,11 +614,13 @@ class SubscriptionService: NSObject, ObservableObject {
             // If IDs match, check RevenueCat for entitlements for this specific user
             let customerInfo = try await Purchases.shared.customerInfo()
             self.customerInfo = customerInfo
-            
-            print("🔐 RevenueCat: Customer Info - Original AppUserID: \(customerInfo.originalAppUserId)")
-            print("🔐 RevenueCat: Customer Info - Current AppUserID: \(Purchases.shared.appUserID)")
-            print("🔐 RevenueCat: Firebase User ID: \(currentFirebaseUID ?? "none")")
-            print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
+
+            if verboseLogging {
+                print("🔐 RevenueCat: Customer Info - Original AppUserID: \(customerInfo.originalAppUserId)")
+                print("🔐 RevenueCat: Customer Info - Current AppUserID: \(Purchases.shared.appUserID)")
+                print("🔐 RevenueCat: Firebase User ID: \(currentFirebaseUID ?? "none")")
+                print("🔐 RevenueCat: All entitlements: \(customerInfo.entitlements.all)")
+            }
             
             // Only check entitlements if the current RevenueCat user matches the Firebase user
             // AND the original purchaser matches the current Firebase user
@@ -625,8 +634,10 @@ class SubscriptionService: NSObject, ObservableObject {
                 
                 // Check for expiration date and potential renewal issues
                 checkSubscriptionExpirationStatus(customerInfo: customerInfo)
-                
-                print("🔐 RevenueCat: Firebase UID \(currentFirebaseUID!) has Pro entitlement: \(hasPro)")
+
+                if verboseLogging {
+                    print("🔐 RevenueCat: Firebase UID \(currentFirebaseUID!) has Pro entitlement: \(hasPro)")
+                }
                 
                 // Cache the subscription status for offline use
                 UserDefaults.standard.set(hasPro, forKey: "cachedProStatus")
@@ -781,8 +792,8 @@ class SubscriptionService: NSObject, ObservableObject {
             self.cachedOfferings = offerings
             
             // Validate offering identifiers against expected values
-            let expectedOfferingId = "default_offerings"
-            let expectedEntitlementId = "Pro"
+            let expectedOfferingId = SubscriptionIDs.offeringID  // "default"
+            let expectedEntitlementId = SubscriptionIDs.entitlement  // "Pro"
             
             // Check if we have the default offering configured
             if let current = offerings.current {
@@ -1165,8 +1176,8 @@ class SubscriptionService: NSObject, ObservableObject {
             print("🔐 RevenueCat: Checking StoreKit for direct receipt evidence")
             
             for await result in Transaction.currentEntitlements {
-                if case .verified(let transaction) = result, 
-                   ["com.KhamariThompson.100Days.monthlyv2"].contains(transaction.productID),
+                if case .verified(let transaction) = result,
+                   [Constants.ProductID.monthly, Constants.ProductID.annualIntro, Constants.ProductID.annualNoIntro].contains(transaction.productID),
                    transaction.revocationDate == nil,
                    (transaction.expirationDate == nil || transaction.expirationDate! > Date()) {
                     
@@ -1521,11 +1532,11 @@ class SubscriptionService: NSObject, ObservableObject {
     }
     
     // Add a timeout to any throwing async call
-    private func withThrowingTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+    private func withThrowingTimeout<T>(seconds: TimeInterval, operation: @escaping @Sendable () async throws -> T) async throws -> T where T: Sendable {
         let task = Task {
             try await operation()
         }
-        
+
         return try await withTimeout(seconds: seconds, task: task)
     }
     
@@ -1789,18 +1800,37 @@ class SubscriptionService: NSObject, ObservableObject {
         }
     }
     
-    // Handle network status changes
+    // Handle network status changes with debouncing to prevent infinite loops
+    private var networkStatusDebounceTimer: Timer?
+    private var lastNetworkStatus: Bool?
+
     @objc private func handleNetworkStatusChange(_ notification: Notification) {
         if let isConnected = notification.userInfo?["isConnected"] as? Bool {
+            // Ignore duplicate status changes
+            if lastNetworkStatus == isConnected {
+                return
+            }
+
+            lastNetworkStatus = isConnected
+
+            // Cancel any pending debounce timer
+            networkStatusDebounceTimer?.invalidate()
+
             if isConnected {
-                // We're back online, refresh subscription status
-                print("🔐 RevenueCat: Network connection restored, refreshing subscription status")
-                isOfflineMode = false
-                Task {
-                    await updateSubscriptionStatus(forceVerification: true)
+                // Debounce the online status change (wait 2 seconds to ensure stable connection)
+                networkStatusDebounceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+                    guard let self = self else { return }
+
+                    // We're back online, refresh subscription status
+                    print("🔐 RevenueCat: Network connection restored, refreshing subscription status")
+                    Task { @MainActor in
+                        self.isOfflineMode = false
+                        // Use regular update without force verification to avoid excessive syncs
+                        await self.updateSubscriptionStatus()
+                    }
                 }
             } else {
-                // We're offline, enable offline mode
+                // We're offline, enable offline mode immediately
                 print("🔐 RevenueCat: Network connection lost, enabling offline mode")
                 isOfflineMode = true
             }

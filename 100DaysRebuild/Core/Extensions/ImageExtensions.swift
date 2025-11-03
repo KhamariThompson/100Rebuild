@@ -3,8 +3,8 @@ import UIKit
 import PhotosUI
 
 // MARK: - Global Image Cache Manager
-final class ImageCacheManager {
-    static let shared = ImageCacheManager()
+final class ImageCacheManager: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = ImageCacheManager()
     
     // Configure URLCache for all images
     let cache: URLCache = {
@@ -207,7 +207,7 @@ struct ProfilePictureView: View {
             } else if imageLoadingError {
                 // Error fallback
                 Image(systemName: "person.circle.fill")
-                    .font(.system(size: size * 0.8))
+                    .font(AppTypography.font(size: size * 0.8, weight: .regular))
                     .foregroundColor(.theme.accent)
                     .frame(width: size, height: size)
             } else {
@@ -273,16 +273,17 @@ struct ProfilePictureView: View {
 
 // Helper extension to convert SwiftUI Image to UIImage
 extension Image {
+    @MainActor
     func asUIImage() -> UIImage? {
         let controller = UIHostingController(rootView: self)
         let view = controller.view
-        
+
         let targetSize = controller.view.intrinsicContentSize
         view?.bounds = CGRect(origin: .zero, size: targetSize)
         view?.backgroundColor = .clear
-        
+
         let renderer = UIGraphicsImageRenderer(size: targetSize)
-        
+
         return renderer.image { _ in
             view?.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
         }
@@ -487,7 +488,7 @@ struct InitialAvatarView: View {
                 .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
             
             Text(initial)
-                .font(.system(size: size * 0.5, weight: .bold))
+                .font(AppTypography.font(size: size * 0.5, weight: .bold))
                 .foregroundColor(.white)
         }
         .accessibilityLabel(Text("\(name)'s avatar"))

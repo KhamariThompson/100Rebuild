@@ -51,7 +51,7 @@ struct MilestoneShareView: View {
             HStack {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(.white)
                         .frame(width: 32, height: 32)
                         .background(Color.white.opacity(0.1))
@@ -61,7 +61,7 @@ struct MilestoneShareView: View {
                 Spacer()
                 
                 Text("🎉 Celebrate Your Win!")
-                    .font(.title2)
+                    .font(AppTypography.title2())
                     .fontWeight(.bold)
                     .foregroundColor(.white)
                 
@@ -72,7 +72,7 @@ struct MilestoneShareView: View {
             }
             
             Text("Share your milestone and inspire others to start their journey!")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
         }
@@ -88,7 +88,7 @@ struct MilestoneShareView: View {
                     
                     Text("Creating your milestone card...")
                         .foregroundColor(.white.opacity(0.8))
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                 }
                 .frame(width: 300, height: 450)
                 .background(Color.white.opacity(0.1))
@@ -108,7 +108,7 @@ struct MilestoneShareView: View {
     private var layoutSelectorView: some View {
         VStack(spacing: AppSpacing.s) {
             Text("Choose Style")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(.white)
             
             HStack(spacing: AppSpacing.s) {
@@ -121,7 +121,7 @@ struct MilestoneShareView: View {
                             layoutPreviewIcon(for: layout)
                             
                             Text(layoutName(for: layout))
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(selectedLayout == layout ? Color.theme.accent : .white.opacity(0.7))
                         }
                         .padding(AppSpacing.s)
@@ -146,9 +146,9 @@ struct MilestoneShareView: View {
             Button(action: { showShareSheet = true }) {
                 HStack {
                     Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                     Text("Share to Social Media")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .fontWeight(.semibold)
                 }
                 .foregroundColor(.white)
@@ -169,7 +169,7 @@ struct MilestoneShareView: View {
             // Secondary Skip Button
             Button(action: onDismiss) {
                 Text("Maybe Later")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.white.opacity(0.8))
             }
         }
@@ -187,13 +187,13 @@ struct MilestoneShareView: View {
                     
                     VStack(spacing: 1) {
                         Text("21")
-                            .font(.system(size: 10, weight: .black))
+                            .font(AppTypography.caption2(.black))
                             .foregroundColor(.white)
                         Rectangle()
                             .fill(Color.white.opacity(0.8))
                             .frame(width: 12, height: 1)
                         Text("DAY")
-                            .font(.system(size: 4, weight: .semibold))
+                            .font(AppTypography.font(size: 4, weight: .semibold))
                             .foregroundColor(.white)
                     }
                 }
@@ -210,10 +210,10 @@ struct MilestoneShareView: View {
                     
                     VStack(spacing: 1) {
                         Text("21")
-                            .font(.system(size: 8, weight: .bold))
+                            .font(AppTypography.caption2(.bold))
                             .foregroundColor(.white)
                         Text("DAY")
-                            .font(.system(size: 4, weight: .medium))
+                            .font(AppTypography.font(size: 4, weight: .medium))
                             .foregroundColor(.white.opacity(0.8))
                     }
                 }
@@ -225,7 +225,7 @@ struct MilestoneShareView: View {
                         .fill(Color.black.opacity(0.7))
                     
                     Text("21")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(AppTypography.caption2(.medium))
                         .foregroundColor(.white)
                 }
                 .frame(width: 32, height: 48)
@@ -243,11 +243,15 @@ struct MilestoneShareView: View {
     
     private func generateShareableImage() {
         isGeneratingImage = true
-        
-        DispatchQueue.global(qos: .userInitiated).async {
+
+        // Capture values before going to background queue
+        let layout = selectedLayout
+        let quoteText = quote
+
+        Task.detached(priority: .userInitiated) {
             let backgroundStyle: MilestoneShareCardGenerator.BackgroundStyle
-            
-            switch selectedLayout {
+
+            switch layout {
             case .modern:
                 backgroundStyle = .gradient([Color.theme.accent, Color.theme.gradientEnd])
             case .classic:
@@ -255,18 +259,18 @@ struct MilestoneShareView: View {
             case .minimal:
                 backgroundStyle = .solid(Color.black.opacity(0.8))
             }
-            
+
             let image = MilestoneShareCardGenerator.generateMilestoneCard(
                 currentDay: milestone,
                 challengeTitle: challengeTitle,
-                quote: quote,
+                quote: quoteText,
                 backgroundStyle: backgroundStyle,
-                layout: selectedLayout
+                layout: layout
             )
-            
-            DispatchQueue.main.async {
-                self.shareableImage = image
-                self.isGeneratingImage = false
+
+            await MainActor.run {
+                shareableImage = image
+                isGeneratingImage = false
             }
         }
     }

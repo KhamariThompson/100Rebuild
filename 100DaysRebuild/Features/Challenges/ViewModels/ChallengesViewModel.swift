@@ -41,8 +41,8 @@ class ChallengesViewModel: ObservableObject {
     @Published var currentTimeOfDay: TimeOfDay = .morning
     
     // Timer for updating the time since last check-in
-    private var timerCancellable: AnyCancellable?
-    private var subscriptions = Set<AnyCancellable>()
+    nonisolated(unsafe) private var timerCancellable: AnyCancellable?
+    nonisolated(unsafe) private var subscriptions = Set<AnyCancellable>()
     
     private let userSession = UserSession.shared
     private let challengeStore = ChallengeStore.shared

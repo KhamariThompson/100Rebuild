@@ -14,8 +14,8 @@ struct FriendProfileView: View {
     var body: some View {
         ZStack {
             Color.theme.background.ignoresSafeArea()
-            
-            if viewModel.isLoading {
+
+            if viewModel.isLoading || viewModel.friendProfile == nil {
                 loadingView
             } else {
                 scrollContent
@@ -24,6 +24,7 @@ struct FriendProfileView: View {
         .navigationTitle("@\(friendUsername)")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(false)
+        .id(friendId) // Enforce unique identity per friendId
         .onAppear {
             viewModel.loadFriendProfile(friendId: friendId)
         }
@@ -44,7 +45,7 @@ struct FriendProfileView: View {
                 .padding()
             
             Text("Loading profile...")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,7 +104,7 @@ struct FriendProfileView: View {
                                 .clipShape(Circle())
                             } else {
                                 Text(String(friendUsername.prefix(1)).uppercased())
-                                    .font(.system(size: 32, weight: .bold))
+                                    .font(AppTypography.largeTitle(.bold))
                                     .foregroundColor(.white)
                             }
                         }
@@ -113,13 +114,13 @@ struct FriendProfileView: View {
                 VStack(spacing: AppSpacing.xs) {
                     if let displayName = viewModel.friendProfile?.displayName {
                         Text(displayName)
-                            .font(.title2)
+                            .font(AppTypography.title2())
                             .fontWeight(.bold)
                             .foregroundColor(.white)
                     }
                     
                     Text("@\(friendUsername)")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .fontWeight(.medium)
                         .foregroundColor(.white.opacity(0.8))
                 }
@@ -132,10 +133,10 @@ struct FriendProfileView: View {
                 }) {
                     HStack(spacing: AppSpacing.xs) {
                         Image(systemName: "heart.fill")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                         
                         Text("Send Encouragement")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .fontWeight(.semibold)
                     }
                     .foregroundColor(.theme.accent)
@@ -197,7 +198,7 @@ struct FriendProfileView: View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
             HStack {
                 Text("Active Challenges")
-                    .font(.title3)
+                    .font(AppTypography.title3())
                     .fontWeight(.bold)
                     .foregroundColor(.theme.text)
                 
@@ -222,16 +223,16 @@ struct FriendProfileView: View {
                 AppComponents.Card {
                     VStack(spacing: AppSpacing.s) {
                         Image(systemName: "flag.slash")
-                            .font(.system(size: 24))
+                            .font(AppTypography.title2())
                             .foregroundColor(.theme.subtext)
                         
                         Text("No Active Challenges")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .fontWeight(.medium)
                             .foregroundColor(.theme.subtext)
                         
                         Text("This friend isn't currently working on any challenges")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                     }
@@ -245,7 +246,7 @@ struct FriendProfileView: View {
     private var recentActivitySection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.s) {
             Text("Recent Activity")
-                .font(.title3)
+                .font(AppTypography.title3())
                 .fontWeight(.bold)
                 .foregroundColor(.theme.text)
             
@@ -259,16 +260,16 @@ struct FriendProfileView: View {
                 AppComponents.Card {
                     VStack(spacing: AppSpacing.s) {
                         Image(systemName: "clock.badge.xmark")
-                            .font(.system(size: 24))
+                            .font(AppTypography.title2())
                             .foregroundColor(.theme.subtext)
                         
                         Text("No Recent Activity")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .fontWeight(.medium)
                             .foregroundColor(.theme.subtext)
                         
                         Text("Check back later to see their progress")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                     }
@@ -293,7 +294,7 @@ struct StatCardView: View {
             VStack(spacing: AppSpacing.s) {
                 HStack {
                     Image(systemName: icon)
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(color)
                     
                     Spacer()
@@ -301,12 +302,12 @@ struct StatCardView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(value)
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.text)
                     
                     Text(subtitle)
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -314,7 +315,7 @@ struct StatCardView: View {
                 Spacer()
                 
                 Text(title)
-                    .font(.caption)
+                    .font(AppTypography.caption1())
                     .fontWeight(.medium)
                     .foregroundColor(.theme.subtext)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -343,20 +344,20 @@ struct FriendChallengeCardView: View {
                         .rotationEffect(.degrees(-90))
                     
                     Text("\(Int(challenge.progress * 100))%")
-                        .font(.caption2)
+                        .font(AppTypography.caption2())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.accent)
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(challenge.title)
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .fontWeight(.semibold)
                         .foregroundColor(.theme.text)
                         .lineLimit(1)
                     
                     Text("Day \(challenge.currentDay) of 100")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -364,11 +365,11 @@ struct FriendChallengeCardView: View {
                 
                 VStack {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 16))
+                        .font(AppTypography.body())
                         .foregroundColor(.orange)
                     
                     Text("\(challenge.streak)")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .fontWeight(.semibold)
                         .foregroundColor(.orange)
                 }
@@ -389,18 +390,18 @@ struct FriendActivityRowView: View {
                     .frame(width: 32, height: 32)
                     .overlay(
                         Image(systemName: activity.type.icon)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(AppTypography.subhead(.semibold))
                             .foregroundColor(activity.type.color)
                     )
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(activity.description)
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.text)
                         .lineLimit(2)
                     
                     Text(activity.timestamp.timeAgoDisplay())
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -408,7 +409,7 @@ struct FriendActivityRowView: View {
                 
                 if activity.type == .milestone {
                     Text("🎉")
-                        .font(.title2)
+                        .font(AppTypography.title2())
                 }
             }
         }

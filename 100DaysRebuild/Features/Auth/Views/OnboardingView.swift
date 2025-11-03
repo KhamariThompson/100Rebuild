@@ -2,6 +2,7 @@ import SwiftUI
 import UserNotifications
 import Foundation
 import FirebaseFirestore
+import RevenueCat
 
 // MARK: - Updated Onboarding View with Auth → Funnel → Paywall Flow
 //
@@ -16,10 +17,9 @@ struct OnboardingView: View {
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var router: NavigationRouter
-    @StateObject private var entitlements = Entitlements.shared
     @StateObject private var cohortManager = CohortManager.shared
     @StateObject private var analyticsService = AnalyticsService.shared
-    
+
     var body: some View {
         Group {
             // Step 1: Verify user is authenticated (defensive check)
@@ -29,7 +29,7 @@ struct OnboardingView: View {
                     .transition(.opacity)
             }
             // Step 2: Check if user is already pro (for restoration cases)
-            else if entitlements.effectiveIsProUser {
+            else if entitlementsAdapter.hasProAccess {
                 // Skip funnel, go directly to main app
                 MainAppView()
                     .onAppear {
@@ -70,19 +70,20 @@ struct OnboardingView: View {
             }
         }
         .onAppear {
-            // Refresh entitlements to check current status
+            // Refresh subscription status to check current Pro access
             Task {
-                await entitlements.refreshEntitlements()
+                await subscriptionStore.load()
 
                 // Set RevenueCat attributes for cohort tracking
                 if let userId = userSession.currentUser?.uid {
                     let cohortValue = cohortManager.userCohort.rawValue
-                    entitlements.setUserAttributes(
-                        userId: userId,
-                        cohort: cohortValue,
-                        funnelCompletedAt: userSession.onboardingCompletedAt,
-                        firstPaywallAt: cohortManager.firstPaywallAt
-                    )
+
+                    // Set custom attributes directly on RevenueCat
+                    Purchases.shared.setAttributes([
+                        "cohort": cohortValue,
+                        "funnel_completed_at": userSession.onboardingCompletedAt?.ISO8601Format() ?? "",
+                        "first_paywall_at": cohortManager.firstPaywallAt?.ISO8601Format() ?? ""
+                    ])
                 }
             }
         }
@@ -191,11 +192,11 @@ struct LegacyOnboardingView: View {
             HStack {
                 // Logo
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 32))
+                    .font(AppTypography.largeTitle())
                     .foregroundColor(.theme.accent)
                 
                 Text("100Days")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 Spacer()
@@ -205,7 +206,7 @@ struct LegacyOnboardingView: View {
                     Button("Skip") {
                         completeOnboarding()
                     }
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(.theme.subtext)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -245,7 +246,7 @@ struct LegacyOnboardingView: View {
                     .frame(width: 220, height: 220)
                 
                 Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 100, weight: .regular))
+                    .font(AppTypography.font(size: 100, weight: .bold))
                     .foregroundColor(.theme.accent)
             }
             .padding(.bottom, 40)
@@ -253,12 +254,12 @@ struct LegacyOnboardingView: View {
             // Welcome text
             VStack(spacing: 16) {
                 Text("Welcome to 100Days")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                     .foregroundColor(.theme.text)
                     .multilineTextAlignment(.center)
                 
                 Text("Build daily habits and achieve your goals with the 100 day challenge method")
-                    .font(.system(size: 18))
+                    .font(AppTypography.title3())
                     .foregroundColor(.theme.subtext)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -287,7 +288,7 @@ struct LegacyOnboardingView: View {
             
             // Title
             Text("What should we call you?")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
@@ -295,11 +296,11 @@ struct LegacyOnboardingView: View {
             // Name field
             VStack(alignment: .leading, spacing: 12) {
                 Text("Your Name")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(.theme.text)
                 
                 TextField("Enter your name", text: $userName)
-                    .font(.system(size: 18))
+                    .font(AppTypography.title3())
                     .padding()
                     .frame(height: 56)
                     .background(Color.theme.surface)
@@ -314,7 +315,7 @@ struct LegacyOnboardingView: View {
             .padding(.horizontal, 20)
             
             Text("This helps personalize your experience")
-                .font(.system(size: 14))
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
             
@@ -327,13 +328,13 @@ struct LegacyOnboardingView: View {
         VStack(spacing: 32) {
             // Title
             Text("What are you focusing on?")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
             Text("This will help us suggest challenges for you")
-                .font(.system(size: 16))
+                .font(AppTypography.body())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
@@ -366,20 +367,20 @@ struct LegacyOnboardingView: View {
                     .frame(width: 180, height: 180)
                 
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 70, weight: .regular))
+                    .font(AppTypography.font(size: 70, weight: .bold))
                     .foregroundColor(.theme.accent)
             }
             .padding(.bottom, 20)
             
             // Title
             Text("Stay Consistent with Reminders")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
             
             Text("Daily reminders help you maintain your streak and build lasting habits")
-                .font(.system(size: 16))
+                .font(AppTypography.body())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 20)
@@ -388,11 +389,11 @@ struct LegacyOnboardingView: View {
             Toggle(isOn: $notificationsEnabled) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Enable Daily Reminders")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(.theme.text)
                     
                     Text("We'll remind you to check in daily")
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
             }
@@ -407,7 +408,7 @@ struct LegacyOnboardingView: View {
             if notificationsEnabled {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Reminder Time")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTypography.headline(.semibold))
                         .foregroundColor(.theme.text)
                     
                     DatePicker("", selection: $selectedTime, displayedComponents: .hourAndMinute)
@@ -459,7 +460,7 @@ struct LegacyOnboardingView: View {
                 }
             }) {
                 Text(currentStep == totalSteps - 1 ? "Get Started" : "Continue")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(AppTypography.title3(.semibold))
                     .foregroundColor(colorScheme == .dark ? .black : .white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
@@ -488,7 +489,7 @@ struct LegacyOnboardingView: View {
                     }
                 }) {
                     Text("Back")
-                        .font(.system(size: 18, weight: .medium))
+                        .font(AppTypography.title3(.medium))
                         .foregroundColor(.theme.text)
                         .frame(maxWidth: .infinity)
                         .frame(height: 56)
@@ -599,17 +600,17 @@ struct OnboardingFeatureRow: View {
                     .frame(width: 50, height: 50)
                 
                 Image(systemName: icon)
-                    .font(.system(size: 22))
+                    .font(AppTypography.title2())
                     .foregroundColor(.theme.accent)
             }
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(AppTypography.headline(.semibold))
                     .foregroundColor(.theme.text)
                 
                 Text(description)
-                    .font(.system(size: 15))
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.subtext)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -631,12 +632,12 @@ struct CategoryCard: View {
             VStack(spacing: 16) {
                 // Icon
                 Image(systemName: iconForCategory(category))
-                    .font(.system(size: 28))
+                    .font(AppTypography.title1())
                     .foregroundColor(isSelected ? (colorScheme == .dark ? .black : .white) : .theme.accent)
                 
                 // Label
                 Text(category)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(isSelected ? (colorScheme == .dark ? .black : .white) : .theme.text)
             }
             .frame(height: 120)

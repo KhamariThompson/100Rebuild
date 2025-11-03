@@ -105,7 +105,7 @@ struct JourneyCarouselView: View {
                     HStack(spacing: 12) {
                         Button(action: previousCard) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(AppTypography.subhead(.semibold))
                                 .foregroundColor(currentIndex > 0 ? .theme.accent : .theme.subtext.opacity(0.3))
                                 .padding(8)
                                 .background(Circle().fill(Color.theme.background))
@@ -115,7 +115,7 @@ struct JourneyCarouselView: View {
                         
                         Button(action: nextCard) {
                             Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(AppTypography.subhead(.semibold))
                                 .foregroundColor(currentIndex < viewModel.journeyCards.count - 1 ? .theme.accent : .theme.subtext.opacity(0.3))
                                 .padding(8)
                                 .background(Circle().fill(Color.theme.background))
@@ -205,7 +205,7 @@ struct JourneyCarouselView: View {
     private var emptyJourneyView: some View {
         VStack(spacing: 16) {
             Image(systemName: "map")
-                .font(.system(size: 40))
+                .font(AppTypography.display())
                 .foregroundColor(.theme.accent.opacity(0.6))
                 .padding(.bottom, 4)
             
@@ -494,7 +494,7 @@ struct MilestoneCard: View {
             }
             
             Text(emoji)
-                .font(.system(size: 42))
+                .font(AppTypography.display())
             
             Text(message)
                 .font(.subheadline)
@@ -555,7 +555,7 @@ struct JourneyCardDetailView: View {
                                         .cornerRadius(12)
                                 case .failure:
                                     Image(systemName: "photo")
-                                        .font(.system(size: 80))
+                                        .font(AppTypography.displayXL())
                                         .foregroundColor(.theme.subtext.opacity(0.5))
                                         .frame(height: 300)
                                         .frame(maxWidth: .infinity)
@@ -593,11 +593,11 @@ struct JourneyCardDetailView: View {
                             if emoji.hasPrefix("sf:") {
                                 let sfName = String(emoji.dropFirst(3))
                                 Image(systemName: sfName)
-                                    .font(.system(size: 60))
+                                    .font(AppTypography.font(size: 60, weight: .bold))
                                     .foregroundColor(.theme.accent)
                             } else {
                                 Text(emoji)
-                                    .font(.system(size: 60))
+                                    .font(AppTypography.font(size: 60, weight: .bold))
                             }
                             
                             Text(message)
@@ -625,7 +625,7 @@ struct JourneyCardDetailView: View {
                         
                         HStack(alignment: .center, spacing: 16) {
                             Image(systemName: "flame.fill")
-                                .font(.system(size: 60))
+                                .font(AppTypography.font(size: 60, weight: .bold))
                                 .foregroundColor(.orange)
                             
                             Text("\(count)-day streak! Keep it up!")
@@ -653,7 +653,7 @@ struct JourneyCardDetailView: View {
                         
                         HStack(alignment: .center, spacing: 16) {
                             Image(systemName: "trophy.fill")
-                                .font(.system(size: 60))
+                                .font(AppTypography.font(size: 60, weight: .bold))
                                 .foregroundColor(.theme.accent)
                             
                             Text(title)

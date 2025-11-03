@@ -1,6 +1,6 @@
 import Foundation
-import FirebaseFirestore
-import FirebaseAuth
+@preconcurrency import FirebaseFirestore
+@preconcurrency import FirebaseAuth
 import Combine
 import SwiftUI
 
@@ -17,7 +17,7 @@ class GroupChallengeService: ObservableObject {
     static let shared = GroupChallengeService()
     
     // Dependencies
-    private let firestore = Firestore.firestore()
+    nonisolated(unsafe) private let firestore = Firestore.firestore()
     private let userSession = UserSession.shared
     private let friendService = FriendService.shared
     private let subscriptionService = SubscriptionService.shared
@@ -35,10 +35,10 @@ class GroupChallengeService: ObservableObject {
     }
     
     deinit {
+        // Clean up listeners synchronously since deinit can't be async
         challengesListener?.remove()
         participatingChallengesListener?.remove()
         invitationsListener?.remove()
-        cancellables.forEach { $0.cancel() }
     }
     
     // MARK: - Public Methods
@@ -291,57 +291,64 @@ class GroupChallengeService: ObservableObject {
         }
         
         let displayName = userDoc.data()?["displayName"] as? String
-        var photoURL: URL? = nil
-        if let photoURLString = userDoc.data()?["photoURL"] as? String {
-            photoURL = URL(string: photoURLString)
-        }
-        
-        // Update invitation status using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            // Update the invitation in user's collection
-            let userInviteRef = self.firestore
-                .collection("users")
-                .document(userId)
-                .collection("challengeInvitations")
-                .document(invitationId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.accepted.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: userInviteRef)
-            
-            // Update the invitation in challenge's collection
-            let challengeInviteRef = self.firestore
-                .collection("challengeInvites")
-                .document(invitation.challengeId)
-                .collection("invitees")
-                .document(userId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.accepted.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: challengeInviteRef)
-            
-            // Add user as participant
-            let participantRef = self.firestore
-                .collection("groupChallenges")
-                .document(invitation.challengeId)
-                .collection("participants")
-                .document(userId)
-            
-            let participant = GroupChallengeParticipant(
-                id: userId,
-                userId: userId,
-                username: username,
-                displayName: displayName,
-                photoURL: photoURL
-            )
-            
-            transaction.setData(participant.asDictionary(), forDocument: participantRef)
-            
+        let photoURL: URL? = {
+            if let photoURLString = userDoc.data()?["photoURL"] as? String {
+                return URL(string: photoURLString)
+            }
             return nil
+        }()
+
+        // Update invitation status using a transaction
+        do {
+            let photoURLLocal = photoURL
+            try await Task.detached {
+                let fs = self.firestore
+                _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                    // Update the invitation in user's collection
+                    let userInviteRef = fs
+                        .collection("users")
+                        .document(userId)
+                        .collection("challengeInvitations")
+                        .document(invitationId)
+
+                    transaction.updateData([
+                        "status": ChallengeInvitation.InvitationStatus.accepted.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: userInviteRef)
+
+                    // Update the invitation in challenge's collection
+                    let challengeInviteRef = fs
+                        .collection("challengeInvites")
+                        .document(invitation.challengeId)
+                        .collection("invitees")
+                        .document(userId)
+
+                    transaction.updateData([
+                        "status": ChallengeInvitation.InvitationStatus.accepted.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: challengeInviteRef)
+
+                    // Add user as participant
+                    let participantRef = fs
+                        .collection("groupChallenges")
+                        .document(invitation.challengeId)
+                        .collection("participants")
+                        .document(userId)
+
+                    let participant = GroupChallengeParticipant(
+                        id: userId,
+                        userId: userId,
+                        username: username,
+                        displayName: displayName,
+                        photoURL: photoURLLocal
+                    )
+
+                    transaction.setData(participant.asDictionary(), forDocument: participantRef)
+                    return nil
+                }
+            }.value
         }
-        
+
         // Notify about the updated challenge list
         NotificationCenter.default.post(
             name: Self.challengesDidUpdateNotification,
@@ -356,41 +363,43 @@ class GroupChallengeService: ObservableObject {
         }
         
         // Update invitation status using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            // Update the invitation in user's collection
-            let userInviteRef = self.firestore
-                .collection("users")
-                .document(userId)
-                .collection("challengeInvitations")
-                .document(invitationId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: userInviteRef)
-            
-            // Update the invitation in challenge's collection
-            let challengeInviteRef = self.firestore
-                .collection("challengeInvites")
-                .document(challengeId)
-                .collection("invitees")
-                .document(userId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: challengeInviteRef)
-            
-            return nil
-        }
-        
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                // Update the invitation in user's collection
+                let userInviteRef = fs
+                    .collection("users")
+                    .document(userId)
+                    .collection("challengeInvitations")
+                    .document(invitationId)
+
+                transaction.updateData([
+                    "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: userInviteRef)
+
+                // Update the invitation in challenge's collection
+                let challengeInviteRef = fs
+                    .collection("challengeInvites")
+                    .document(challengeId)
+                    .collection("invitees")
+                    .document(userId)
+
+                transaction.updateData([
+                    "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: challengeInviteRef)
+                return nil
+            }
+        }.value
+
         // Notify about the updated invitation list
         NotificationCenter.default.post(
             name: Self.invitationsDidUpdateNotification,
             object: nil
         )
     }
-    
+
     /// Reject a challenge invitation
     func rejectChallengeInvitation(invitationId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else {
@@ -415,41 +424,44 @@ class GroupChallengeService: ObservableObject {
         }
         
         // Update invitation status using a transaction
-        try await firestore.runTransaction { transaction, errorPointer in
-            // Update the invitation in user's collection
-            let userInviteRef = self.firestore
-                .collection("users")
-                .document(userId)
-                .collection("challengeInvitations")
-                .document(invitationId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.rejected.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: userInviteRef)
-            
-            // Update the invitation in challenge's collection
-            let challengeInviteRef = self.firestore
-                .collection("challengeInvites")
-                .document(invitation.challengeId)
-                .collection("invitees")
-                .document(userId)
-            
-            transaction.updateData([
-                "status": ChallengeInvitation.InvitationStatus.rejected.rawValue,
-                "updatedAt": FieldValue.serverTimestamp()
-            ], forDocument: challengeInviteRef)
-            
-            return nil
-        }
-        
+        try await Task.detached {
+            let fs = self.firestore
+            _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                // Update the invitation in user's collection
+                let userInviteRef = fs
+                    .collection("users")
+                    .document(userId)
+                    .collection("challengeInvitations")
+                    .document(invitationId)
+
+                transaction.updateData([
+                    "status": ChallengeInvitation.InvitationStatus.rejected.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: userInviteRef)
+
+                // Update the invitation in challenge's collection
+                let challengeInviteRef = fs
+                    .collection("challengeInvites")
+                    .document(invitation.challengeId)
+                    .collection("invitees")
+                    .document(userId)
+
+                transaction.updateData([
+                    "status": ChallengeInvitation.InvitationStatus.rejected.rawValue,
+                    "updatedAt": FieldValue.serverTimestamp()
+                ], forDocument: challengeInviteRef)
+                return nil
+            }
+        }.value
+
         // Notify about the updated invitation list
         NotificationCenter.default.post(
             name: Self.invitationsDidUpdateNotification,
             object: nil
         )
     }
-    
+
+
     /// Leave a group challenge
     func leaveGroupChallenge(challengeId: String) async throws {
         guard let userId = Auth.auth().currentUser?.uid else {
@@ -594,37 +606,39 @@ class GroupChallengeService: ObservableObject {
         // Update each stale invitation
         for invitationDoc in staleInvitationsQuery.documents {
             guard let invitation = ChallengeInvitation(from: invitationDoc) else { continue }
-            
+
             // Update invitation status using a transaction
-            try await firestore.runTransaction { transaction, errorPointer in
-                // Update the invitation in user's collection
-                let userInviteRef = self.firestore
-                    .collection("users")
-                    .document(userId)
-                    .collection("challengeInvitations")
-                    .document(invitation.id)
-                
-                transaction.updateData([
-                    "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], forDocument: userInviteRef)
-                
-                // Update the invitation in challenge's collection
-                let challengeInviteRef = self.firestore
-                    .collection("challengeInvites")
-                    .document(invitation.challengeId)
-                    .collection("invitees")
-                    .document(userId)
-                
-                transaction.updateData([
-                    "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
-                    "updatedAt": FieldValue.serverTimestamp()
-                ], forDocument: challengeInviteRef)
-                
-                return nil
-            }
+            try await Task.detached {
+                let fs = self.firestore
+                _ = try await fs.runTransaction { transaction, errorPointer -> Any? in
+                    // Update the invitation in user's collection
+                    let userInviteRef = fs
+                        .collection("users")
+                        .document(userId)
+                        .collection("challengeInvitations")
+                        .document(invitation.id)
+
+                    transaction.updateData([
+                        "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: userInviteRef)
+
+                    // Update the invitation in challenge's collection
+                    let challengeInviteRef = fs
+                        .collection("challengeInvites")
+                        .document(invitation.challengeId)
+                        .collection("invitees")
+                        .document(userId)
+
+                    transaction.updateData([
+                        "status": ChallengeInvitation.InvitationStatus.expired.rawValue,
+                        "updatedAt": FieldValue.serverTimestamp()
+                    ], forDocument: challengeInviteRef)
+                    return nil
+                }
+            }.value
         }
-        
+
         // Notify about the updated invitation list
         if !staleInvitationsQuery.documents.isEmpty {
             NotificationCenter.default.post(

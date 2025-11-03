@@ -214,7 +214,7 @@ extension View {
                     .overlay(
                         Image(systemName: "checkmark")
                             .foregroundColor(.white)
-                            .font(.system(size: size * 0.6, weight: .bold))
+                            .font(AppTypography.font(size: size * 0.6, weight: .bold))
                     )
                     .offset(x: offset.x, y: offset.y)
                     .transition(.scale.combined(with: .opacity))
@@ -455,16 +455,20 @@ struct AdaptiveKeyboardHandler: ViewModifier {
             ) { notification in
                 if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                     // Add a small buffer to avoid constraint conflicts
-                    self.keyboardHeight = keyboardFrame.height + 10
+                    Task { @MainActor in
+                        self.keyboardHeight = keyboardFrame.height + 10
+                    }
                 }
             }
-            
+
             NotificationCenter.default.addObserver(
                 forName: UIResponder.keyboardWillHideNotification,
                 object: nil,
                 queue: .main
             ) { _ in
-                self.keyboardHeight = 0
+                Task { @MainActor in
+                    self.keyboardHeight = 0
+                }
             }
         }
     }

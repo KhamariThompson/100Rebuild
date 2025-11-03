@@ -79,7 +79,7 @@ struct FriendsView: View {
                                     .foregroundColor(Color.orange)
                                 
                                 Text("Free users are limited to 5 friends. Upgrade to Pro for unlimited friends.")
-                                    .font(.caption)
+                                    .font(AppTypography.caption1())
                                     .foregroundColor(Color.orange)
                                     .lineLimit(2)
                                 
@@ -89,7 +89,7 @@ struct FriendsView: View {
                                     subscriptionService.showPaywall = true
                                 }) {
                                     Text("Upgrade")
-                                        .font(.caption)
+                                        .font(AppTypography.caption1())
                                         .fontWeight(.semibold)
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 8)
@@ -113,7 +113,7 @@ struct FriendsView: View {
                             VStack(alignment: .leading, spacing: AppSpacing.s) {
                                 HStack {
                                     Text("Suggested Friends")
-                                        .font(.headline)
+                                        .font(AppTypography.headline())
                                         .foregroundColor(Color.theme.text)
                                     
                                     Spacer()
@@ -200,16 +200,16 @@ struct FriendsView: View {
                 } else if searchResults.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "person.fill.questionmark")
-                            .font(.system(size: 40))
+                            .font(AppTypography.display())
                             .foregroundColor(Color.theme.subtext)
                             .padding(.bottom, 8)
                         
                         Text("No users found")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         Text("Try a different username")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.theme.subtext)
                     }
                     .frame(maxWidth: .infinity)
@@ -276,17 +276,17 @@ struct FriendsView: View {
     private var emptyFriendsView: some View {
         VStack(spacing: 16) {
             Image(systemName: "person.3.sequence.fill")
-                .font(.system(size: 50))
+                .font(AppTypography.display())
                 .foregroundColor(Color.theme.accent.opacity(0.7))
                 .padding(.bottom, 8)
             
             Text("No Friends Yet")
-                .font(.title2)
+                .font(AppTypography.title2())
                 .fontWeight(.bold)
                 .foregroundColor(Color.theme.text)
             
             Text("Search for users by username and send friend requests to connect.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -297,7 +297,7 @@ struct FriendsView: View {
                         .foregroundColor(Color.theme.accent)
                     
                     Text("Free accounts can have up to 5 friends")
-                        .font(.footnote)
+                        .font(AppTypography.footnote())
                         .foregroundColor(Color.theme.subtext)
                 }
                 .padding(.top, 8)
@@ -344,17 +344,17 @@ struct FriendsView: View {
     private var emptyRequestsView: some View {
         VStack(spacing: 16) {
             Image(systemName: "person.crop.circle.badge.questionmark")
-                .font(.system(size: 50))
+                .font(AppTypography.display())
                 .foregroundColor(Color.theme.accent.opacity(0.7))
                 .padding(.bottom, 8)
             
             Text("No Friend Requests")
-                .font(.title2)
+                .font(AppTypography.title2())
                 .fontWeight(.bold)
                 .foregroundColor(Color.theme.text)
             
             Text("When someone sends you a friend request, it will appear here.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -396,12 +396,12 @@ struct SearchResultRow: View {
             // User info
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.displayName ?? "@\(user.username)")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(Color.theme.text)
                 
                 if user.displayName != nil {
                     Text("@\(user.username)")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.subtext)
                 }
             }
@@ -411,7 +411,7 @@ struct SearchResultRow: View {
             // Add friend button
             if isFriend {
                 Text("Friend")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(Color.theme.success)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -421,7 +421,7 @@ struct SearchResultRow: View {
                     )
             } else if isFriendRequestSent {
                 Text("Requested")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(Color.theme.subtext)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
@@ -433,10 +433,10 @@ struct SearchResultRow: View {
                 Button(action: onAddFriend) {
                     HStack(spacing: 4) {
                         Image(systemName: "lock.fill")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                         
                         Text("Upgrade")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                     }
                     .foregroundColor(Color.orange)
                     .padding(.horizontal, 12)
@@ -449,7 +449,7 @@ struct SearchResultRow: View {
             } else {
                 Button(action: onAddFriend) {
                     Text("Add")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
@@ -498,12 +498,12 @@ struct FriendRow: View {
                     // User info
                     VStack(alignment: .leading, spacing: 4) {
                         Text(friend.displayName ?? "@\(friend.username)")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(Color.theme.text)
                         
                         if friend.displayName != nil {
                             Text("@\(friend.username)")
-                                .font(.subheadline)
+                                .font(AppTypography.subhead())
                                 .foregroundColor(Color.theme.subtext)
                         }
                     }
@@ -587,12 +587,12 @@ struct FriendRequestRow: View {
             // User info
             VStack(alignment: .leading, spacing: 4) {
                 Text(request.fromDisplayName ?? "@\(request.fromUsername)")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(Color.theme.text)
                 
                 if request.fromDisplayName != nil {
                     Text("@\(request.fromUsername)")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(Color.theme.subtext)
                 }
             }

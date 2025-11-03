@@ -166,32 +166,34 @@ class CheckInViewModel: ObservableObject {
         }
         
         do {
-            let storage = Storage.storage()
-            let storageRef = storage.reference()
-            
-            // Create a unique filename
-            let fileName = "\(UUID().uuidString).jpg"
-            let imageRef = storageRef.child("users/\(userId)/check-ins/\(fileName)")
-            
-            // Use PhotoTransferable for compression
+            // Compress image data locally
             let photoTransferable = PhotoTransferable(image: image)
-            
-            // Get compressed data
             guard let imageData = photoTransferable.compressedData(quality: 0.7) else {
                 throw NSError(domain: "app", code: 0, userInfo: [NSLocalizedDescriptionKey: "Could not compress image"])
             }
-            
-            // Upload the image
-            let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg"
-            
-            let _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
-            let downloadURL = try await imageRef.downloadURL()
-            
+
+            // Perform the storage upload off the MainActor so non-Sendable SDK
+            // types like StorageMetadata don't need to cross actor boundaries.
+            let downloadURL = try await Task.detached(priority: .userInitiated) { () -> URL in
+                let storage = Storage.storage()
+                let storageRef = storage.reference()
+                let fileName = "\(UUID().uuidString).jpg"
+                let imageRef = storageRef.child("users/\(userId)/check-ins/\(fileName)")
+
+                let metadata = StorageMetadata()
+                metadata.contentType = "image/jpeg"
+
+                _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
+                return try await imageRef.downloadURL()
+            }.value
+
             return downloadURL
         } catch {
-            errorMessage = "Failed to upload image: \(error.localizedDescription)"
-            showError = true
+            // Ensure UI-affecting state is updated on the MainActor
+            await MainActor.run {
+                errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                showError = true
+            }
             return nil
         }
     }
@@ -309,32 +311,39 @@ class CheckInViewModel: ObservableObject {
         // Upload photo if selected
         if let image = selectedImage {
             // Create a storage reference
-            let storageRef = Storage.storage().reference()
             let photoId = UUID().uuidString
-            let photoRef = storageRef.child("checkInPhotos/\(userId)/\(challengeId)/\(photoId).jpg")
-            
-            // Use PhotoTransferable for better compression
+
+            // Compress the image on the actor first
             let photoTransferable = PhotoTransferable(image: image)
-            
-            // Get compressed data
             guard let imageData = photoTransferable.compressedData(quality: 0.6) else {
                 throw NSError(domain: "CheckInViewModel", code: 400, userInfo: [
                     NSLocalizedDescriptionKey: "Failed to process image"
                 ])
             }
-            
-            // Upload the image
-            let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg"
-            
-            let _ = try await photoRef.putDataAsync(imageData, metadata: metadata)
-            
-            // Get download URL
-            let downloadURL = try await photoRef.downloadURL()
-            
-            // Add to check-in data
+
+            // Run upload off the MainActor so SDK return types (StorageMetadata)
+            // don't need to be sent back into the actor. Only the URL (Sendable)
+            // is returned and then assigned on the MainActor.
+            // Capture challengeId locally so we don't attempt to send `self`
+            // into the detached task closure (which would cause a compiler error).
+            let localChallengeId = challengeId
+
+            let downloadURL = try await Task.detached(priority: .userInitiated) { () -> URL in
+                let storageRef = Storage.storage().reference()
+                let photoRef = storageRef.child("checkInPhotos/\(userId)/\(localChallengeId)/\(photoId).jpg")
+
+                let metadata = StorageMetadata()
+                metadata.contentType = "image/jpeg"
+
+                _ = try await photoRef.putDataAsync(imageData, metadata: metadata)
+                return try await photoRef.downloadURL()
+            }.value
+
+            // Add to check-in data and update actor-isolated state on the MainActor
             checkInData["photoURL"] = downloadURL.absoluteString
-            self.photoURL = downloadURL
+            await MainActor.run {
+                self.photoURL = downloadURL
+            }
         }
         
         // Save check-in data

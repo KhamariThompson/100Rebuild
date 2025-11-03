@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import FirebaseStorage
+@preconcurrency import FirebaseStorage
 import PhotosUI
 import FirebaseFirestore
 import FirebaseAuth
@@ -75,7 +75,7 @@ class ProfileViewModel: ObservableObject {
     }
     
     deinit {
-        cancellables.removeAll()
+        // Cancellables will be automatically cleaned up when the object is deallocated
     }
     
     private func setupChallengeStoreObservers() {
@@ -308,9 +308,14 @@ class ProfileViewModel: ObservableObject {
             
             // Upload the image to Firebase Storage
             let storageRef = Storage.storage().reference().child("profile/\(userId)/profile.jpg")
-            let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg"
-            
+
+            // Create metadata on main actor to avoid Sendable issues
+            let metadata = await MainActor.run {
+                let meta = StorageMetadata()
+                meta.contentType = "image/jpeg"
+                return meta
+            }
+
             // Upload the image
             let _ = try await storageRef.putDataAsync(processedImageData, metadata: metadata)
             print("Image uploaded successfully to Firebase Storage")

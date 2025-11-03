@@ -53,11 +53,11 @@ struct CheckInReflectionModalView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(selectedDate, style: .date)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(AppTypography.title3(.bold))
                     .foregroundColor(.theme.text)
                 
                 Text("Check-in Reflection")
-                    .font(.system(size: 14, weight: .medium))
+                    .font(AppTypography.subhead(.medium))
                     .foregroundColor(.theme.subtext)
             }
             
@@ -67,7 +67,7 @@ struct CheckInReflectionModalView: View {
                 dismiss()
             }) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 24))
+                    .font(AppTypography.title2())
                     .foregroundColor(.theme.subtext)
             }
         }
@@ -92,7 +92,7 @@ struct CheckInReflectionModalView: View {
                 .tint(.theme.accent)
             
             Text("Loading check-in data...")
-                .font(.system(size: 16))
+                .font(AppTypography.body())
                 .foregroundColor(.theme.subtext)
         }
         .frame(maxWidth: .infinity, alignment: .center)
@@ -136,11 +136,11 @@ struct CheckInReflectionModalView: View {
         if let note = checkIn.note, !note.isEmpty {
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 Text("Reflection Note")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.theme.text)
                 
                 Text(note)
-                    .font(.system(size: 15))
+                    .font(AppTypography.callout())
                     .foregroundColor(.theme.text)
                     .padding(AppSpacing.m)
                     .background(
@@ -156,17 +156,17 @@ struct CheckInReflectionModalView: View {
         if let quote = checkIn.quote {
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 Text("Daily Quote")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.theme.text)
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text("\"\(quote.text)\"")
-                        .font(.system(size: 15, design: .serif))
+                        .font(AppTypography.callout())
                         .italic()
                         .foregroundColor(.theme.text)
                     
                     Text("— \(quote.author)")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(AppTypography.footnote(.medium))
                         .foregroundColor(.theme.subtext)
                 }
                 .padding(AppSpacing.m)
@@ -181,15 +181,15 @@ struct CheckInReflectionModalView: View {
     private var errorView: some View {
         VStack(spacing: AppSpacing.m) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 32))
+                .font(AppTypography.largeTitle())
                 .foregroundColor(.theme.accent)
             
             Text("Error loading data")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(.theme.text)
             
             Text(viewModel.errorMessage)
-                .font(.system(size: 14))
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
         }
@@ -200,15 +200,15 @@ struct CheckInReflectionModalView: View {
     private var noDataView: some View {
         VStack(spacing: AppSpacing.m) {
             Image(systemName: "calendar.badge.minus")
-                .font(.system(size: 32))
+                .font(AppTypography.largeTitle())
                 .foregroundColor(.theme.subtext)
             
             Text("No check-in data")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.headline(.semibold))
                 .foregroundColor(.theme.text)
             
             Text("No check-in was recorded for this day.")
-                .font(.system(size: 14))
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
         }

@@ -18,13 +18,13 @@ struct SelectChallengeAndInviteView: View {
     private var emptyStateView: some View {
         VStack(spacing: 12) {
             Image(systemName: "flag.2.crossed")
-                .font(.system(size: 40))
+                .font(AppTypography.display())
                 .foregroundColor(Color.theme.subtext)
             Text("No challenges")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(Color.theme.text)
             Text("Create a group challenge first, then invite friends to join it.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
@@ -52,10 +52,10 @@ struct SelectChallengeAndInviteView: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text(challenge.title)
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(Color.theme.text)
                     Text("Max \(challenge.maxParticipants) participants")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                 }
                 Spacer()

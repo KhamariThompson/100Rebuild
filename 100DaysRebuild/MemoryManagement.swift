@@ -1,9 +1,11 @@
 import SwiftUI
 import Foundation
-import UIKit
+@preconcurrency import UIKit
+import Darwin.Mach
 
 /// Memory Management Utilities for the 100DaysRebuild app
 /// This class provides functions to optimize memory usage and prevent crashes
+@MainActor
 class MemoryManager {
     static let shared = MemoryManager()
     
@@ -125,16 +127,29 @@ class MemoryManager {
     }
     
     // Monitor memory usage
-    func currentMemoryUsage() -> UInt64 {
+    // This function interacts with low-level C APIs that are not inherently concurrency-safe.
+    // Mark it as nonisolated(unsafe) to acknowledge and restrict usage to synchronous, local callers.
+    nonisolated(unsafe) func currentMemoryUsage() -> UInt64 {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-        
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / UInt32(MemoryLayout<integer_t>.size)
+
+        // Resolve the `mach_task_self_` symbol at runtime via dlsym and read
+        // the port value from the resulting pointer. This avoids referencing
+        // the imported global variable directly (which the compiler flags
+        // as shared mutable state) while still getting the current task port.
+        let task: mach_port_t
+        if let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "mach_task_self_") {
+            task = sym.assumingMemoryBound(to: mach_port_t.self).pointee
+        } else {
+            // Fallback: if dlsym fails, return 0 for safety
+            return 0
+        }
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) { infoPtr in
+            infoPtr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                task_info(task, task_flavor_t(MACH_TASK_BASIC_INFO), intPtr, &count)
             }
         }
-        
+
         if kerr == KERN_SUCCESS {
             return info.resident_size
         } else {

@@ -37,7 +37,7 @@ struct MainAppChallengesTabView: View {
                     HStack(alignment: .top) {
                         // Title with proper styling
                         Text("100Days")
-                            .font(.largeTitle)
+                            .font(AppTypography.largeTitle())
                             .fontWeight(.semibold)
                             .foregroundColor(.theme.text)
                         
@@ -55,7 +55,7 @@ struct MainAppChallengesTabView: View {
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(AppTypography.title3(.semibold))
                         }
                     }
                 }
@@ -124,7 +124,9 @@ struct MainAppChallengesTabView: View {
             
             // Start a timer to update every minute
             timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
-                currentTime = Date()
+                DispatchQueue.main.async {
+                    currentTime = Date()
+                }
             }
         }
         .onDisappear {
@@ -158,11 +160,11 @@ struct MainAppChallengesTabView: View {
                 .tint(Color.theme.accent)
             
             Text("Loading challenges...")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(Color.theme.text)
             
             Text("Hold tight as we fetch your latest data")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -174,16 +176,16 @@ struct MainAppChallengesTabView: View {
     private var emptyStateView: some View {
         VStack(spacing: 24) {
             Image(systemName: "flag.fill")
-                .font(.system(size: 50))
+                .font(AppTypography.display())
                 .foregroundColor(Color.theme.accent.opacity(0.7))
             
             Text("No challenges yet")
-                .font(.title3)
+                .font(AppTypography.title3())
                 .fontWeight(.semibold)
                 .foregroundColor(Color.theme.text)
             
             Text("Create your first challenge to track your 100-day journey")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
@@ -236,11 +238,11 @@ struct MainAppChallengesTabView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "lightbulb.fill")
-                    .font(.system(size: 18))
+                    .font(AppTypography.title3())
                     .foregroundColor(.yellow)
                 
                 Text("Add another challenge?")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
                 
                 Spacer()
@@ -248,14 +250,14 @@ struct MainAppChallengesTabView: View {
             
             // Random motivational quote
             Text(motivationalQuotes.randomElement() ?? "Consistency is key to success.")
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
             
             Button(action: { viewModel.isShowingNewChallenge = true }) {
                 Text("Create New Challenge")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.accent)
                     .padding(.vertical, 8)
             }
@@ -273,7 +275,7 @@ struct MainAppChallengesTabView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Good morning/afternoon/evening message
             Text(getGreeting())
-                .font(.title2)
+                .font(AppTypography.title2())
                 .fontWeight(.bold)
                 .foregroundColor(.theme.text)
             
@@ -283,10 +285,10 @@ struct MainAppChallengesTabView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.red)
-                            .font(.system(size: 18))
+                            .font(AppTypography.title3())
                         
                         Text("Streak at risk!")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.red)
                     }
                     
@@ -295,7 +297,7 @@ struct MainAppChallengesTabView: View {
                             .foregroundColor(.orange)
                         
                         Text("\(streakAtRisk.streakCount)-day streak for \"\(streakAtRisk.title)\" will break in \(formatTimeRemaining())")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -309,7 +311,7 @@ struct MainAppChallengesTabView: View {
                         }
                     }) {
                         Text("Check in now")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.white)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
@@ -514,7 +516,7 @@ struct ChallengesOfflineBannerView: View {
             Image(systemName: "wifi.slash")
                 .foregroundColor(.yellow)
             Text("You're offline. Some features may be limited.")
-                .font(.footnote)
+                .font(AppTypography.footnote())
                 .foregroundColor(.secondary)
             Spacer()
         }

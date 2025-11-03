@@ -51,8 +51,7 @@ struct ChallengesView: View {
                     // App title as "100Days" inside the ScrollView 
                     HStack(alignment: .top) {
                         Text("100Days")
-                            .font(.largeTitle)
-                            .bold()
+                            .font(AppTypography.largeTitle(.bold))
                             .foregroundStyle(challengesGradient)
                         
                         Spacer()
@@ -167,10 +166,10 @@ struct ChallengesView: View {
                     HStack(spacing: 12) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.white)
-                            .font(.system(size: 20))
-                        
+                            .font(AppTypography.title3())
+
                         Text(viewModel.successMessage)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(AppTypography.subhead(.semibold))
                             .foregroundColor(.white)
                         
                         Spacer()
@@ -278,7 +277,7 @@ struct ChallengesView: View {
             .padding(.bottom, AppSpacing.s)
             
             Image(systemName: "flag.fill")
-                .font(.system(size: 70))
+                .font(AppTypography.font(size: 70, weight: .bold))
                 .foregroundColor(.theme.accent.opacity(0.7))
                 .padding(.bottom, AppSpacing.m)
             
@@ -418,7 +417,7 @@ struct ChallengesView: View {
                             .foregroundColor(.theme.accent)
                         
                         Text("Add Another Challenge")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.theme.accent)
                     }
                     .padding()
@@ -460,10 +459,10 @@ struct ChallengesView: View {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.orange)
-                    .font(.title3)
-                
+                    .font(AppTypography.title3())
+
                 Text("Don't Break the Chain!")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
                 
                 Spacer()
@@ -486,7 +485,7 @@ struct ChallengesView: View {
                 print("Setting sheet state at \(Date())")
             } label: {
                 Text("Keep the Streak")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AppSpacing.s)
@@ -549,7 +548,7 @@ struct ChallengesView: View {
                     .foregroundColor(.theme.accent)
                 
                 Text("Pro Feature")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.accent)
                 
                 Spacer()
@@ -568,7 +567,7 @@ struct ChallengesView: View {
                 }
             } label: {
                 Text("Upgrade to Pro")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, AppSpacing.s)
@@ -784,7 +783,7 @@ struct EditChallengeSheet: View {
                         // Challenge Title Section
                         VStack(alignment: .leading, spacing: 12) {
                             Text("Challenge Title")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                                 .foregroundColor(.theme.text)
                             
                             TextField("Enter challenge title", text: $title)
@@ -802,7 +801,7 @@ struct EditChallengeSheet: View {
                         // Challenge Progress Section
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Progress Details")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                                 .foregroundColor(.theme.text)
                                 .padding(.bottom, 4)
                             
@@ -854,15 +853,15 @@ struct EditChallengeSheet: View {
                                     HStack(spacing: 8) {
                                         Image(systemName: "flame.fill")
                                             .foregroundColor(.orange)
-                                            .font(.system(size: 18))
-                                        
+                                            .font(AppTypography.headline())
+
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Current Streak")
-                                                .font(.subheadline)
+                                                .font(AppTypography.subhead())
                                                 .foregroundColor(.theme.subtext)
-                                            
+
                                             Text("\(challenge.streakCount) days")
-                                                .font(.headline)
+                                                .font(AppTypography.headline())
                                                 .foregroundColor(.theme.text)
                                         }
                                     }
@@ -872,15 +871,15 @@ struct EditChallengeSheet: View {
                                     HStack(spacing: 8) {
                                         Image(systemName: "calendar")
                                             .foregroundColor(.theme.accent)
-                                            .font(.system(size: 18))
-                                        
+                                            .font(AppTypography.headline())
+
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text("Started On")
-                                                .font(.subheadline)
+                                                .font(AppTypography.subhead())
                                                 .foregroundColor(.theme.subtext)
-                                            
+
                                             Text(challenge.startDate, style: .date)
-                                                .font(.headline)
+                                                .font(AppTypography.headline())
                                                 .foregroundColor(.theme.text)
                                         }
                                     }
@@ -893,15 +892,15 @@ struct EditChallengeSheet: View {
                                 HStack(spacing: 8) {
                                     Image(systemName: "clock")
                                         .foregroundColor(.theme.accent)
-                                        .font(.system(size: 18))
-                                    
+                                        .font(AppTypography.headline())
+
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Last Modified")
-                                            .font(.subheadline)
+                                            .font(AppTypography.subhead())
                                             .foregroundColor(.theme.subtext)
-                                        
+
                                         Text(challenge.lastModified, style: .date)
-                                            .font(.headline)
+                                            .font(AppTypography.headline())
                                             .foregroundColor(.theme.text)
                                     }
                                 }
@@ -929,11 +928,11 @@ struct EditChallengeSheet: View {
                                         .padding(.trailing, 8)
                                 } else {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 18))
+                                        .font(AppTypography.headline())
                                 }
-                                
+
                                 Text("Save Changes")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -951,10 +950,10 @@ struct EditChallengeSheet: View {
                         }) {
                             HStack {
                                 Image(systemName: "trash")
-                                    .font(.system(size: 18))
-                                
+                                    .font(AppTypography.headline())
+
                                 Text("Archive Challenge")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                             }
                             .foregroundColor(.red)
                             .frame(maxWidth: .infinity)
@@ -1011,7 +1010,7 @@ struct GreetingView: View {
         HStack {
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 Text(viewModel.getGreeting())
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTypography.title1(.bold))
                     .foregroundColor(.theme.text)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
@@ -1027,7 +1026,7 @@ struct GreetingView: View {
                     .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 3)
                 
                 Text(viewModel.currentTimeOfDay.emoji)
-                    .font(.system(size: 24))
+                    .font(AppTypography.title3())
             }
         }
         .padding(.vertical, AppSpacing.s)
@@ -1067,18 +1066,18 @@ struct FliqloTimerView: View {
         VStack(alignment: .leading, spacing: AppSpacing.xs) {
             if viewModel.lastCheckInDate == nil {
                 Text("You haven't checked in yet — today's your Day 1.")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.accent)
                     .padding(.vertical, AppSpacing.xs)
             } else {
                 VStack(alignment: .leading, spacing: AppSpacing.s) {
                     HStack(spacing: AppSpacing.xs) {
                         Image(systemName: "clock")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(AppTypography.body(.semibold))
                             .foregroundColor(.theme.accent)
-                        
+
                         Text("Since your last check-in")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.theme.text)
                     }
                     
@@ -1130,7 +1129,7 @@ struct ModernFlipClockView: View {
                     VStack(spacing: AppSpacing.xxs) {
                         // Create flip panel for the digit
                         Text(numericPart)
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
+                            .font(AppTypography.display(.bold))
                             .monospacedDigit()
                             .foregroundColor(.theme.text)
                             .frame(minWidth: 60)
@@ -1152,7 +1151,7 @@ struct ModernFlipClockView: View {
                         
                         // Unit label
                         Text(formatUnit(unitPart))
-                            .font(.system(size: 14, weight: .medium))
+                            .font(AppTypography.subhead(.medium))
                             .foregroundColor(.theme.subtext)
                             .id("\(index)_\(unitPart)")
                     }
@@ -1196,16 +1195,16 @@ struct ChallengeRestartView: View {
             // Header
             VStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 36))
+                    .font(AppTypography.display())
                     .foregroundColor(.orange)
                     .padding(.bottom, 4)
-                
+
                 Text("Challenge Expired")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                    .font(AppTypography.title2(.bold))
                     .foregroundColor(.theme.text)
-                
+
                 Text("You missed check-ins for \(challenge.title)")
-                    .font(.system(size: 16))
+                    .font(AppTypography.body())
                     .foregroundColor(.theme.subtext)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
@@ -1221,17 +1220,17 @@ struct ChallengeRestartView: View {
                             .frame(width: 40, height: 40)
                         
                         Image(systemName: "calendar.badge.exclamationmark")
-                            .font(.system(size: 18))
+                            .font(AppTypography.headline())
                             .foregroundColor(.orange)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Progress at risk")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.text)
-                        
+
                         Text("\(challenge.daysCompleted) days of progress could be reset")
-                            .font(.system(size: 14))
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                     }
                     
@@ -1246,22 +1245,22 @@ struct ChallengeRestartView: View {
                             .frame(width: 40, height: 40)
                         
                         Image(systemName: "clock.fill")
-                            .font(.system(size: 18))
+                            .font(AppTypography.headline())
                             .foregroundColor(.blue)
                     }
-                    
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Last check-in")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.text)
-                        
+
                         if let lastCheckIn = challenge.lastCheckInDate {
                             Text(formatLastCheckIn(lastCheckIn))
-                                .font(.system(size: 14))
+                                .font(AppTypography.subhead())
                                 .foregroundColor(.theme.subtext)
                         } else {
                             Text("No previous check-ins recorded")
-                                .font(.system(size: 14))
+                                .font(AppTypography.subhead())
                                 .foregroundColor(.theme.subtext)
                         }
                     }
@@ -1300,7 +1299,7 @@ struct ChallengeRestartView: View {
                         }
                         
                         Text("Restart Challenge")
-                            .font(.system(size: 16, weight: .bold))
+                            .font(AppTypography.body(.bold))
                             .foregroundColor(.white)
                     }
                     .frame(maxWidth: .infinity)
@@ -1340,7 +1339,7 @@ struct ChallengeRestartView: View {
                         }
                         
                         Text("Archive Challenge")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.text)
                     }
                     .frame(maxWidth: .infinity)
@@ -1360,7 +1359,7 @@ struct ChallengeRestartView: View {
                     onDismiss()
                 }) {
                     Text("Decide Later")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(.theme.subtext)
                         .padding(.vertical, 8)
                 }

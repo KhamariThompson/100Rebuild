@@ -5,25 +5,26 @@ import FirebaseAuth
 
 struct CheckInHistoryView: View {
     let challenge: Challenge
-    
+
     @State private var checkIns: [Views_CheckInRecord] = []
     @State private var isLoading = false
     @State private var selectedCheckIn: Views_CheckInRecord?
     @State private var showDetailView = false
     @State private var errorMessage = ""
     @State private var showError = false
-    
+    @State private var loadTask: Task<Void, Never>?
+
     private let firestore = Firestore.firestore()
-    
+
     var body: some View {
         ZStack {
             Color.theme.background
                 .ignoresSafeArea()
-            
+
             VStack {
                 // Title
                 Text(challenge.title)
-                    .font(.title2)
+                    .font(AppTypography.title2())
                     .fontWeight(.bold)
                     .foregroundColor(.theme.text)
                     .padding(.top, AppSpacing.m)
@@ -34,11 +35,11 @@ struct CheckInHistoryView: View {
                 HStack(spacing: AppSpacing.m) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Days completed")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                         
                         Text("\(challenge.daysCompleted)")
-                            .font(.title)
+                            .font(AppTypography.title1())
                             .fontWeight(.bold)
                             .foregroundColor(.theme.accent)
                     }
@@ -48,11 +49,11 @@ struct CheckInHistoryView: View {
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Current streak")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                         
                         Text("\(challenge.streakCount)")
-                            .font(.title)
+                            .font(AppTypography.title1())
                             .fontWeight(.bold)
                             .foregroundColor(.theme.accent)
                     }
@@ -72,15 +73,15 @@ struct CheckInHistoryView: View {
                     Spacer()
                     VStack(spacing: 16) {
                         Image(systemName: "calendar.badge.clock")
-                            .font(.system(size: 60))
+                            .font(AppTypography.display())
                             .foregroundColor(.theme.subtext.opacity(0.5))
                         
                         Text("No check-ins yet")
-                            .font(.headline)
+                            .font(AppTypography.headline())
                             .foregroundColor(.theme.text)
                         
                         Text("Complete your first day to see it here")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .foregroundColor(.theme.subtext)
                             .multilineTextAlignment(.center)
                     }
@@ -105,6 +106,7 @@ struct CheckInHistoryView: View {
         }
         .navigationTitle("Check-In History")
         .navigationBarTitleDisplayMode(.inline)
+        .id(challenge.id) // Enforce unique identity per challenge
         .sheet(isPresented: $showDetailView) {
             if let checkIn = selectedCheckIn {
                 CheckInBasicDetailView(
@@ -129,6 +131,9 @@ struct CheckInHistoryView: View {
         .onAppear {
             loadCheckIns()
         }
+        .onDisappear {
+            loadTask?.cancel()
+        }
     }
     
     private func loadCheckIns() {
@@ -137,31 +142,33 @@ struct CheckInHistoryView: View {
             showError = true
             return
         }
-        
+
+        // Cancel previous load
+        loadTask?.cancel()
+
+        // Clear stale data immediately
+        checkIns = []
         isLoading = true
-        
-        let checkInsRef = firestore
-            .collection("users").document(userId)
-            .collection("challenges").document(challenge.id.uuidString)
-            .collection("checkIns")
-        
-        checkInsRef
-            .order(by: "dayNumber", descending: true)
-            .getDocuments { snapshot, error in
-                isLoading = false
-                
-                if let error = error {
-                    errorMessage = "Failed to load check-ins: \(error.localizedDescription)"
-                    showError = true
-                    return
-                }
-                
-                guard let documents = snapshot?.documents else {
-                    return
-                }
-                
+
+        let challengeId = challenge.id.uuidString
+
+        loadTask = Task {
+            let checkInsRef = firestore
+                .collection("users").document(userId)
+                .collection("challenges").document(challengeId)
+                .collection("checkIns")
+
+            do {
+                let snapshot = try await checkInsRef
+                    .order(by: "dayNumber", descending: true)
+                    .getDocuments()
+
+                guard !Task.isCancelled else { return }
+
+                let documents = snapshot.documents
+
                 // Parse the check-in records
-                self.checkIns = documents.compactMap { document -> Views_CheckInRecord? in
+                let parsedCheckIns = documents.compactMap { document -> Views_CheckInRecord? in
                     let data = document.data()
                     
                     // Get basic check-in data
@@ -200,7 +207,24 @@ struct CheckInHistoryView: View {
                         photoURL: photoURL
                     )
                 }
+
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.checkIns = parsedCheckIns
+                    self.isLoading = false
+                }
+
+            } catch {
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    self.errorMessage = "Failed to load check-ins: \(error.localizedDescription)"
+                    self.showError = true
+                    self.isLoading = false
+                }
             }
+        }
     }
 }
 

@@ -31,8 +31,9 @@ func printSubscriptionStatusReport(
 
     // 1. Expected product IDs
     let expected = [
-        "com.KhamariThompson.100Days.monthlyv2",
-        "com.KhamariThompson.100Days.annualv1"
+        Constants.ProductID.monthly,
+        Constants.ProductID.annualIntro,
+        Constants.ProductID.annualNoIntro
     ]
 
     print("✅ Expected product IDs:")
@@ -63,8 +64,11 @@ func printSubscriptionStatusReport(
         print("⚠️  Error fetching offerings: \(error)")
     }
 
-    // 3. Check intro eligibility
-    let isIntroEligible = await repository.isIntroEligible(for: .annual)
+    // 3. Check intro eligibility (capture repository to avoid sendability issues)
+    let isIntroEligible = await {
+        nonisolated(unsafe) let repo = repository
+        return await repo.isIntroEligible(for: .annual)
+    }()
 
     // 4. Five-minute window
     let windowActive = fiveMinuteWindow?.isActive ?? false

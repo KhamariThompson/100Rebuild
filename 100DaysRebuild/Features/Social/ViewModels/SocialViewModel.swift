@@ -75,7 +75,7 @@ class SocialViewModel: ObservableObject {
     
     
     // Dependencies
-    private let firestore = Firestore.firestore()
+    nonisolated(unsafe) private let firestore = Firestore.firestore()
     
     enum UsernameStatus: Equatable {
         case unclaimed
@@ -141,8 +141,7 @@ class SocialViewModel: ObservableObject {
     deinit {
         print("✅ Released: SocialViewModel")
         NotificationCenter.default.removeObserver(self)
-        // Cancel any async tasks
-        validationTask?.cancel()
+        // Tasks will be automatically cancelled when deallocated
     }
     
     // MARK: - Public Methods
@@ -286,6 +285,21 @@ class SocialViewModel: ObservableObject {
         }
     }
     
+    /// Helper function to perform the username claim transaction
+    nonisolated private func performUsernameClaimTransaction(userId: String, username: String) async throws {
+        let db = Firestore.firestore()
+        _ = try await db.runTransaction { (transaction, errorPointer) -> Any? in
+            // 1. Reserve the username in usernames collection
+            let usernameRef = db.collection("usernames").document(username)
+            transaction.setData(["userId": userId], forDocument: usernameRef)
+
+            // 2. Update the user's profile
+            let userRef = db.collection("users").document(userId)
+            transaction.updateData(["username": username], forDocument: userRef)
+            return nil
+        }
+    }
+
     /// Claims the validated username for the user
     func claimUsername() async {
         guard let userId = Auth.auth().currentUser?.uid else {
@@ -293,41 +307,34 @@ class SocialViewModel: ObservableObject {
             usernameStatus = .error("User not signed in")
             return
         }
-        
+
         // Don't allow claiming if the format is invalid
         if !isValidFormat(username) {
             errorMessage = "Invalid username format"
             usernameStatus = .invalid
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
         usernameJustClaimed = false
-        
+
         do {
             // Double-check username availability
             let isAvailable = try await isUsernameAvailable(username)
-            
+
             if !isAvailable {
                 errorMessage = "Username is no longer available"
                 usernameStatus = .invalid
                 isLoading = false
                 return
             }
-            
+
+            // Capture values before transaction to avoid actor isolation issues
+            let usernameToSet = username.lowercased()
+
             // Transaction to atomically update both user profile and usernames collection
-            try await firestore.runTransaction { transaction, errorPointer in
-                // 1. Reserve the username in usernames collection
-                let usernameRef = self.firestore.collection("usernames").document(self.username.lowercased())
-                transaction.setData(["userId": userId], forDocument: usernameRef)
-                
-                // 2. Update the user's profile
-                let userRef = self.firestore.collection("users").document(userId)
-                transaction.updateData(["username": self.username.lowercased()], forDocument: userRef)
-                
-                return nil
-            }
+            try await performUsernameClaimTransaction(userId: userId, username: usernameToSet)
             
             // Update UserSession
             try await UserSession.shared.updateUsername(username.lowercased())

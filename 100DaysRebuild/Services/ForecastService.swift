@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 
 /// Forecast service: simple linear regression over recent days to estimate Day 100 finish date
-final class ForecastService {
-    static let shared = ForecastService()
+final class ForecastService: @unchecked Sendable {
+    nonisolated(unsafe) static let shared = ForecastService()
 
     struct ProgressPoint: Identifiable {
         let id = UUID()

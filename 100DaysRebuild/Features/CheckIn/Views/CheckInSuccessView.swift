@@ -84,7 +84,7 @@ struct CheckInSuccessView: View {
                             .frame(width: 110, height: 110)
                         
                         Image(systemName: "checkmark")
-                            .font(.system(size: 60, weight: .bold))
+                            .font(AppTypography.font(size: 60, weight: .bold))
                             .foregroundColor(.white)
                             .offset(y: animateContent ? 0 : -100)
                             .opacity(animateContent ? 1 : 0)
@@ -95,7 +95,7 @@ struct CheckInSuccessView: View {
                     // Day completion text
                     VStack(spacing: 10) {
                         Text("Day \(dayNumber) Complete!")
-                            .font(.system(size: 28, weight: .bold))
+                            .font(AppTypography.title1(.bold))
                             .foregroundColor(.white)
                             .multilineTextAlignment(.center)
                             .opacity(animateContent ? 1 : 0)
@@ -103,7 +103,7 @@ struct CheckInSuccessView: View {
                             .animation(.easeOut(duration: 0.5).delay(0.3), value: animateContent)
                         
                         Text(challenge.title)
-                            .font(.system(size: 18, weight: .medium))
+                            .font(AppTypography.headline(.medium))
                             .foregroundColor(.white.opacity(0.8))
                             .multilineTextAlignment(.center)
                             .opacity(animateContent ? 1 : 0)
@@ -112,11 +112,11 @@ struct CheckInSuccessView: View {
                         
                         HStack(spacing: 8) {
                             Text("Current streak:")
-                                .font(.system(size: 16))
+                                .font(AppTypography.body())
                                 .foregroundColor(.white.opacity(0.8))
                             
                             Text("\(challenge.streakCount) days")
-                                .font(.system(size: 16, weight: .bold))
+                                .font(AppTypography.body(.bold))
                                 .foregroundColor(.white)
                         }
                         .padding(.top, 4)
@@ -129,14 +129,14 @@ struct CheckInSuccessView: View {
                     if let quote = quote, !quote.text.isEmpty {
                         VStack(spacing: 16) {
                             Text(quote.text)
-                                .font(.system(size: 18, weight: .medium))
+                                .font(AppTypography.headline(.medium))
                                 .italic()
                                 .foregroundColor(.theme.text)
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
                             
                             Text("— \(quote.author)")
-                                .font(.system(size: 14))
+                                .font(AppTypography.subhead())
                                 .foregroundColor(.theme.subtext)
                         }
                         .padding(.horizontal, 24)
@@ -155,7 +155,7 @@ struct CheckInSuccessView: View {
                     
                     // Motivational message
                     Text(motivationalMessage)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(.white.opacity(0.9))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 30)
@@ -173,10 +173,10 @@ struct CheckInSuccessView: View {
                         }) {
                             HStack {
                                 Image(systemName: "square.and.pencil")
-                                    .font(.system(size: 18))
+                                    .font(AppTypography.headline())
                                 
                                 Text("Add Journal Entry")
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(AppTypography.headline(.semibold))
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -198,10 +198,10 @@ struct CheckInSuccessView: View {
                         }) {
                             HStack {
                                 Image(systemName: "square.and.arrow.up")
-                                    .font(.system(size: 18))
+                                    .font(AppTypography.headline())
                                 
                                 Text("Share Your Achievement")
-                                    .font(.system(size: 18, weight: .semibold))
+                                    .font(AppTypography.headline(.semibold))
                             }
                             .foregroundColor(.theme.accent)
                             .frame(maxWidth: .infinity)
@@ -222,7 +222,7 @@ struct CheckInSuccessView: View {
                             isPresented = false
                         }) {
                             Text("Continue")
-                                .font(.system(size: 16, weight: .medium))
+                                .font(AppTypography.body(.medium))
                                 .foregroundColor(.white.opacity(0.8))
                                 .padding(.vertical, 8)
                         }

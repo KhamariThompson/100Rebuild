@@ -31,9 +31,10 @@ struct TabBarIcon: View {
                 
                 // Icon
                 Image(systemName: isSelected ? activeIcon : icon)
-                    .font(.system(size: isSelected ? selectedIconSize : iconSize, 
-                                 weight: isSelected ? .semibold : .regular,
-                                 design: .rounded))
+                    .font(AppTypography.font(
+                        size: isSelected ? selectedIconSize : iconSize,
+                        weight: isSelected ? .semibold : .regular
+                    ))
                     .foregroundColor(isSelected ? Color.theme.accent : Color.theme.subtext)
                     .offset(y: iconOffset)
                     .scaleEffect(iconScale)
@@ -47,11 +48,11 @@ struct TabBarIcon: View {
                         
                         if count < 10 {
                             Text("\(count)")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(AppTypography.caption2(.bold))
                                 .foregroundColor(.white)
                         } else {
                             Text("9+")
-                                .font(.system(size: 8, weight: .bold))
+                                .font(AppTypography.caption2(.bold))
                                 .foregroundColor(.white)
                         }
                     }
@@ -63,9 +64,10 @@ struct TabBarIcon: View {
             
             // Title
             Text(title)
-                .font(.system(size: isSelected ? selectedTextSize : textSize, 
-                             weight: isSelected ? .medium : .regular,
-                             design: .rounded))
+                .font(AppTypography.font(
+                    size: isSelected ? selectedTextSize : textSize,
+                    weight: isSelected ? .medium : .regular
+                ))
                 .foregroundColor(isSelected ? Color.theme.accent : Color.theme.subtext)
                 .opacity(titleOpacity)
         }

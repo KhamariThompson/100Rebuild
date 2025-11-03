@@ -22,7 +22,7 @@ struct PullToRefresh: View {
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
                         Image(systemName: "arrow.down")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(AppTypography.body(.semibold))
                             .foregroundColor(.theme.accent)
                             .opacity(min(geo.frame(in: .global).minY / pullThreshold, 1.0))
                             .rotationEffect(.degrees(min((geo.frame(in: .global).minY / 20.0) * 180.0, 180.0)))

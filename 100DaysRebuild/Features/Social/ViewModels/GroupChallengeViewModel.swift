@@ -9,24 +9,25 @@ class GroupChallengeViewModel: ObservableObject {
     @Published var challenge: GroupChallenge?
     @Published var participants: [GroupChallengeParticipant] = []
     @Published var invitations: [ChallengeInvitation] = []
-    
+
     // UI state
     @Published var isLoading = false
     @Published var showError = false
     @Published var errorMessage: String?
     @Published var showInviteFriendSheet = false
-    
+
     // User role flags
     @Published var isCreator = false
     @Published var isParticipant = false
     @Published var hasInvitation = false
     @Published var invitationId: String?
-    
+
     // Services
     private let groupChallengeService = GroupChallengeService.shared
     private let friendService = FriendService.shared
     private var cancellables = Set<AnyCancellable>()
-    
+    private var loadTask: Task<Void, Never>?
+
     // Load challenge details
     func loadChallenge(challengeId: String) {
         guard let userId = Auth.auth().currentUser?.uid else {
@@ -34,10 +35,20 @@ class GroupChallengeViewModel: ObservableObject {
             showError = true
             return
         }
-        
+
+        // Cancel previous load
+        loadTask?.cancel()
+
+        // Clear stale data immediately
+        challenge = nil
+        participants = []
+        invitations = []
+        isCreator = false
+        isParticipant = false
+        hasInvitation = false
         isLoading = true
-        
-        Task {
+
+        loadTask = Task {
             do {
                 // Get challenge document
                 let challengeDoc = try await Firestore.firestore()
@@ -99,9 +110,13 @@ class GroupChallengeViewModel: ObservableObject {
                         invitationId = invitation.id
                     }
                 }
-                
+
+                guard !Task.isCancelled else { return }
+
                 isLoading = false
             } catch {
+                guard !Task.isCancelled else { return }
+
                 errorMessage = "Failed to load challenge: \(error.localizedDescription)"
                 showError = true
                 isLoading = false

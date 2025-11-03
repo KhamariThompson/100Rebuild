@@ -7,76 +7,43 @@ import CryptoKit
 struct WelcomeView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var themeManager: ThemeManager
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingAuthView = false
-    @State private var animationCompleted = false
-    @State private var animateElements = false
     @State private var showTerms = false
     @State private var showPrivacy = false
-    @State private var activeTab = 0
-    @State private var testimonialIndex = 0
-    
-    // Timer for automatic testimonial cycling
-    let testimonialTimer = Timer.publish(every: 6, on: .main, in: .common).autoconnect()
-    
-    // State for Apple Sign In
     @State private var currentNonce: String?
-    
-    // Enhanced testimonials with more realistic data and profile images
-    private let testimonials = [
-        (quote: "100Days helped me finally stick with my meditation practice. I'm on day 87 and it's changed my life!", name: "Sarah K.", image: "testimonial-sarah", location: "New York"),
-        (quote: "I've tried many habit apps, but this one actually keeps me accountable. The visualization makes progress so satisfying.", name: "Michael T.", image: "testimonial-michael", location: "San Francisco"),
-        (quote: "The streaks visualization makes it so satisfying to stay consistent. I've never kept a habit this long before.", name: "James R.", image: "testimonial-james", location: "Chicago"),
-        (quote: "This app helped me write daily for 100 days straight. I finally finished my book!", name: "Emily L.", image: "testimonial-emily", location: "London"),
-        (quote: "The clean design and simple tracking keeps me motivated. Perfect for building a consistent workout routine.", name: "David W.", image: "testimonial-david", location: "Toronto")
-    ]
-    
+
     var body: some View {
         ZStack {
-            // Enhanced background with improved gradient overlay
-            backgroundView
-            
-            // Main content
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Logo and hero section
-                    heroSection
-                    
-                    // Enhanced testimonials
-                    testimonialsSection
-                        .padding(.top, 40)
-                    
-                    // Feature cards with animations
-                    featuresSection
-                        .padding(.top, 50)
-                    
-                    // Stats section
-                    statsSection
-                        .padding(.top, 40)
-                    
-                    // Call to action
-                    callToActionSection
-                        .padding(.top, 40)
-                        .padding(.bottom, 40)
+            // Background
+            Color.theme.background.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Scrollable content
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 48) {
+                        // Hero Section
+                        heroSection
+                            .padding(.top, 80)
+
+                        // Features
+                        featuresSection
+
+                        // Social Proof
+                        socialProofSection
+
+                        Spacer(minLength: 200)
+                    }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 180)
+
+                Spacer()
             }
-            
-            // Bottom action bar that stays fixed
+
+            // Fixed bottom CTA
             VStack {
                 Spacer()
-                actionBar
-            }
-        }
-        .onAppear {
-            // Start animations
-            withAnimation(.easeOut(duration: 0.8).delay(0.2)) {
-                animateElements = true
-            }
-        }
-        .onReceive(testimonialTimer) { _ in
-            withAnimation(.easeInOut(duration: 0.7)) {
-                testimonialIndex = (testimonialIndex + 1) % testimonials.count
+                ctaSection
             }
         }
         .fullScreenCover(isPresented: $isShowingAuthView) {
@@ -89,277 +56,345 @@ struct WelcomeView: View {
             TermsAndPrivacyView(mode: .privacy)
         }
     }
-    
-    // MARK: - View Components
-    
-    // Enhanced background view with gradient
-    private var backgroundView: some View {
-        ZStack {
-            Color.theme.background.ignoresSafeArea()
-            
-            // Top gradient for hero section - improved for both light and dark mode
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.theme.accent.opacity(0.15),
-                    Color.theme.background.opacity(0.0)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .center
-            )
-            .ignoresSafeArea()
-            
-            // Bottom gradient for action bar - smoother transition
-            VStack {
-                Spacer()
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.theme.background.opacity(0.0),
-                        Color.theme.background.opacity(0.8),
-                        Color.theme.background
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 150)
-                .ignoresSafeArea()
-            }
-        }
-    }
-    
-    // Enhanced hero section with logo and tagline
+
+    // MARK: - Hero Section
+
     private var heroSection: some View {
-        VStack(spacing: 20) {
-            // Logo with highlighting glow effect
+        VStack(spacing: 28) {
+            // App Icon with enhanced glow
             ZStack {
-                // Glow effect - adjusted for better appearance in dark mode
+                // Outer glow
                 Circle()
-                    .fill(Color.theme.accent.opacity(0.18))
-                    .frame(width: 130, height: 130)
-                    .blur(radius: 20)
-                
-                Image(systemName: "checkmark.circle.fill")
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.theme.accent.opacity(0.15),
+                                Color.theme.accent.opacity(0.05),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 40,
+                            endRadius: 80
+                        )
+                    )
+                    .frame(width: 160, height: 160)
+
+                // Main circle
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.theme.accent.opacity(0.2),
+                                Color.theme.accent.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+
+                // Icon
+                Image(systemName: "flame.fill")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 100, height: 100)
-                    .foregroundColor(.theme.accent)
-                    .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
-            }
-            .offset(y: animateElements ? 0 : -20)
-            .opacity(animateElements ? 1 : 0)
-            .padding(.top, 60)
-            
-            // App name with larger font
-            Text("100Days")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .opacity(animateElements ? 1 : 0)
-                .offset(y: animateElements ? 0 : 10)
-            
-            // Tagline with emphasis
-            VStack(spacing: 12) {
-                Text("Build habits that last")
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .multilineTextAlignment(.center)
-                
-                Text("The science-backed approach to transform your life through consistent action")
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
-                    .foregroundColor(.theme.subtext)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 4)
-            }
-            .opacity(animateElements ? 1 : 0)
-            .offset(y: animateElements ? 0 : 15)
-        }
-        .padding(.bottom, 20)
-    }
-    
-    // Enhanced testimonials section with profile pictures
-    private var testimonialsSection: some View {
-        VStack(spacing: 16) {
-            // Section title
-            Text("People love 100Days")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 5)
-                .opacity(animateElements ? 1 : 0)
-            
-            // Enhanced testimonial cards in TabView
-            TabView(selection: $testimonialIndex) {
-                ForEach(0..<testimonials.count, id: \.self) { index in
-                    enhancedTestimonialCard(
-                        quote: testimonials[index].quote,
-                        name: testimonials[index].name,
-                        imageName: testimonials[index].image,
-                        location: testimonials[index].location
-                    )
-                    .tag(index)
-                }
-            }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
-            .frame(height: 180)
-            .opacity(animateElements ? 1 : 0)
-            
-            // Indicators - improved styling
-            HStack(spacing: 8) {
-                ForEach(0..<testimonials.count, id: \.self) { index in
-                    Circle()
-                        .fill(testimonialIndex == index ? Color.theme.accent : Color.theme.border.opacity(0.5))
-                        .frame(width: 8, height: 8)
-                        .animation(.spring(), value: testimonialIndex)
-                        .scaleEffect(testimonialIndex == index ? 1.2 : 1.0)
-                }
-            }
-            .padding(.top, 8)
-            .opacity(animateElements ? 1 : 0)
-        }
-    }
-    
-    // Enhanced features section
-    private var featuresSection: some View {
-        VStack(spacing: 16) {
-            // Section title
-            Text("Why 100Days works")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 5)
-                .offset(y: animateElements ? 0 : 20)
-                .opacity(animateElements ? 1 : 0)
-            
-            // Feature cards with improved styling
-            VStack(spacing: 16) {
-                featureCard(
-                    icon: "chart.bar.fill",
-                    title: "Visualize Your Progress",
-                    description: "Track your streaks and see your consistency grow day by day",
-                    delay: 0.3
-                )
-                
-                featureCard(
-                    icon: "bell.fill",
-                    title: "Smart Reminders",
-                    description: "Get timely notifications that adapt to your schedule",
-                    delay: 0.4
-                )
-                
-                featureCard(
-                    icon: "brain.head.profile",
-                    title: "Science-Backed System",
-                    description: "Based on proven habit formation psychology",
-                    delay: 0.5
-                )
-                
-                featureCard(
-                    icon: "trophy.fill",
-                    title: "Achieve Your Goals",
-                    description: "88% of users report significant habit improvement",
-                    delay: 0.6
-                )
-            }
-        }
-    }
-    
-    // Enhanced stats section
-    private var statsSection: some View {
-        VStack(spacing: 20) {
-            // Stats title
-            Text("Proven Results")
-                .font(.system(size: 24, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 5)
-                .padding(.bottom, 10)
-                .opacity(animateElements ? 1 : 0)
-            
-            // Stats row - enhanced styling
-            HStack(spacing: 0) {
-                statItem(number: "100", text: "DAYS", delay: 0.1)
-                
-                Divider()
-                    .frame(width: 1, height: 50)
-                    .background(Color.theme.border.opacity(0.3))
-                    .padding(.horizontal)
-                
-                statItem(number: "10K+", text: "USERS", delay: 0.2)
-                
-                Divider()
-                    .frame(width: 1, height: 50)
-                    .background(Color.theme.border.opacity(0.3))
-                    .padding(.horizontal)
-                
-                statItem(number: "88%", text: "SUCCESS", delay: 0.3)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .padding(.horizontal, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 12, x: 0, y: 5)
-            )
-            .opacity(animateElements ? 1 : 0)
-        }
-        .padding(.bottom, 10)
-    }
-    
-    // Enhanced call to action section
-    private var callToActionSection: some View {
-        VStack(spacing: 24) {
-            // CTA title
-            Text("Start your journey today")
-                .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-                .multilineTextAlignment(.center)
-                .opacity(animateElements ? 1 : 0)
-            
-            // CTA description
-            Text("Join thousands of people who have transformed their habits with the 100-day method")
-                .font(.system(size: 17, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 20)
-                .opacity(animateElements ? 1 : 0)
-        }
-    }
-    
-    // Enhanced fixed action bar at bottom
-    private var actionBar: some View {
-        VStack(spacing: 16) {
-            // Primary button - enhanced shadow and gradient
-            Button {
-                isShowingAuthView = true
-            } label: {
-                Text("Get Started Free")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(colorScheme == .dark ? .black : .white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 58)
-                    .background(
+                    .frame(width: 56, height: 56)
+                    .foregroundStyle(
                         LinearGradient(
-                            gradient: Gradient(colors: [
+                            colors: [
                                 Color.theme.accent,
-                                Color.theme.accent.opacity(0.85)
-                            ]),
+                                Color.theme.accent.opacity(0.8)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+            }
+
+            // Title
+            VStack(spacing: 16) {
+                Text("100Days")
+                    .font(AppTypography.largeTitle(.bold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color.theme.accent,
+                                Color.theme.accent.opacity(0.8)
+                            ],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: Color.theme.accent.opacity(0.35), radius: 8, x: 0, y: 4)
                     )
+
+                Text("Build lasting habits through\nconsistent daily action")
+                    .font(AppTypography.title3())
+                    .foregroundColor(.theme.subtext)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(6)
+
+                // Trust badge
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.theme.accent)
+
+                    Text("Trusted by 10,000+ habit builders")
+                        .font(AppTypography.footnote())
+                        .foregroundColor(.theme.subtext)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.theme.surface)
+                        .shadow(color: Color.theme.shadow.opacity(0.05), radius: 8, x: 0, y: 2)
+                )
+                .padding(.top, 8)
             }
-            .padding(.horizontal, 20)
-            
-            // Sign in with Apple - improved styling
+        }
+    }
+
+    // MARK: - Features Section
+
+    private var featuresSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Why it works")
+                .font(AppTypography.title2(.bold))
+                .foregroundColor(.theme.text)
+
+            VStack(spacing: 16) {
+                FeatureRow(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "Track Your Progress",
+                    subtitle: "Visual streaks and insights keep you motivated",
+                    iconColor: Color.theme.accent
+                )
+
+                FeatureRow(
+                    icon: "bell.badge.fill",
+                    title: "Smart Reminders",
+                    subtitle: "Daily notifications that actually help",
+                    iconColor: Color.theme.accent
+                )
+
+                FeatureRow(
+                    icon: "checkmark.shield.fill",
+                    title: "Science-Backed",
+                    subtitle: "100-day method proven to build lasting habits",
+                    iconColor: Color.theme.accent
+                )
+            }
+        }
+    }
+
+    // MARK: - Social Proof
+
+    private var socialProofSection: some View {
+        VStack(spacing: 24) {
+            // Stats Grid
+            HStack(spacing: 24) {
+                statItem(value: "10K+", label: "Active Users")
+                statItem(value: "4.9★", label: "App Store")
+                statItem(value: "92%", label: "Success Rate")
+            }
+
+            // Testimonials Header
+            VStack(spacing: 8) {
+                Text("Loved by thousands")
+                    .font(AppTypography.title2(.bold))
+                    .foregroundColor(.theme.text)
+
+                Text("Real people. Real results.")
+                    .font(AppTypography.body())
+                    .foregroundColor(.theme.subtext)
+            }
+            .padding(.top, 8)
+
+            // Testimonials
+            VStack(spacing: 20) {
+                enhancedTestimonialCard(
+                    text: "This app completely changed how I approach my goals. I've been using it for 6 months and haven't missed a single day. The streak tracking is so motivating!",
+                    author: "Sarah Martinez",
+                    role: "Marketing Director",
+                    days: "156",
+                    avatarColor: Color(red: 0.2, green: 0.6, blue: 0.9),
+                    avatarIcon: "person.fill"
+                )
+
+                enhancedTestimonialCard(
+                    text: "Finally hit my 100-day milestone for meditation! This app kept me accountable when nothing else could. The daily reminders are perfect.",
+                    author: "Michael Chen",
+                    role: "Software Engineer",
+                    days: "127",
+                    avatarColor: Color(red: 0.3, green: 0.7, blue: 0.5),
+                    avatarIcon: "person.fill"
+                )
+
+                enhancedTestimonialCard(
+                    text: "Love the streak tracking and the simple design. Makes building habits feel like a game! I've built 3 habits simultaneously with 100Days.",
+                    author: "Jessica Williams",
+                    role: "Fitness Coach",
+                    days: "89",
+                    avatarColor: Color(red: 0.9, green: 0.5, blue: 0.6),
+                    avatarIcon: "person.fill"
+                )
+
+                enhancedTestimonialCard(
+                    text: "I've tried every habit app out there. This one actually works. The consistency heatmap is brilliant - seeing my progress visually keeps me going.",
+                    author: "David Thompson",
+                    role: "Product Manager",
+                    days: "203",
+                    avatarColor: Color(red: 0.7, green: 0.4, blue: 0.9),
+                    avatarIcon: "person.fill"
+                )
+            }
+        }
+    }
+
+    private func statItem(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(AppTypography.title2(.bold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color.theme.accent,
+                            Color.theme.accent.opacity(0.8)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+
+            Text(label)
+                .font(AppTypography.caption1())
+                .foregroundColor(.theme.subtext)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func enhancedTestimonialCard(
+        text: String,
+        author: String,
+        role: String,
+        days: String,
+        avatarColor: Color,
+        avatarIcon: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header with avatar and info
+            HStack(spacing: 12) {
+                // Avatar
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    avatarColor,
+                                    avatarColor.opacity(0.8)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 48, height: 48)
+
+                    Image(systemName: avatarIcon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(.white)
+                }
+
+                // Name and role
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(author)
+                        .font(AppTypography.headline(.semibold))
+                        .foregroundColor(.theme.text)
+
+                    Text(role)
+                        .font(AppTypography.caption1())
+                        .foregroundColor(.theme.subtext)
+                }
+
+                Spacer()
+
+                // Day streak badge
+                VStack(spacing: 2) {
+                    Text(days)
+                        .font(AppTypography.title3(.bold))
+                        .foregroundColor(.theme.accent)
+
+                    Text("days")
+                        .font(AppTypography.caption2())
+                        .foregroundColor(.theme.subtext)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.theme.accent.opacity(0.1))
+                )
+            }
+
+            // Testimonial text
+            Text(text)
+                .font(AppTypography.body())
+                .foregroundColor(.theme.text)
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Star rating
+            HStack(spacing: 4) {
+                ForEach(0..<5, id: \.self) { _ in
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.theme.accent)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.08), radius: 12, x: 0, y: 4)
+        )
+    }
+
+    // MARK: - CTA Section
+
+    private var ctaSection: some View {
+        VStack(spacing: 16) {
+            // Primary CTA
+            Button(action: {
+                isShowingAuthView = true
+            }) {
+                Text("Get Started Free")
+                    .font(AppTypography.headline(.semibold))
+                    .foregroundColor(DS.Colors.primaryButtonFg(colorScheme))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color.theme.accent,
+                                Color.theme.accent.opacity(0.9)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(16)
+                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
+            }
+
+            // Sign in with Apple
             SignInWithAppleButton(
                 text: .signIn,
                 onRequest: { request in
                     let nonce = randomNonceString()
                     currentNonce = nonce
-                    request.requestedScopes = [.email]
+                    request.requestedScopes = [.fullName, .email]
                     request.nonce = sha256(nonce)
                 },
                 onCompletion: { result in
@@ -371,357 +406,131 @@ struct WelcomeView: View {
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
             .frame(height: 56)
             .cornerRadius(16)
-            .padding(.horizontal, 20)
-            
-            // Sign in link
-            Button {
+
+            // Already have account
+            Button(action: {
                 isShowingAuthView = true
-            } label: {
+            }) {
                 Text("Already have an account? Sign In")
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundColor(Color.theme.accent)
-                    .padding(.top, 4)
-            }
-            
-            // Terms and privacy
-            HStack(spacing: 3) {
-                Text("By continuing, you agree to our")
-                    .font(.system(size: 13))
-                    .foregroundColor(.theme.subtext)
-                
-                Link("Terms of Use", destination: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(AppTypography.body())
                     .foregroundColor(.theme.accent)
-                
-                Text("and")
-                    .font(.system(size: 13))
+            }
+            .padding(.top, 8)
+
+            // Legal
+            HStack(spacing: 4) {
+                Text("By continuing, you agree to our")
+                    .font(AppTypography.caption1())
                     .foregroundColor(.theme.subtext)
-                
-                Button(action: { showPrivacy = true }) {
-                    Text("Privacy Policy")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.theme.accent)
+
+                Button("Terms") {
+                    showTerms = true
                 }
+                .font(AppTypography.caption1())
+                .foregroundColor(.theme.accent)
+
+                Text("and")
+                    .font(AppTypography.caption1())
+                    .foregroundColor(.theme.subtext)
+
+                Button("Privacy Policy") {
+                    showPrivacy = true
+                }
+                .font(AppTypography.caption1())
+                .foregroundColor(.theme.accent)
             }
             .padding(.top, 4)
-            .padding(.bottom, 16)
         }
-        .padding(.bottom, 20)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 40)
         .background(
-            Rectangle()
-                .fill(Color.theme.background)
-                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 10, x: 0, y: -5)
-                .edgesIgnoringSafeArea(.bottom)
+            LinearGradient(
+                colors: [
+                    Color.theme.background.opacity(0),
+                    Color.theme.background.opacity(0.95),
+                    Color.theme.background
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 300)
+            .offset(y: -100)
         )
     }
-    
-    // MARK: - Helper Components
-    
-    // Enhanced feature card component with improved shadows and styling
-    private func featureCard(icon: String, title: String, description: String, delay: Double) -> some View {
-        HStack(spacing: 16) {
-            // Icon with enhanced styling
-            ZStack {
-                Circle()
-                    .fill(Color.theme.accent.opacity(0.1))
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundColor(Color.theme.accent)
-            }
-            
-            // Text content
-            VStack(alignment: .leading, spacing: 6) {
-                Text(title)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                
-                Text(description)
-                    .font(.system(size: 15, weight: .regular, design: .rounded))
-                    .foregroundColor(.theme.subtext)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            
-            Spacer()
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.theme.accent.opacity(0.08), lineWidth: 1)
-                )
-                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 15, x: 0, y: 4)
-        )
-        .offset(x: animateElements ? 0 : -30, y: 0)
-        .opacity(animateElements ? 1 : 0)
-        .animation(.easeOut(duration: 0.7).delay(delay), value: animateElements)
-    }
-    
-    // Enhanced testimonial card with profile image
-    private func enhancedTestimonialCard(quote: String, name: String, imageName: String, location: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Quote with quote marks
-            HStack(alignment: .top, spacing: 8) {
-                Text("\u{201C}")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(Color.theme.accent.opacity(0.3))
-                    .offset(y: -8)
-                
-                Text(quote)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(3)
-                
-                Spacer()
-            }
-            
-            // Name with profile image
-            HStack {
-                Spacer()
-                
-                HStack(spacing: 12) {
-                    // Check if custom image exists, otherwise fall back to SF Symbol
-                    if UIImage(named: imageName) != nil {
-                        Image(imageName)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 36, height: 36)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
-                            )
-                            .shadow(color: Color.theme.shadow.opacity(0.1), radius: 2, x: 0, y: 1)
-                    } else {
-                        Image(systemName: "person.circle.fill")
-                            .resizable()
-                            .frame(width: 36, height: 36)
-                            .foregroundColor(.theme.accent.opacity(0.8))
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(.theme.text)
-                        
-                        Text(location)
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundColor(.theme.subtext)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .frame(width: UIScreen.main.bounds.width - 40, height: 180)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.theme.accent.opacity(0.1), lineWidth: 1)
-                )
-                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 12, x: 0, y: 4)
-        )
-    }
-    
-    // Legacy testimonial card (kept for backward compatibility)
-    private func testimonialCard(quote: String, name: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Quote with quote marks
-            HStack(alignment: .top, spacing: 8) {
-                Text("\u{201C}")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(Color.theme.accent.opacity(0.3))
-                    .offset(y: -8)
-                
-                Text(quote)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .lineLimit(3)
-                
-                Spacer()
-            }
-            
-            // Name with user icon
-            HStack {
-                Spacer()
-                
-                HStack(spacing: 8) {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.theme.subtext)
-                    
-                    Text(name)
-                        .font(.system(size: 14, weight: .medium, design: .rounded))
-                        .foregroundColor(.theme.subtext)
-                }
-            }
-        }
-        .padding(20)
-        .frame(width: UIScreen.main.bounds.width - 40, height: 140)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.theme.accent.opacity(0.1), lineWidth: 1)
-                )
-                .shadow(color: Color.theme.shadow.opacity(0.15), radius: 15, x: 0, y: 5)
-        )
-    }
-    
-    // Enhanced stat item
-    private func statItem(number: String, text: String, delay: Double) -> some View {
-        VStack(spacing: 6) {
-            Text(number)
-                .font(.system(size: 26, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.accent)
-                .offset(y: animateElements ? 0 : 20)
-                .opacity(animateElements ? 1 : 0)
-                .animation(.easeOut(duration: 0.5).delay(delay), value: animateElements)
-            
-            Text(text)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundColor(.theme.subtext)
-                .offset(y: animateElements ? 0 : 20)
-                .opacity(animateElements ? 1 : 0)
-                .animation(.easeOut(duration: 0.5).delay(delay + 0.1), value: animateElements)
-        }
-        .frame(maxWidth: .infinity)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-    
-    // Environment properties
-    @Environment(\.colorScheme) private var systemColorScheme
-    
-    private var colorScheme: ColorScheme {
-        // Get the current color scheme from the theme manager
-        if themeManager.currentTheme == .system {
-            return systemColorScheme
-        }
-        return themeManager.currentTheme == .dark ? .dark : .light
-    }
-    
-    // MARK: - Helper Methods
-    
+
+    // MARK: - Apple Sign In Helpers
+
     private func handleAppleSignIn(result: Result<ASAuthorization, Error>) async {
         switch result {
         case .success(let authorization):
             if let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential {
-                // Process Apple ID credential
                 await signInWithApple(credential: appleIDCredential)
             }
         case .failure(let error):
             print("Apple Sign In failed: \(error.localizedDescription)")
         }
     }
-    
+
     private func signInWithApple(credential: ASAuthorizationAppleIDCredential) async {
-        // Extract tokens from credential
         guard let tokenData = credential.identityToken,
               let token = String(data: tokenData, encoding: .utf8),
               let nonce = currentNonce else {
             print("Unable to fetch identity token or nonce is missing")
             return
         }
-        
-        // Create Firebase credential
-        let firebaseCredential = OAuthProvider.credential(withProviderID: "apple.com",
-                                                         idToken: token,
-                                                         rawNonce: nonce)
-        
-        // Sign in with Firebase
+
+        let firebaseCredential = OAuthProvider.credential(
+            withProviderID: "apple.com",
+            idToken: token,
+            rawNonce: nonce
+        )
+
         do {
-            let authResult = try await Auth.auth().signIn(with: firebaseCredential)
-            
-            // Check if this is a new user and name data is available
-            if authResult.additionalUserInfo?.isNewUser == true,
-               let givenName = credential.fullName?.givenName,
-               !givenName.isEmpty {
-                
-                // Create a display name from the Apple credential data
-                var components: [String] = []
-                if let givenName = credential.fullName?.givenName {
-                    components.append(givenName)
-                }
-                if let familyName = credential.fullName?.familyName {
-                    components.append(familyName)
-                }
-                
-                if !components.isEmpty {
-                    let displayName = components.joined(separator: " ")
-                    
-                    // Use Firebase's profile change request
-                    let changeRequest = authResult.user.createProfileChangeRequest()
-                    changeRequest.displayName = displayName
-                    try await changeRequest.commitChanges()
-                    
-                    print("Updated user display name to: \(displayName)")
+            // Run the Auth SDK call off the MainActor so the non-Sendable
+            // AuthDataResult doesn't need to be transported across actor
+            // boundaries. We don't need the AuthDataResult here; auth state
+            // changes are observed elsewhere in the app.
+            Task.detached(priority: .userInitiated) {
+                do {
+                    _ = try await Auth.auth().signIn(with: firebaseCredential)
+                } catch {
+                    await MainActor.run {
+                        print("Error authenticating: \(error.localizedDescription)")
+                    }
                 }
             }
-            
-            // TODO: Remove dead code - paywall triggering is handled through navigation now
-            // This code was attempting to prevent paywall showing after login
-            // but showPaywall property no longer exists in the new architecture
-            
         } catch {
-            print("Error signing in with Apple: \(error.localizedDescription)")
+            print("Error preparing credential: \(error.localizedDescription)")
         }
     }
-    
-    // Generate a random nonce for authentication
+
     private func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
-        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        var result = ""
-        var remainingLength = length
-        
-        while remainingLength > 0 {
-            let randoms: [UInt8] = (0 ..< 16).map { _ in
-                var random: UInt8 = 0
-                let errorCode = SecRandomCopyBytes(kSecRandomDefault, 1, &random)
-                if errorCode != errSecSuccess {
-                    fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
-                }
-                return random
-            }
-            
-            randoms.forEach { random in
-                if remainingLength == 0 { return }
-                
-                if random < charset.count {
-                    result.append(charset[Int(random)])
-                    remainingLength -= 1
-                }
-            }
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            fatalError("Unable to generate nonce. SecRandomCopyBytes failed with OSStatus \(errorCode)")
         }
-        
-        return result
+
+        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        let nonce = randomBytes.map { byte in
+            charset[Int(byte) % charset.count]
+        }
+        return String(nonce)
     }
-    
-    // Generate SHA256 hash of the nonce
+
     private func sha256(_ input: String) -> String {
         let inputData = Data(input.utf8)
         let hashedData = SHA256.hash(data: inputData)
         let hashString = hashedData.compactMap {
             String(format: "%02x", $0)
         }.joined()
-        
         return hashString
     }
 }
 
-// MARK: - Preview Provider
-struct WelcomeView_Previews: PreviewProvider {
-    static var previews: some View {
-        WelcomeView()
-            .environmentObject(UserSession.shared)
-            .environmentObject(ThemeManager.shared)
-    }
-} 
+#Preview {
+    WelcomeView()
+        .environmentObject(UserSession.shared)
+        .environmentObject(ThemeManager.shared)
+}

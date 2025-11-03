@@ -65,7 +65,7 @@ public struct MorningGreetingComponent: View {
             HStack {
                 // Main greeting with name if available
                 Text(getPersonalizedGreeting())
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(AppTypography.title1(.bold))
                     .foregroundColor(.theme.text)
                     .minimumScaleFactor(0.7)
                     .lineLimit(1)
@@ -80,7 +80,7 @@ public struct MorningGreetingComponent: View {
                         .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 3)
                     
                     Text(timeOfDay.emoji)
-                        .font(.system(size: 24))
+                        .font(AppTypography.title2())
                 }
             }
         }

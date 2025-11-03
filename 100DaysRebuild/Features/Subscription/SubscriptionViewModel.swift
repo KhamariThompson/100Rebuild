@@ -125,6 +125,8 @@ class SubscriptionViewModel: ObservableObject {
                     }
                 case .noOfferingAvailable:
                     errorMessage = "No subscription offerings available. Please try again later."
+                case .noOffering:
+                    errorMessage = "No offering found in RevenueCat. Please try again later."
                 case .packageNotFound:
                     errorMessage = "Subscription package not found. Please try again."
                 case .purchaseCancelled:

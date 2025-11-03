@@ -40,18 +40,18 @@ struct ProGateView: View {
                         )
                     
                     Image(systemName: iconName)
-                        .font(.system(size: 32))
+                        .font(AppTypography.largeTitle())
                         .foregroundColor(.white)
                 }
                 
                 // Pro badge
                 HStack(spacing: 6) {
                     Image(systemName: "crown.fill")
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                         .foregroundColor(.yellow)
                     
                     Text(proRequiredMessage)
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(.theme.text)
                 }
                 .padding(.horizontal, 16)
@@ -67,12 +67,12 @@ struct ProGateView: View {
             // Title and description
             VStack(spacing: 12) {
                 Text(title)
-                    .font(.system(size: 24, weight: .bold))
+                    .font(AppTypography.title2(.bold))
                     .foregroundColor(.theme.text)
                     .multilineTextAlignment(.center)
                 
                 Text(description)
-                    .font(.system(size: 16))
+                    .font(AppTypography.body())
                     .foregroundColor(.theme.subtext)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
@@ -91,11 +91,11 @@ struct ProGateView: View {
                 // Already a pro user - shouldn't see this, but just in case
                 VStack(spacing: 16) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 30))
+                        .font(AppTypography.title1())
                         .foregroundColor(.green)
 
                     Text("You already have Pro access!")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                 }
                 .padding()
@@ -109,10 +109,10 @@ struct ProGateView: View {
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "star.fill")
-                                    .font(.system(size: 16))
+                                    .font(AppTypography.body())
                                 
                                 Text("Upgrade to Pro")
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .font(AppTypography.headline(.semibold))
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
@@ -135,7 +135,7 @@ struct ProGateView: View {
                     if let alternateTitle = alternateActionTitle, let action = alternateAction {
                         Button(action: action) {
                             Text(alternateTitle)
-                                .font(.system(size: 16, weight: .medium))
+                                .font(AppTypography.body(.medium))
                                 .foregroundColor(.theme.subtext)
                                 .padding(.vertical, 8)
                         }
@@ -146,10 +146,10 @@ struct ProGateView: View {
                     if !NetworkMonitor.shared.isConnected {
                         HStack(spacing: 6) {
                             Image(systemName: "wifi.slash")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                             
                             Text("You're offline. Connect to see Pro features.")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                         }
                         .foregroundColor(.theme.error)
                         .padding(.top, 8)

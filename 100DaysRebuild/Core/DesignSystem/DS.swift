@@ -27,7 +27,10 @@ public enum DS {
 
     // MARK: - Typography
 
-    /// Typography styles from AppTypography
+    /// @deprecated Use AppTypography directly instead of DS.Typo
+    /// DS.Typo is a legacy wrapper that will be removed in a future version.
+    /// Migration: DS.Typo.body → AppTypography.body()
+    @available(*, deprecated, message: "Use AppTypography directly. DS.Typo will be removed in a future version.")
     public enum Typo {
         // Display sizes
         public static let titleXL = AppTypography.largeTitle(.bold)      // 32pt bold
@@ -143,11 +146,11 @@ public enum DS {
         public var body: some View {
             Label {
                 Text(text)
-                    .font(DS.Typo.caption1)
+                    .font(AppTypography.caption1())
             } icon: {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: 10))
+                        .font(AppTypography.caption2())
                 }
             }
             .foregroundStyle(DS.Colors.onSurfaceSecondary)
@@ -170,7 +173,7 @@ public enum DS {
 
         public var body: some View {
             Image(systemName: name)
-                .font(.system(size: size))
+                .font(AppTypography.font(size: size, weight: .regular))
                 .foregroundStyle(color)
         }
     }
@@ -188,6 +191,7 @@ public enum DS {
 
 extension Button {
     /// Apply DS button style variant
+    @MainActor
     public func ds(_ variant: DS.ButtonStyleVariant) -> some View {
         switch variant {
         case .primary:

@@ -72,7 +72,6 @@ class ChallengeStore: ObservableObject {
     
     deinit {
         loadTask?.cancel()
-        cancellables.removeAll()
     }
     
     /// Refresh challenges from Firestore

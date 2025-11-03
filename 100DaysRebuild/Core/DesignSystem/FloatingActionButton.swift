@@ -34,7 +34,7 @@ struct FloatingActionButton: View {
                 
                 // Icon
                 Image(systemName: icon)
-                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .font(AppTypography.font(size: size * 0.4, weight: .semibold))
                     .foregroundColor(.white)
             }
         }
@@ -83,7 +83,7 @@ struct FloatingActionMenu<Content: View>: View {
                     
                     // Animated icon (+ rotates to X)
                     Image(systemName: isExpanded ? "xmark" : "plus")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(AppTypography.title2(.semibold))
                         .foregroundColor(.white)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .scaleEffect(isExpanded ? 1.1 : 1.0)
@@ -117,13 +117,13 @@ struct FloatingActionMenuItem: View {
                         .frame(width: 40, height: 40)
                     
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .medium))
+                        .font(AppTypography.headline(.medium))
                         .foregroundColor(color)
                 }
                 
                 // Title
                 Text(title)
-                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .font(AppTypography.body(.medium))
                     .foregroundColor(Color.theme.text)
                 
                 Spacer()

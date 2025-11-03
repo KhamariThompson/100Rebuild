@@ -68,7 +68,7 @@ struct BadgeItemView: View {
                     
                     // Icon
                     Image(systemName: badge.iconName)
-                        .font(.system(size: 24))
+                        .font(AppTypography.title2())
                         .foregroundColor(badge.isUnlocked
                                         ? badge.category.color
                                         : Color.gray.opacity(0.5))
@@ -76,7 +76,7 @@ struct BadgeItemView: View {
                     // Locked overlay
                     if !badge.isUnlocked {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 14))
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.gray.opacity(0.7))
                             .background(
                                 Circle()
@@ -110,7 +110,7 @@ struct BadgeItemView: View {
                 
                 // Badge name
                 Text(badge.name)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(AppTypography.caption1(.medium))
                     .foregroundColor(badge.isUnlocked ? Color.theme.text : Color.theme.subtext.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -169,7 +169,7 @@ struct BadgeDetailView: View {
                 
                 // Icon
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 60))
+                    .font(AppTypography.font(size: 60, weight: .bold))
                     .foregroundColor(badge.category.color)
                     .scaleEffect(badge.isUnlocked ? 1.05 : 1.0)
                     .animation(badge.isUnlocked ? Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default, value: badge.isUnlocked)

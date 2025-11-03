@@ -17,12 +17,12 @@ struct ChallengeDetailView: View {
                 // Challenge header
                 VStack(alignment: .leading, spacing: 8) {
                     Text(challenge.title)
-                        .font(.title)
+                        .font(AppTypography.title1())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.text)
                     
                     Text("Started on \(challenge.startDate, style: .date)")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                     
                     if challenge.isTimed {
@@ -30,7 +30,7 @@ struct ChallengeDetailView: View {
                             Image(systemName: "timer")
                                 .foregroundColor(.theme.accent)
                             Text("Timed Challenge")
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.theme.accent)
                                 .fontWeight(.medium)
                         }
@@ -55,9 +55,9 @@ struct ChallengeDetailView: View {
                         }) {
                             HStack {
                                 Image(systemName: "timer")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                                 Text(challenge.isCompletedToday ? "Completed Today" : "Start Timer Session")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                             }
                             .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .frame(maxWidth: .infinity)
@@ -78,9 +78,9 @@ struct ChallengeDetailView: View {
                         }) {
                             HStack {
                                 Image(systemName: "checkmark.circle.fill")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                                 Text("Check In for Today")
-                                    .font(.headline)
+                                    .font(AppTypography.headline())
                             }
                             .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .frame(maxWidth: .infinity)
@@ -102,9 +102,9 @@ struct ChallengeDetailView: View {
                     }) {
                         HStack {
                             Image(systemName: "calendar")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                             Text("View Check-In History")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                         }
                         .foregroundColor(.theme.accent)
                         .frame(maxWidth: .infinity)
@@ -120,9 +120,9 @@ struct ChallengeDetailView: View {
                     }) {
                         HStack {
                             Image(systemName: "pencil")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                             Text("Edit Challenge")
-                                .font(.headline)
+                                .font(AppTypography.headline())
                         }
                         .foregroundColor(.theme.subtext)
                         .frame(maxWidth: .infinity)
@@ -142,6 +142,7 @@ struct ChallengeDetailView: View {
         .background(Color.theme.background.ignoresSafeArea())
         .navigationTitle("Challenge Details")
         .navigationBarTitleDisplayMode(.inline)
+        .id(challenge.id) // Enforce unique identity per challenge
         .sheet(isPresented: $showTimerSession) {
             TimerSessionView(challenge: challenge)
         }
@@ -216,10 +217,10 @@ struct ChallengeDetailView: View {
             HStack {
                 VStack(alignment: .leading) {
                     Text("Day \(challenge.daysCompleted)/100")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     Text("\(Int(challenge.progressPercentage * 100))% complete")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -229,17 +230,17 @@ struct ChallengeDetailView: View {
                 VStack(alignment: .trailing) {
                     HStack(spacing: 4) {
                         Text("\(challenge.streakCount)")
-                            .font(.title3)
+                            .font(AppTypography.title3())
                             .fontWeight(.bold)
                             .foregroundColor(.theme.text)
                         
                         Text("day streak")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                     
                     Text(challenge.streakEmoji)
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                 }
             }
         }
@@ -255,7 +256,7 @@ struct ChallengeDetailView: View {
     private var challengeStatsCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Stats")
-                .font(.headline)
+                .font(AppTypography.headline())
                 .foregroundColor(.theme.text)
             
             // Days remaining
@@ -265,11 +266,11 @@ struct ChallengeDetailView: View {
                 
                 VStack(alignment: .leading) {
                     Text("\(challenge.daysRemaining)")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     Text("Days Remaining")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
                 
@@ -281,11 +282,11 @@ struct ChallengeDetailView: View {
                 
                 VStack(alignment: .leading) {
                     Text("\(challenge.streakCount)")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     Text("Current Streak")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(.theme.subtext)
                 }
             }
@@ -324,10 +325,9 @@ struct ProgressCircle: View {
                     )
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.linear, value: progress)
-            
+
             Text("\(Int(progress * 100))%")
-                .font(.caption)
+                .font(AppTypography.caption1())
                 .bold()
                 .foregroundColor(.theme.text)
         }

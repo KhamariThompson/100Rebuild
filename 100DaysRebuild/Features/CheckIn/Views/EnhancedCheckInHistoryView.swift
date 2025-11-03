@@ -99,11 +99,12 @@ struct EnhancedCheckInHistoryView: View {
 }
 
 // MARK: - View Model
+@MainActor
 class EnhancedCheckInHistoryViewModel: ObservableObject {
     @Published var checkIns: [Date: Models_CheckInRecord] = [:]
     @Published var currentMonth: Date = Date()
     private let challenge: Challenge
-    
+
     init(challenge: Challenge) {
         self.challenge = challenge
     }
@@ -145,63 +146,64 @@ class EnhancedCheckInHistoryViewModel: ObservableObject {
     
     func loadCheckIns() {
         guard let userId = Auth.auth().currentUser?.uid else { return }
-        
+
         let db = Firestore.firestore()
         let checkInsRef = db
             .collection("users").document(userId)
             .collection("challenges").document(challenge.id.uuidString)
             .collection("checkIns")
-        
-        checkInsRef.getDocuments { [weak self] snapshot, error in
-            guard let self = self,
-                  let documents = snapshot?.documents else { return }
-            
-            var newCheckIns: [Date: Models_CheckInRecord] = [:]
-            
-            for document in documents {
-                let data = document.data()
-                
-                // Get basic check-in data
-                guard let dayNumber = data["dayNumber"] as? Int else { continue }
-                
-                // Get timestamp or create a fallback date
-                let date: Date
-                if let timestamp = data["date"] as? Timestamp {
-                    date = timestamp.dateValue()
-                } else {
-                    date = Date()
+
+        Task {
+            do {
+                let snapshot = try await checkInsRef.getDocuments()
+                var newCheckIns: [Date: Models_CheckInRecord] = [:]
+
+                for document in snapshot.documents {
+                    let data = document.data()
+
+                    // Get basic check-in data
+                    guard let dayNumber = data["dayNumber"] as? Int else { continue }
+
+                    // Get timestamp or create a fallback date
+                    let date: Date
+                    if let timestamp = data["date"] as? Timestamp {
+                        date = timestamp.dateValue()
+                    } else {
+                        date = Date()
+                    }
+
+                    // Get optional fields
+                    let note = data["note"] as? String
+                    let quoteId = data["quoteId"] as? String
+                    let promptShown = data["promptShown"] as? String
+                    let photoURLString = data["photoURL"] as? String
+                    let photoURL = photoURLString != nil ? URL(string: photoURLString!) : nil
+
+                    // Find quote if we have a quoteId
+                    let quote: Quote?
+                    if let id = quoteId {
+                        quote = Quote.all.first { $0.id == id } ?? Quote.samples.first
+                    } else {
+                        quote = nil
+                    }
+
+                    let checkIn = Models_CheckInRecord(
+                        id: document.documentID,
+                        dayNumber: dayNumber,
+                        date: date,
+                        note: note,
+                        quote: quote,
+                        promptShown: promptShown,
+                        photoURL: photoURL
+                    )
+
+                    newCheckIns[date] = checkIn
                 }
-                
-                // Get optional fields
-                let note = data["note"] as? String
-                let quoteId = data["quoteId"] as? String
-                let promptShown = data["promptShown"] as? String
-                let photoURLString = data["photoURL"] as? String
-                let photoURL = photoURLString != nil ? URL(string: photoURLString!) : nil
-                
-                // Find quote if we have a quoteId
-                let quote: Quote?
-                if let id = quoteId {
-                    quote = Quote.all.first { $0.id == id } ?? Quote.samples.first
-                } else {
-                    quote = nil
-                }
-                
-                let checkIn = Models_CheckInRecord(
-                    id: document.documentID,
-                    dayNumber: dayNumber,
-                    date: date,
-                    note: note,
-                    quote: quote,
-                    promptShown: promptShown,
-                    photoURL: photoURL
-                )
-                
-                newCheckIns[date] = checkIn
-            }
-            
-            DispatchQueue.main.async {
+
+                // Since we're @MainActor, this update happens on the main thread automatically
                 self.checkIns = newCheckIns
+            } catch {
+                print("Error loading check-ins: \(error.localizedDescription)")
             }
         }
     }
@@ -233,14 +235,14 @@ struct EnhancedCalendarDayView: View {
                     // Photo indicator
                     if checkIn?.photoURL != nil {
                         Image(systemName: "photo.fill")
-                            .font(.system(size: 8))
+                            .font(AppTypography.caption2())
                             .foregroundColor(.theme.accent)
                     }
                     
                     // Journal indicator
                     if let note = checkIn?.note, !note.isEmpty {
                         Image(systemName: "text.book.closed")
-                            .font(.system(size: 8))
+                            .font(AppTypography.caption2())
                             .foregroundColor(.theme.accent)
                     }
                 }

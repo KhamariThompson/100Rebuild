@@ -3,12 +3,16 @@ import RevenueCat
 import StoreKit
 
 /// Protocol defining subscription data operations
-protocol SubscriptionRepository {
+protocol SubscriptionRepository: Sendable {
     /// Load current subscription status
     func loadStatus() async throws -> SubscriptionStatus
 
-    /// Purchase a subscription plan
-    func purchase(_ plan: SubscriptionPlan) async throws -> SubscriptionStatus
+    /// Purchase a subscription plan with optional explicit product ID override
+    /// - Parameters:
+    ///   - plan: The subscription plan (monthly or annual)
+    ///   - explicitProductId: Optional product ID to override plan's default (used for annual intro vs no-intro selection)
+    /// - Returns: Tuple of (subscription status, purchased product ID)
+    func purchase(_ plan: SubscriptionPlan, explicitProductId: String?) async throws -> (SubscriptionStatus, String)
 
     /// Restore purchases
     func restorePurchases() async throws -> SubscriptionStatus

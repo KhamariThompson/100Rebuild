@@ -62,7 +62,7 @@ struct ScrollAwareHeaderView<Content: View>: View {
             // Subtitle if provided
             if let subtitle = subtitle {
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(AppTypography.callout(.medium))
                     .foregroundColor(Color.theme.subtext)
             }
             
@@ -88,14 +88,14 @@ struct ScrollAwareHeaderView<Content: View>: View {
 struct SubtitleTextStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.system(size: 15, weight: .regular, design: .rounded))
+            .font(AppTypography.callout())
     }
 }
 
 // ScrollOffsetPreferenceKey to track scroll offset
 struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    
+    static let defaultValue: CGFloat = 0
+
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }

@@ -15,14 +15,14 @@ struct SuggestedFriendCard: View {
             // User Info
             VStack(spacing: 4) {
                 Text("@\(suggestion.username)")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .fontWeight(.semibold)
                     .foregroundColor(Color.theme.text)
                     .lineLimit(1)
                 
                 if let displayName = suggestion.displayName {
                     Text(displayName)
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                         .lineLimit(1)
                 }
@@ -35,10 +35,10 @@ struct SuggestedFriendCard: View {
             Button(action: onAddFriend) {
                 HStack(spacing: 4) {
                     Image(systemName: isAtFriendLimit ? "crown.fill" : "person.badge.plus")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(AppTypography.caption1(.semibold))
                     
                     Text(isAtFriendLimit ? "Upgrade" : "Add")
-                        .font(.caption)
+                        .font(AppTypography.caption1())
                         .fontWeight(.semibold)
                 }
                 .foregroundColor(isAtFriendLimit ? .orange : Color.theme.accent)
@@ -66,14 +66,14 @@ struct SuggestedFriendCard: View {
                     // User Info
                     VStack(spacing: 4) {
                         Text("@\(suggestion.username)")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                             .fontWeight(.semibold)
                             .foregroundColor(Color.theme.text)
                             .lineLimit(1)
 
                         if let displayName = suggestion.displayName {
                             Text(displayName)
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.subtext)
                                 .lineLimit(1)
                         }
@@ -86,10 +86,10 @@ struct SuggestedFriendCard: View {
                     Button(action: onAddFriend) {
                         HStack(spacing: 4) {
                             Image(systemName: isAtFriendLimit ? "crown.fill" : "person.badge.plus")
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(AppTypography.caption1(.semibold))
 
                             Text(isAtFriendLimit ? "Upgrade" : "Add")
-                                .font(.caption)
+                                .font(AppTypography.caption1())
                                 .fontWeight(.semibold)
                         }
                         .foregroundColor(isAtFriendLimit ? .orange : Color.theme.accent)
@@ -138,7 +138,7 @@ struct SuggestedFriendCard: View {
             .fill(Color.theme.accent.opacity(0.2))
             .overlay(
                 Text(String(suggestion.username.prefix(1)).uppercased())
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .fontWeight(.semibold)
                     .foregroundColor(Color.theme.accent)
             )
@@ -148,7 +148,7 @@ struct SuggestedFriendCard: View {
         HStack(spacing: 2) {
             suggestionIcon
             Text(suggestionText)
-                .font(.system(size: 10))
+                .font(AppTypography.caption2())
                 .foregroundColor(Color.theme.subtext)
         }
     }
@@ -170,7 +170,7 @@ struct SuggestedFriendCard: View {
                     .foregroundColor(.purple)
             }
         }
-        .font(.system(size: 8))
+        .font(AppTypography.caption2())
     }
     
     private var suggestionText: String {

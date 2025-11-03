@@ -22,10 +22,10 @@ struct BadgeShowcaseView: View {
                 Button(action: onEditTap) {
                     HStack(spacing: 4) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 10))
+                            .font(AppTypography.caption2())
                         
                         Text("Edit")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(AppTypography.caption1(.medium))
                     }
                     .foregroundColor(.theme.accent)
                     .padding(.horizontal, 10)
@@ -52,7 +52,7 @@ struct BadgeShowcaseView: View {
     private var emptyShowcaseView: some View {
         VStack(spacing: 12) {
             Image(systemName: "trophy")
-                .font(.system(size: 30))
+                .font(AppTypography.largeTitle())
                 .foregroundColor(.theme.subtext.opacity(0.7))
             
             Text("Showcase your favorite badges here")
@@ -122,7 +122,7 @@ struct BadgeShowcaseView: View {
                 .frame(width: 70, height: 70)
             
             Image(systemName: "plus")
-                .font(.system(size: 20))
+                .font(AppTypography.title3())
                 .foregroundColor(.theme.subtext.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
@@ -155,7 +155,7 @@ struct BadgeShowcaseItem: View {
                 
                 // Icon
                 Image(systemName: badge.iconName)
-                    .font(.system(size: 30))
+                    .font(AppTypography.largeTitle())
                     .foregroundColor(adaptiveIconColor)
             }
             .shadow(color: badge.category.color.opacity(colorScheme == .dark ? 0.3 : 0.2), 
@@ -163,7 +163,7 @@ struct BadgeShowcaseItem: View {
             
             // Badge name
             Text(badge.name)
-                .font(.system(size: 12, weight: .medium))
+                .font(AppTypography.caption1(.medium))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
                 .lineLimit(1)
@@ -269,7 +269,7 @@ struct BadgeShowcaseEditorView: View {
                                 }
                                 
                                 Image(systemName: "chevron.down")
-                                    .font(.system(size: 12))
+                                    .font(AppTypography.caption1())
                                     .foregroundColor(.theme.subtext)
                             }
                             .padding(.vertical, 8)
@@ -396,7 +396,7 @@ struct BadgeShowcaseEditorView: View {
                 .frame(width: 70, height: 70)
             
             Image(systemName: "plus")
-                .font(.system(size: 20))
+                .font(AppTypography.title3())
                 .foregroundColor(.theme.subtext.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
@@ -521,7 +521,7 @@ struct BadgeShowcasePreviewItem: View {
                         .frame(width: 70, height: 70)
                     
                     Image(systemName: badge.iconName)
-                        .font(.system(size: 30))
+                        .font(AppTypography.largeTitle())
                         .foregroundColor(badge.category.color)
                 }
                 
@@ -541,7 +541,7 @@ struct BadgeShowcasePreviewItem: View {
                         .frame(width: 22, height: 22)
                     
                     Image(systemName: "minus")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(AppTypography.caption1(.bold))
                         .foregroundColor(.white)
                 }
             }
@@ -582,7 +582,7 @@ struct BadgeSelectionItem: View {
                     
                     // Icon
                     Image(systemName: badge.iconName)
-                        .font(.system(size: 30))
+                        .font(AppTypography.largeTitle())
                         .foregroundColor(iconColor)
                     
                     // Selected checkmark indicator
@@ -593,7 +593,7 @@ struct BadgeSelectionItem: View {
                                 .frame(width: 24, height: 24)
                             
                             Image(systemName: "checkmark")
-                                .font(.system(size: 12, weight: .bold))
+                                .font(AppTypography.caption1(.bold))
                                 .foregroundColor(.white)
                         }
                         .shadow(color: badge.category.color.opacity(0.3), radius: 2, x: 0, y: 1)
@@ -603,7 +603,7 @@ struct BadgeSelectionItem: View {
                     // Locked overlay
                     if !badge.isUnlocked {
                         Image(systemName: "lock.fill")
-                            .font(.system(size: 14))
+                            .font(AppTypography.subhead())
                             .foregroundColor(Color.gray.opacity(0.7))
                             .background(
                                 Circle()
@@ -677,7 +677,7 @@ struct BadgeIconView: View {
                 .frame(width: 56, height: 56)
             
             Image(systemName: iconName)
-                .font(.system(size: 24))
+                .font(AppTypography.title2())
                 .foregroundColor(adaptiveIconColor)
         }
     }
@@ -706,7 +706,7 @@ struct BadgeNameLabel: View {
     
     var body: some View {
         Text(name)
-            .font(.system(size: 10, weight: .medium))
+            .font(AppTypography.caption2(.medium))
             .foregroundColor(.theme.text)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -730,7 +730,7 @@ struct SelectionCheckmark: View {
                 )
             
             Image(systemName: "checkmark")
-                .font(.system(size: 12, weight: .bold))
+                .font(AppTypography.caption1(.bold))
                 .foregroundColor(.white)
         }
         .offset(x: 25, y: -25)

@@ -52,7 +52,7 @@ struct ChangeUsernameView: View {
                                     .foregroundColor(Color.theme.subtext)
                                 
                                 Text("Username can be changed again on \(nextDate.formatted(date: .abbreviated, time: .shortened))")
-                                    .font(.footnote)
+                                    .font(AppTypography.footnote())
                                     .foregroundColor(Color.theme.subtext)
                             }
                             .padding(.vertical, 8)
@@ -61,7 +61,7 @@ struct ChangeUsernameView: View {
                         Text("Enter New Username")
                     } footer: {
                         Text("Username can contain letters, numbers, and underscores only.")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(Color.theme.subtext)
                     }
                     
@@ -258,7 +258,7 @@ struct UsernameLoadingView: View {
                     .scaleEffect(1.5)
                 
                 Text("Updating username...")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.white)
             }
             .padding(24)
@@ -277,10 +277,10 @@ struct SuccessToastView: View {
         HStack {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundColor(.white)
-                .font(.headline)
+                .font(AppTypography.headline())
             
             Text(message)
-                .font(.subheadline)
+                .font(AppTypography.subhead())
                 .fontWeight(.medium)
                 .foregroundColor(.white)
         }

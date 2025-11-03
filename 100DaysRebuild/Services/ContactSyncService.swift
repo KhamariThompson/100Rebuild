@@ -13,8 +13,8 @@ class ContactSyncService: ObservableObject {
     @Published var suggestedFriends: [UserSuggestion] = []
     @Published var errorMessage: String?
     
-    private let contactStore = CNContactStore()
-    private let firestore = Firestore.firestore()
+    nonisolated(unsafe) private let contactStore = CNContactStore()
+    nonisolated(unsafe) private let firestore = Firestore.firestore()
     
     private init() {
         checkContactsPermission()
@@ -22,10 +22,16 @@ class ContactSyncService: ObservableObject {
     
     // MARK: - Permission Management
     
-    func requestContactsPermission() async throws {
-        let status = try await contactStore.requestAccess(for: .contacts)
-        hasContactsPermission = status
-        
+    nonisolated func requestContactsPermission() async throws {
+        let status = try await Task.detached {
+            let store = CNContactStore()
+            return try await store.requestAccess(for: .contacts)
+        }.value
+
+        await MainActor.run {
+            hasContactsPermission = status
+        }
+
         if status {
             await processContacts()
         }
@@ -36,67 +42,64 @@ class ContactSyncService: ObservableObject {
     }
     
     // MARK: - Contact Processing
-    
+
     private func processContacts() async {
         guard hasContactsPermission else { return }
-        
+
         isProcessingContacts = true
         defer { isProcessingContacts = false }
-        
+
         do {
-            let contacts = try await fetchContacts()
-            let hashedIdentifiers = hashContactIdentifiers(contacts)
+            let hashedIdentifiers = try await fetchAndHashContacts()
             await findMatchingUsers(hashedIdentifiers: hashedIdentifiers)
         } catch {
             errorMessage = "Failed to process contacts: \(error.localizedDescription)"
         }
     }
-    
-    private func fetchContacts() async throws -> [CNContact] {
-        let keys: [CNKeyDescriptor] = [
-            CNContactGivenNameKey as CNKeyDescriptor,
-            CNContactFamilyNameKey as CNKeyDescriptor,
-            CNContactPhoneNumbersKey as CNKeyDescriptor,
-            CNContactEmailAddressesKey as CNKeyDescriptor
-        ]
-        
-        let request = CNContactFetchRequest(keysToFetch: keys)
-        var contacts: [CNContact] = []
-        
-        return try await withCheckedThrowingContinuation { continuation in
-            do {
-                try contactStore.enumerateContacts(with: request) { contact, _ in
-                    contacts.append(contact)
+
+    nonisolated private func fetchAndHashContacts() async throws -> Set<String> {
+        return try await Task.detached {
+            let keys: [CNKeyDescriptor] = [
+                CNContactGivenNameKey as CNKeyDescriptor,
+                CNContactFamilyNameKey as CNKeyDescriptor,
+                CNContactPhoneNumbersKey as CNKeyDescriptor,
+                CNContactEmailAddressesKey as CNKeyDescriptor
+            ]
+
+            let request = CNContactFetchRequest(keysToFetch: keys)
+            let store = CNContactStore()
+
+            var hashedIdentifiers = Set<String>()
+
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                do {
+                    try store.enumerateContacts(with: request) { contact, _ in
+                        // Hash phone numbers
+                        for phoneNumber in contact.phoneNumbers {
+                            let cleanedNumber = phoneNumber.value.stringValue.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+                            if !cleanedNumber.isEmpty {
+                                let hashedNumber = SHA256.hash(data: Data(cleanedNumber.utf8))
+                                    .compactMap { String(format: "%02x", $0) }.joined()
+                                hashedIdentifiers.insert(hashedNumber)
+                            }
+                        }
+
+                        // Hash email addresses
+                        for email in contact.emailAddresses {
+                            let emailString = email.value as String
+                            let hashedEmail = SHA256.hash(data: Data(emailString.lowercased().utf8))
+                                .compactMap { String(format: "%02x", $0) }.joined()
+                            hashedIdentifiers.insert(hashedEmail)
+                        }
+                    }
+                    continuation.resume(returning: ())
+                } catch {
+                    continuation.resume(throwing: error)
                 }
-                continuation.resume(returning: contacts)
-            } catch {
-                continuation.resume(throwing: error)
             }
-        }
-    }
-    
-    private func hashContactIdentifiers(_ contacts: [CNContact]) -> Set<String> {
-        var hashedIdentifiers = Set<String>()
-        
-        for contact in contacts {
-            // Hash phone numbers
-            for phoneNumber in contact.phoneNumbers {
-                let cleanedNumber = phoneNumber.value.stringValue.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-                if !cleanedNumber.isEmpty {
-                    let hashedNumber = hashString(cleanedNumber)
-                    hashedIdentifiers.insert(hashedNumber)
-                }
-            }
-            
-            // Hash email addresses
-            for email in contact.emailAddresses {
-                let emailString = email.value as String
-                let hashedEmail = hashString(emailString.lowercased())
-                hashedIdentifiers.insert(hashedEmail)
-            }
-        }
-        
-        return hashedIdentifiers
+
+            return hashedIdentifiers
+        }.value
     }
     
     private func hashString(_ input: String) -> String {

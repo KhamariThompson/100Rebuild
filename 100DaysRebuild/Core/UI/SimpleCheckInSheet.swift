@@ -94,7 +94,7 @@ struct SimpleCheckInSheet: View {
                         onDismiss()
                     }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
+                            .font(AppTypography.title2())
                             .foregroundColor(.theme.subtext)
                     }
                     .buttonStyle(AppScaleButtonStyle())
@@ -131,11 +131,11 @@ struct SimpleCheckInSheet: View {
                 
                 VStack(spacing: 20) {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 70))
+                        .font(AppTypography.display())
                         .foregroundColor(.theme.accent)
                     
                     Text("Check-In Saved!")
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .foregroundColor(.white)
                 }
@@ -171,26 +171,26 @@ struct SimpleCheckInSheet: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.xxs) {
             Text("Day \(dayNumber) of 100")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.accent)
             
             Text(challenge.title)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(AppTypography.font(size: 22, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
             
             HStack(spacing: AppSpacing.s) {
                 HStack(spacing: 4) {
                     Text("🔥")
-                        .font(.system(size: 14))
+                        .font(AppTypography.subhead())
                     Text("\(challenge.streakCount) day streak")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext)
                 }
                 
                 Spacer()
                 
                 Text("\(Int(challenge.progressPercentage * 100))% complete")
-                    .font(.subheadline)
+                    .font(AppTypography.subhead())
                     .foregroundColor(.theme.accent)
             }
             .padding(.top, AppSpacing.xxs)
@@ -203,21 +203,21 @@ struct SimpleCheckInSheet: View {
                 Image(systemName: "pencil.line")
                     .foregroundColor(.theme.accent)
                 Text("Journal Entry")
-                    .font(.headline)
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.text)
             }
             
             ZStack(alignment: .topLeading) {
                 if journalText.isEmpty {
                     Text("Write your thoughts...")
-                        .font(.subheadline)
+                        .font(AppTypography.subhead())
                         .foregroundColor(.theme.subtext.opacity(0.7))
                         .padding(.top, 8)
                         .padding(.leading, 4)
                 }
                 
                 TextEditor(text: $journalText)
-                    .font(.body)
+                    .font(AppTypography.body())
                     .foregroundColor(.theme.text)
                     .frame(height: 80)
                     .focused($isJournalFocused)
@@ -254,7 +254,7 @@ struct SimpleCheckInSheet: View {
                 Spacer()
                 
                 Text("Photos remaining: \(photosRemaining)/\(photoLimit)")
-                    .font(.caption)
+                    .font(AppTypography.caption1())
                     .foregroundColor(.theme.subtext)
             }
             
@@ -275,7 +275,7 @@ struct SimpleCheckInSheet: View {
                                     selectedImages.remove(at: index)
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 22))
+                                        .font(AppTypography.title2())
                                         .foregroundColor(.theme.accent)
                                         .background(Circle().fill(Color.white))
                                 }
@@ -314,9 +314,9 @@ struct SimpleCheckInSheet: View {
                 } label: {
                     HStack {
                         Image(systemName: "photo")
-                            .font(.system(size: 16))
+                            .font(AppTypography.body())
                         Text("Add Photo")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                     }
                     .foregroundColor(.theme.accent)
                     .padding(.vertical, AppSpacing.s)
@@ -351,9 +351,9 @@ struct SimpleCheckInSheet: View {
                 } label: {
                     HStack {
                         Image(systemName: "crown")
-                            .font(.system(size: 16))
+                            .font(AppTypography.body())
                         Text("Upgrade to Add More Photos")
-                            .font(.subheadline)
+                            .font(AppTypography.subhead())
                     }
                     .foregroundColor(.yellow)
                     .padding(.vertical, AppSpacing.s)
@@ -415,33 +415,25 @@ struct SimpleCheckInSheet: View {
     private func processImage(_ image: UIImage) async -> UIImage {
         // Resize and compress the image for better performance
         let targetSize = CGSize(width: 1200, height: 1200)
-        
+
         // If image is already small enough, return it as is
         if image.size.width <= targetSize.width && image.size.height <= targetSize.height {
             return image
         }
-        
+
         // Calculate new size maintaining aspect ratio
         let widthRatio = targetSize.width / image.size.width
         let heightRatio = targetSize.height / image.size.height
         let scaleFactor = min(widthRatio, heightRatio)
         let scaledSize = CGSize(width: image.size.width * scaleFactor, height: image.size.height * scaleFactor)
-        
-        // Ensure we're not on the main thread for heavy image processing
-        if Thread.isMainThread {
-            return await Task.detached(priority: .userInitiated) { 
-                let renderer = UIGraphicsImageRenderer(size: scaledSize)
-                return renderer.image { _ in
-                    image.draw(in: CGRect(origin: .zero, size: scaledSize))
-                }
-            }.value
-        } else {
-            // Already on a background thread, proceed directly
+
+        // Perform image processing on a detached task (background thread)
+        return await Task.detached(priority: .userInitiated) {
             let renderer = UIGraphicsImageRenderer(size: scaledSize)
             return renderer.image { _ in
                 image.draw(in: CGRect(origin: .zero, size: scaledSize))
             }
-        }
+        }.value
     }
     
     private var checkInButtonSection: some View {
@@ -451,7 +443,7 @@ struct SimpleCheckInSheet: View {
             handleCheckIn()
         } label: {
             Text("Complete Check-In")
-                .font(.system(size: 18, weight: .semibold))
+                .font(AppTypography.title3(.semibold))
                 .foregroundColor(colorScheme == .dark ? .black : .white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, AppSpacing.m)

@@ -51,7 +51,7 @@ public struct ProFeatureCard: View {
             // Card header with lock icon
             HStack {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 18))
+                    .font(AppTypography.headline())
                     .foregroundColor(.theme.accent)
                 
                 Text("Pro Feature")
@@ -65,7 +65,7 @@ public struct ProFeatureCard: View {
             // Title and description
             VStack(spacing: AppSpacing.s) {
                 Text(title)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(AppTypography.title3(.bold))
                     .foregroundColor(.theme.text)
                     .multilineTextAlignment(.center)
                 
@@ -96,7 +96,7 @@ public struct ProFeatureCard: View {
                     
                     // Lock icon overlay
                     Image(systemName: "lock.circle.fill")
-                        .font(.system(size: 40))
+                        .font(AppTypography.display())
                         .foregroundColor(.theme.accent.opacity(0.8))
                 }
                 .frame(height: 150)

@@ -1,6 +1,7 @@
 import Foundation
 
 // Protocols to allow testing and DI for FriendService in the future.
+@MainActor
 protocol FriendServiceProtocol: AnyObject {
     var friends: [Friend] { get }
     var incomingRequests: [FriendRequest] { get }

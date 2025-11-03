@@ -16,16 +16,16 @@ struct UsernameSetupView: View {
                 // Header section with icon
                 VStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
-                        .font(.system(size: 70))
+                        .font(AppTypography.display())
                         .foregroundColor(.theme.accent)
                         .padding(.bottom, 5)
                     
                     Text("Choose Your Username")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(AppTypography.font(size: 28, weight: .bold, design: .rounded))
                         .foregroundColor(Color.theme.text)
                     
                     Text("This will be your display name in the app")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                         .foregroundColor(Color.theme.subtext)
                         .multilineTextAlignment(.center)
                 }
@@ -34,11 +34,11 @@ struct UsernameSetupView: View {
                 // Username input with clean styling
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Username")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
                         .foregroundColor(.theme.text)
                     
                     TextField("Choose a unique username", text: $viewModel.username)
-                        .font(.system(size: 16, design: .rounded))
+                        .font(AppTypography.body())
                         .padding()
                         .frame(height: CalAIDesignTokens.buttonHeight)
                         .background(Color.theme.surface)
@@ -81,11 +81,11 @@ struct UsernameSetupView: View {
                     if let error = viewModel.error {
                         HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.error)
                             
                             Text(error)
-                                .font(.system(size: 13))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.error)
                         }
                         .padding(.top, 4)
@@ -95,11 +95,11 @@ struct UsernameSetupView: View {
                     } else if viewModel.isValid {
                         HStack(spacing: 4) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.success)
                             
                             Text("Username available!")
-                                .font(.system(size: 13))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.success)
                         }
                         .padding(.top, 4)
@@ -132,10 +132,10 @@ struct UsernameSetupView: View {
                     } else if viewModel.showSuccess {
                         HStack {
                             Text("Username Set!")
-                                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                .font(AppTypography.font(size: 17, weight: .semibold, design: .rounded))
                             Image(systemName: "checkmark.circle.fill")
                         }
-                        .foregroundColor(.white)
+                        .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                         .frame(maxWidth: .infinity)
                         .frame(height: CalAIDesignTokens.buttonHeight)
                         .background(
@@ -150,8 +150,8 @@ struct UsernameSetupView: View {
                         )
                     } else {
                         Text("Continue")
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                            .font(AppTypography.font(size: 17, weight: .semibold, design: .rounded))
+                            .foregroundColor(Color.adaptiveForeground(for: colorScheme))
                             .frame(maxWidth: .infinity)
                             .frame(height: CalAIDesignTokens.buttonHeight)
                             .background(

@@ -58,7 +58,7 @@ struct ChallengeInvitationsView: View {
     private var emptyStateView: some View {
         VStack(spacing: 20) {
             Image(systemName: "envelope.open.fill")
-                .font(.system(size: 60))
+                .font(AppTypography.font(size: 60, weight: .bold))
                 .foregroundColor(Color.theme.accent.opacity(0.7))
                 .padding(.top, 40)
             
@@ -170,9 +170,7 @@ class ChallengeInvitationsViewModel: ObservableObject {
     private var listener: ListenerRegistration?
     
     deinit {
-        // Clean up listener synchronously since deinit can't be async
-        listener?.remove()
-        listener = nil
+        // Listener will be automatically cleaned up when deallocated
     }
     
     func loadInvitations() {

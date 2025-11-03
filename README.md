@@ -1,328 +1,187 @@
-# 100Days
+# 100Days - Habit Tracking App
 
-A professional-grade iOS app for tracking and completing 100-day challenges, built with SwiftUI and following MVVM + Feature-based architecture. This app helps users build habits and track their progress through 100-day challenges with features like streak tracking, progress visualization, and smart reminders.
+A production-ready iOS app for building sustainable habits through 100-day challenges. Built with SwiftUI following MVVM + Feature-based architecture.
 
-## 🚀 Prerequisites
+## Overview
 
-Before you begin, ensure you have the following installed:
+100Days helps users commit to and track 100-day challenges with features including:
 
-- Xcode 15.0 or later
-- iOS 17.0 or later
-- Swift 5.9 or later
-- CocoaPods (for Firebase dependencies)
-- A Firebase account (for backend services)
+- Daily check-ins and progress tracking
+- Streak monitoring and consistency analytics
+- Achievement badges and milestones
+- Pro subscription with RevenueCat
 
-## 🚀 Features
+## Requirements
 
-- **Challenge Tracking**: Create and monitor your 100-day challenges
-- **Daily Check-ins**: Record your progress with optional notes
-- **Streak Counter**: Track your current and longest streaks
-- **Progress Stats**: View detailed progress metrics and completion rates
-- **Smart Reminders**: Get notified when it's time to check in
-- **Multiple Challenges**: Manage different challenges simultaneously
-- **Milestone Celebrations**: Beautiful, animated celebration modals when you reach key milestones (Day 3, 7, 30, 50, 100)
-- **Social Sharing**: Share your milestone achievements with customizable cards
-- **Dark Mode**: Beautiful dark-themed UI that's easy on the eyes
-- **Pro Features**: Analytics, unlimited challenges, and more with a subscription
+- **iOS:** 16.0+
+- **Xcode:** 15.0+
+- **Swift:** 5.9+
 
-## 🏗️ Project Structure
+## Quick Start
+
+### 1. Clone & Install
+
+```bash
+git clone <repository-url>
+cd 100Rebuild
+open 100DaysRebuild.xcodeproj
+```
+
+Dependencies are managed via Swift Package Manager and will download automatically.
+
+### 2. Firebase Setup
+
+1. Add `GoogleService-Info.plist` to the `100DaysRebuild` folder
+2. Configure Firebase Console with:
+   - Authentication (Email/Password, Google, Apple)
+   - Firestore Database
+   - Storage
+
+### 3. RevenueCat Setup
+
+**Product IDs (must match App Store Connect):**
+
+- `com.KhamariThompson.100Days.monthlyv2`
+- `com.KhamariThompson.100Days.annualv1`
+- `com.KhamariThompson.100Days.annualv1.no_introv1`
+
+**RevenueCat Dashboard Configuration:**
+
+- Offering ID: `default`
+- Entitlement: `Pro`
+- Packages: `monthly`, `annual`, `annual_no_intro`
+
+## Architecture
 
 ```
 100DaysRebuild/
-├── App/
-│   └── App.swift               # Main app entry point with AppDelegate
 ├── Core/
-│   ├── DesignSystem/
-│   │   ├── Colors.swift        # Color palette and theme
-│   │   ├── Typography.swift    # Typography system
-│   │   ├── ButtonStyles.swift  # Reusable button styles
-│   │   ├── ThemeManager.swift  # Theme management
-│   │   ├── AppSpacing.swift    # Spacing constants
-│   │   ├── Components.swift    # Reusable UI components
-│   │   ├── StatCard.swift      # Statistics cards
-│   │   └── ProgressComponents.swift # Progress UI components
-│   ├── UI/                     # Common UI components
-│   ├── Navigation/             # Navigation helpers
-│   ├── Extensions/             # Swift extensions
-│   └── Utils/                  # Utility functions
+│   ├── DesignSystem/     # UI components, colors, typography
+│   ├── Navigation/       # AppRouter, centralized routing
+│   ├── UI/               # Reusable components
+│   └── Utils/            # Constants, extensions
 ├── Features/
-│   ├── Auth/                   # Authentication
-│   ├── Challenges/             # Challenge management
-│   ├── CheckIn/                # Daily check-in functionality
-│   ├── Progress/               # Progress tracking and visualization
-│   ├── Profile/                # User profile
-│   ├── Reminders/              # Notification settings
-│   ├── Settings/               # App settings
-│   ├── Social/                 # Social sharing features
-│   ├── Subscription/           # Pro subscription features
-│   └── TimerSession/           # Timer functionality
-├── Models/                     # Data models
+│   ├── Auth/             # Authentication flows
+│   ├── CheckIn/          # Daily check-in
+│   ├── Challenges/       # Challenge management
+│   ├── Profile/          # User profile
+│   ├── Progress/         # Progress tracking
+│   ├── Settings/         # Settings
+│   └── Social/           # Friend features
 ├── Services/
-│   ├── FirebaseService.swift   # Firebase integration
-│   ├── NotificationService.swift # Local notifications
-│   ├── AuthService.swift       # Authentication service
-│   ├── SubscriptionService.swift # RevenueCat integration
-│   ├── ChallengeService.swift  # Challenge data management
-│   ├── CheckInService.swift    # Check-in functionality
-│   ├── UserSession.swift       # User state management
-│   ├── ProgressService.swift   # Progress calculations
-│   └── NetworkMonitor.swift    # Network connectivity monitoring
-├── Resources/                  # Assets and resources
-├── Configuration/              # App configuration
-└── SupportingFiles/
-    ├── Info.plist              # App configuration
-    └── GoogleService-Info.plist # Firebase config
+│   ├── UserSession.swift          # Auth state (SSOT)
+│   ├── MigrationManager.swift     # Data migrations
+│   └── SubscriptionService.swift  # Legacy service
+└── Subscription/
+    ├── Domain/           # Models, policies, IDs
+    ├── Service/          # SubscriptionStore (SSOT)
+    ├── Data/             # RevenueCat repository
+    └── UI/               # Paywall, subscription UI
 ```
 
-## 🛠️ Setup Instructions
+## Key Features
 
-### 1. Clone the Repository
+### Subscription System
 
-```bash
-git clone https://github.com/KhamariThompson/100Rebuild.git
-cd 100DaysRebuild
+- **Grandfather Policy:** Users before Nov 1, 2025 get 1 year free Pro
+- **New User Funnel:** Post-signup onboarding with paywall
+- **RevenueCat Integration:** Production-ready with StoreKit 2
+- **Offline Support:** Graceful offline handling
+
+### Progress Tracking
+
+- Consistency calendar heatmap
+- Streak tracking (current & longest)
+- Completion percentage & trends
+- Projected completion date
+
+### Social Features
+
+- Friend connections
+- Group challenges
+- Activity feed
+- Leaderboards
+
+## Configuration
+
+### Constants (`Constants.swift`)
+
+```swift
+// Subscription cutoff date
+enum Onboarding {
+    static let newFunnelStartDate = Nov 1, 2025 00:00:00 UTC
+    static let grandfatherDuration = 365 days
+}
+
+// Feature flags
+enum FeatureFlags {
+    static var routingV2Enabled: Bool { true }
+    static var overrideNoFunnel: Bool { false }
+}
 ```
 
-### 2. Install Dependencies
+### Subscription IDs (`SubscriptionIDs.swift`)
 
-```bash
-# Install project dependencies
-pod install
+```swift
+static let entitlement = "Pro"
+static let offeringID = "default"
+
+enum ProductID {
+    static let monthly = "com.KhamariThompson.100Days.monthlyv2"
+    static let annualIntro = "com.KhamariThompson.100Days.annualv1"
+    static let annualNoIntro = "com.KhamariThompson.100Days.annualv1.no_introv1"
+}
 ```
 
-### 3. Firebase Setup
+## Production Build
 
-1. Create a new Firebase project at [Firebase Console](https://console.firebase.google.com/)
-2. Add an iOS app to your Firebase project
-3. Download `GoogleService-Info.plist`
-4. Place `GoogleService-Info.plist` in the `100DaysRebuild` directory
-5. Enable Authentication and Firestore in Firebase Console
+### Pre-Release Checklist
 
-### 4. RevenueCat Setup
+✅ **Code:**
 
-1. Create a RevenueCat account
-2. Set up your product and entitlement in the RevenueCat dashboard
-3. Ensure your "pro" entitlement is properly configured
-4. Update the API key in SubscriptionService.swift if needed
+- Debug logging removed
+- Product IDs verified
+- RevenueCat production API key set
+- Firebase production mode enabled
 
-### 5. Build and Run
+✅ **Testing:**
 
-1. Open `100DaysRebuild.xcworkspace` (not .xcodeproj)
-2. Select your development team in Xcode
-3. Choose a simulator or device
-4. Build and run (⌘R)
+- Subscription flows (purchase, restore, cancel)
+- Grandfather logic (users before cutoff)
+- New user onboarding flow
+- Offline scenarios
 
-## 🎨 Design System
+✅ **App Store Connect:**
 
-The app uses a comprehensive, modern design system:
+- In-App Purchases created & approved
+- Pricing configured
+- All metadata filled
+- Screenshots uploaded
 
-### Colors
+### Build Steps
 
-- Primary: #007AFF (iOS Blue)
-- Secondary: #5856D6 (Purple)
-- Background: #000000 (Black)
-- Surface: #1C1C1E (Dark Gray)
-- Text: #FFFFFF (White)
-- Subtext: #8E8E93 (Light Gray)
+1. Archive: Product → Archive
+2. Distribute: App Store Connect
+3. TestFlight: Beta test with real users
+4. Submit: App Store Review
 
-### Typography
+## Documentation
 
-- Headline: SF Pro Display, 34pt
-- Title: SF Pro Display, 28pt
-- Body: SF Pro Text, 17pt
-- Caption: SF Pro Text, 12pt
+Essential documentation is located in the `docs/` folder:
 
-### Components
+- **App Store Submission:** `docs/APP_STORE_SUBMISSION_CHECKLIST.md`
+- **Production Readiness:** `docs/PRODUCTION_READINESS_CHECKLIST.md`
+- **Design System:** `docs/DESIGN_SYSTEM.md`
+- **App Icons:** `docs/APP_ICONS.md`
 
-- Cards with 16pt corner radius
-- Subtle shadows and gradients
-- Consistent spacing using AppSpacing constants
-- Animated transitions
-- Standardized button styles
+Archived historical documentation: `Archive/` folder
 
-## 🔧 Configuration
+## Support
 
-### API Security
+- Support URL: https://100days.site/support
+- Privacy Policy: https://100days.site/privacy
+- Terms of Service: https://100days.site/terms
 
-**Important**: Do not store API keys in configuration files for production builds. Instead:
+---
 
-1. For RevenueCat: Use the secure runtime wrapper in SubscriptionService.swift
-2. For Firebase: Use GoogleService-Info.plist (which is gitignored)
-
-### Authentication
-
-The app supports:
-
-- Email/Password authentication
-- Apple Sign-In
-- Google Sign-In
-
-### Build Settings
-
-- Deployment Target: iOS 17.0
-- Swift Version: 5.9
-- Enable Dark Mode
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/YourFeature`)
-3. Commit your changes (`git commit -m 'Add YourFeature'`)
-4. Push to the branch (`git push origin feature/YourFeature`)
-5. Open a Pull Request
-
-### Code Style
-
-- Follow Swift Style Guide
-- Use SwiftLint for code formatting
-- Write unit tests for new features
-- Document public APIs
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Firebase for backend services
-- RevenueCat for subscription management
-- SwiftUI for the amazing UI framework
-- The iOS community for inspiration and support
-
-## Troubleshooting
-
-### Fixing "68 duplicate symbols" Linker Error
-
-If you encounter a linker error with "68 duplicate symbols" when building the project, the following changes have been made to address this issue:
-
-1. The root-level `Core` directory has been renamed to `Core.bak` to prevent it from being included in the build and causing duplicate symbol definitions with `100DaysRebuild/Core`.
-
-2. Added the `-Wl,-no_warn_duplicate_libraries` flag to the project's Other Linker Flags to suppress warnings about duplicate libraries.
-
-To build the project after these changes:
-
-- Clean the build folder (Shift+Command+K)
-- Build the project (Command+B)
-
-If you still encounter issues, you may need to:
-
-1. Check for duplicate module imports in your code
-2. Look for duplicate class/struct definitions across the project
-3. Verify that the same frameworks aren't being imported multiple times through different dependency paths
-
-## Technical Improvements
-
-### Authentication System Rebuild
-
-The authentication system has been completely redesigned to provide a more reliable authentication experience:
-
-- Consolidated authentication methods in AuthService class
-- Implemented proper error handling and network awareness
-- Created non-throwing wrappers for all auth operations
-- Fixed Apple Sign-In issues with proper authentication flow
-
-### Check-In Functionality Improvements
-
-- Implemented robust check-in validation
-- Fixed navigation conflicts between check-in and edit flows
-- Added proper streak counting and statistics updates
-- Enhanced data persistence with Firestore
-
-### Performance Optimizations
-
-- Reduced Firebase cache size from 100MB to 10MB
-- Implemented memory warning handlers
-- Optimized animations and UI transitions
-- Improved network request handling with timeout management
-- Added offline mode support with recovery mechanisms
-
-### UI/UX Enhancements
-
-- Implemented comprehensive design system with consistent typography, colors and spacing
-- Fixed navigation bar appearance and constraint issues
-- Enhanced keyboard handling
-- Added proper loading states throughout the app
-
-## App Store Submission Checklist
-
-Before submitting the app to the App Store, ensure all of these items are ready:
-
-### Required Assets
-
-- [x] App icon in all required sizes (1024x1024 for App Store)
-- [x] Screenshots for all supported device sizes
-- [x] App preview videos (optional but recommended)
-
-### Metadata
-
-- [x] App name: 100Days
-- [x] App description
-- [x] Keywords for App Store search
-- [x] Privacy policy URL (https://100days.site/privacy)
-- [x] Support URL
-- [x] Marketing URL (optional)
-- [x] Copyright information
-
-### Technical Requirements
-
-- [x] All features are fully functional
-- [x] Data is properly saved to Firebase/Firestore
-- [x] Challenges are correctly filtered (showing active, hiding archived)
-- [x] Progress view shows correct challenge statistics
-- [x] Fixed duplicate navigation headers throughout the app
-- [x] Ensured proper data persistence when offline
-- [x] Fixed all constraint issues in SFAuthenticationViewController
-- [x] Optimized memory usage for large challenge lists
-
-### Compliance
-
-- [x] Privacy policy implemented and accessible in the app
-- [x] Terms of Service implemented and accessible in the app
-- [x] App complies with Apple's App Review Guidelines
-- [x] Ensured no hardcoded API credentials in the app
-- [x] Subscription products configured in App Store Connect
-- [x] In-app purchases tested and working
-
-### Final Testing
-
-- [x] Tested on multiple iOS versions
-- [x] Verified proper functionality on slow network connections
-- [x] Checked compatibility with different device sizes
-- [x] Ensured dark mode support works correctly
-- [x] Verified all animations run smoothly
-
-## Memory and Performance Optimizations
-
-The app has undergone significant memory and performance optimizations to resolve freezing issues:
-
-1. **Tab Navigation System**: Simplified tab navigation with optimized animations
-2. **Memory Management**: Added proper cleanup for timers and background tasks
-3. **Animation Improvements**: Reduced expensive animations and simplified transitions
-4. **Cache Management**: Added memory warning handlers to clear caches when system memory is low
-5. **Network Requests**: Improved timeout handling and error recovery
-
-If you encounter frozen UI:
-
-- Force quit the app from the app switcher
-- Restart the app
-- If problems persist, try restarting your device
-
-These optimizations significantly improve stability while maintaining the app's responsiveness and visual polish.
-
-## Running social feature tests locally
-
-This project uses Firestore for social features (friend requests, friend lists). To run tests that interact with Firestore locally, use the Firebase Emulator Suite.
-
-1. Install Firebase CLI:
-
-   npm install -g firebase-tools
-
-2. Start the emulator in the repo root:
-
-   firebase emulators:start --only firestore
-
-3. In Xcode or your test runner, point your Firestore initialization to the emulator host (typically localhost:8080) using the Firebase SDK emulator setup.
-
-4. Run the unit/integration tests in Xcode or via `xcodebuild`.
-
-Note: Some test scaffolding is added in `Tests/FriendServiceTests` as placeholders — replace with proper emulator-backed tests in CI.
+**Copyright © 2025 Khamari Thompson. All rights reserved.**

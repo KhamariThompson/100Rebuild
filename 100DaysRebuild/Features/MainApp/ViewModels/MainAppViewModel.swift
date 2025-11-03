@@ -157,10 +157,11 @@ class MainAppViewModel: ObservableObject {
     
     /// Cleanup method that can be safely called from any thread
     /// Set and Cancellable operations are thread-safe
-    @MainActor(unsafe)
-    private func nonisolatedCleanup() {
+    nonisolated private func nonisolatedCleanup() {
         print("🧹 MainAppViewModel cleaning up")
-        cancellables.forEach { $0.cancel() }
-        cancellables.removeAll()
+        Task { @MainActor in
+            cancellables.forEach { $0.cancel() }
+            cancellables.removeAll()
+        }
     }
 } 

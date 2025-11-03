@@ -33,12 +33,12 @@ class UserProgressViewModelImpl: ObservableObject {
     private let firestore = Firestore.firestore()
     private var loadTask: Task<Void, Never>?
     private var networkMonitor = NetworkMonitor.shared
-    private var cancellables = Set<AnyCancellable>()
-    
+    nonisolated(unsafe) private var cancellables = Set<AnyCancellable>()
+
     init() {
         setupNetworkMonitoring()
     }
-    
+
     deinit {
         loadTask?.cancel()
         cancellables.forEach { $0.cancel() }

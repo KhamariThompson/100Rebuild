@@ -113,11 +113,11 @@ struct Milestone: Identifiable {
 @MainActor
 class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
     private let challengeStore = ChallengeStore.shared
-    private var loadTask: Task<Void, Never>?
-    private var cancellables = Set<AnyCancellable>()
+    nonisolated(unsafe) private var loadTask: Task<Void, Never>?
+    nonisolated(unsafe) private var cancellables = Set<AnyCancellable>()
     private let maxRetries = 3
     private let retryDelay: TimeInterval = 2.0
-    
+
     deinit {
         loadTask?.cancel()
         cancellables.removeAll()
@@ -135,28 +135,15 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         // Observe challenge updates from ChallengeStore
         NotificationCenter.default.publisher(for: ChallengeStore.challengesDidUpdateNotification)
             .sink { [weak self] _ in
-                self?.handle(.loadProgress)
+                // Avoid sending the MainActor-isolated `self` into the Combine
+                // subscriber closure (which can execute concurrently). Capture a
+                // weak reference and dispatch the work onto the MainActor.
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    await self.loadUserProgress()
+                }
             }
             .store(in: &cancellables)
-    }
-    
-    override func handle(_ action: ProgressAction) {
-        switch action {
-        case .loadProgress:
-            Task {
-                await loadUserProgress()
-            }
-        case .retryLoading:
-            Task {
-                await retryLoadProgress()
-            }
-        case .viewMilestone:
-            // Implemented by the navigation container
-            break
-        case .shareProgress:
-            // Implemented by the view controller
-            break
-        }
     }
     
     private func retryLoadProgress() async {
@@ -189,42 +176,42 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         
         // Cancel any existing task
         loadTask?.cancel()
-        
-        loadTask = Task { [weak self] in
+
+        loadTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
-            
+
             do {
                 // Ensure the challenge store is up to date
-                await challengeStore.refreshChallenges()
-                
+                await self.challengeStore.refreshChallenges()
+
                 // Get overall progress directly from the store
-                let overallProgress = challengeStore.overallCompletionPercentage
-                
+                let overallProgress = self.challengeStore.overallCompletionPercentage
+
                 // Extract challenges from the store
-                let challenges = challengeStore.challenges
-                
+                let challenges = self.challengeStore.challenges
+
                 if Task.isCancelled { return }
-                
+
                 // Convert significant milestones to our data model
                 let milestones = self.extractMilestones(from: challenges)
-                
+
                 if Task.isCancelled { return }
-                
-                state.overallProgress = overallProgress
-                state.milestones = milestones
-                state.isLoading = false
-                state.lastLoadTime = Date()
-                state.retryCount = 0 // Reset retry count on success
-                
+
+                self.state.overallProgress = overallProgress
+                self.state.milestones = milestones
+                self.state.isLoading = false
+                self.state.lastLoadTime = Date()
+                self.state.retryCount = 0 // Reset retry count on success
+
             } catch {
                 if !Task.isCancelled {
-                    state.error = error.localizedDescription
-                    state.isLoading = false
-                    
+                    self.state.error = error.localizedDescription
+                    self.state.isLoading = false
+
                     // Auto-retry if network error and not already a retry
-                    if !isRetry && state.retryCount < self.maxRetries {
+                    if !isRetry && self.state.retryCount < self.maxRetries {
                         // Schedule retry
-                        scheduleRetry()
+                        self.scheduleRetry()
                     }
                 }
             }
@@ -232,9 +219,10 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
     }
     
     private func scheduleRetry() {
-        Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
-            guard let self = self, !Task.isCancelled else { return }
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(self.retryDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
             await self.retryLoadProgress()
         }
     }
@@ -345,14 +333,6 @@ class ProgressViewModel: ViewModel<ProgressState, ProgressAction> {
         // Fallback to start date plus days
         return calendar.date(byAdding: .day, value: days, to: challenge.startDate) ?? challenge.startDate
     }
-    
-    // Add a nonisolated method for deinit to use
-    nonisolated func cancelTaskOnly() {
-        Task { @MainActor in
-            loadTask?.cancel()
-            loadTask = nil
-        }
-    }
 }
 
 // MARK: - UPViewModel Implementation
@@ -411,10 +391,10 @@ class ProgressDashboardViewModel: ObservableObject {
     @MainActor private var badgeService: BadgeService { BadgeService.shared }
     
     // Add Combine cancellables for subscriptions
-    private var cancellables = Set<AnyCancellable>()
-    
+    nonisolated(unsafe) private var cancellables = Set<AnyCancellable>()
+
     // Add debounce timer
-    private var refreshDebounceTimer: Timer?
+    nonisolated(unsafe) private var refreshDebounceTimer: Timer?
     private let refreshDebounceInterval: TimeInterval = 2.0
     
     // Private initializer for singleton
@@ -478,15 +458,17 @@ class ProgressDashboardViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] stats in
-                guard let self = self else { return }
-                
-                // Update hasData based on whether stats has meaningful data
-                let hasUserStats = stats.totalChallenges > 0
-                
-                // Only update if data status would change or if we have data
-                if self.hasData != hasUserStats || hasUserStats {
-                    self.hasData = hasUserStats
-                    print("ProgressDashboardViewModel updated from UserStatsService - hasData: \(hasUserStats)")
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+
+                    // Update hasData based on whether stats has meaningful data
+                    let hasUserStats = stats.totalChallenges > 0
+
+                    // Only update if data status would change or if we have data
+                    if self.hasData != hasUserStats || hasUserStats {
+                        self.hasData = hasUserStats
+                        print("ProgressDashboardViewModel updated from UserStatsService - hasData: \(hasUserStats)")
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -495,12 +477,14 @@ class ProgressDashboardViewModel: ObservableObject {
         NotificationCenter.default.publisher(for: BadgeService.badgeUnlockedNotification)
             .receive(on: RunLoop.main)
             .sink { [weak self] notification in
-                guard let self = self, let badge = notification.object as? Badge else { return }
-                print("ProgressDashboardViewModel received badge unlock notification for \(badge.name)")
-                
-                // Show badge unlock celebration
-                self.newlyUnlockedBadge = badge
-                self.showingBadgeUnlock = true
+                Task { @MainActor [weak self] in
+                    guard let self = self, let badge = notification.object as? Badge else { return }
+                    print("ProgressDashboardViewModel received badge unlock notification for \(badge.name)")
+
+                    // Show badge unlock celebration
+                    self.newlyUnlockedBadge = badge
+                    self.showingBadgeUnlock = true
+                }
             }
             .store(in: &cancellables)
         
@@ -509,12 +493,14 @@ class ProgressDashboardViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .debounce(for: .seconds(0.5), scheduler: RunLoop.main)
             .sink { [weak self] isLoading in
-                guard let self = self else { return }
-                // Only update our loading state if UserStatsService is loading
-                // and we're not already loading something else
-                if isLoading && !self.isLoading {
-                    self.isLoading = true
-                    print("ProgressDashboardViewModel - Loading state updated from UserStatsService")
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    // Only update our loading state if UserStatsService is loading
+                    // and we're not already loading something else
+                    if isLoading && !self.isLoading {
+                        self.isLoading = true
+                        print("ProgressDashboardViewModel - Loading state updated from UserStatsService")
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -524,18 +510,20 @@ class ProgressDashboardViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                print("ProgressDashboardViewModel received userStatsDidUpdateNotification")
-                
-                // Mark as having data if UserStatsService has meaningful stats
-                if UserStatsService.shared.userStats.totalChallenges > 0 {
-                    self.hasData = true
-                    self.isInitialLoad = false
-                }
-                
-                // If we were loading, finish loading state
-                if self.isLoading {
-                    self.isLoading = false
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    print("ProgressDashboardViewModel received userStatsDidUpdateNotification")
+
+                    // Mark as having data if UserStatsService has meaningful stats
+                    if UserStatsService.shared.userStats.totalChallenges > 0 {
+                        self.hasData = true
+                        self.isInitialLoad = false
+                    }
+
+                    // If we were loading, finish loading state
+                    if self.isLoading {
+                        self.isLoading = false
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -549,14 +537,13 @@ class ProgressDashboardViewModel: ObservableObject {
                 print("ProgressDashboardViewModel received challenge updates - refreshing consistency calendar")
                 
                 // Update calendar data with fresh check-in information
-                Task { [self] in
-                    // Generate new check-in data for the consistency calendar
-                    let newCheckInData = self.generateCheckInMapFromChallenges()
-                    
-                    // Update the map on the main thread
-                    await MainActor.run {
-                        self.dateIntensityMap = newCheckInData
-                    }
+                // Compute the new data synchronously here and then update the
+                // actor state from a Task that captures `self` weakly so we
+                // don't send the MainActor-isolated `self` into a @Sendable
+                // task closure.
+                let newCheckInData = self.generateCheckInMapFromChallenges()
+                Task { @MainActor [weak self] in
+                    self?.dateIntensityMap = newCheckInData
                 }
             }
             .store(in: &cancellables)
@@ -583,7 +570,7 @@ class ProgressDashboardViewModel: ObservableObject {
     private func debouncedRefresh() {
         refreshDebounceTimer?.invalidate()
         refreshDebounceTimer = Timer.scheduledTimer(withTimeInterval: refreshDebounceInterval, repeats: false) { [weak self] _ in
-            Task { [weak self] in
+            Task { @MainActor [weak self] in
                 await self?.loadData(forceRefresh: true)
             }
         }
@@ -599,40 +586,41 @@ class ProgressDashboardViewModel: ObservableObject {
         
         // Cancel any existing task to avoid race conditions
         loadTask?.cancel()
-        
-        loadTask = Task {
+
+        loadTask = Task { @MainActor [weak self] in
+            guard let self = self else { return }
             do {
-                isLoading = true
-                
+                self.isLoading = true
+
                 // First load all user challenges to get the data we need
-                try await loadUserChallenges()
-                
+                try await self.loadUserChallenges()
+
                 // Then load user stats which will be used for progress calculations
-                try await loadUserStats()
-                
+                try await self.loadUserStats()
+
                 // Additional data for UI components
-                try await fetchAdditionalData()
-                
+                try await self.fetchAdditionalData()
+
                 // Set hasData to true if we have fetched data
                 if !Task.isCancelled {
-                    hasData = true
-                    errorMessage = nil
-                    isInitialLoad = false
+                    self.hasData = true
+                    self.errorMessage = nil
+                    self.isInitialLoad = false
                 }
-                
+
                 print("ProgressDashboardViewModel: Data loading completed")
             } catch {
                 if !Task.isCancelled {
                     print("ProgressDashboardViewModel: Error loading data: \(error.localizedDescription)")
-                    errorMessage = "Could not load progress data: \(error.localizedDescription)"
+                    self.errorMessage = "Could not load progress data: \(error.localizedDescription)"
                 }
             }
-            
+
             if !Task.isCancelled {
-                isLoading = false
+                self.isLoading = false
             }
-            
-            loadTask = nil
+
+            self.loadTask = nil
         }
     }
     

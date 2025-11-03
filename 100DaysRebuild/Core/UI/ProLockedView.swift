@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ProLockedView<Content: View>: View {
     let content: Content
-    @StateObject private var entitlements = Entitlements.shared
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @State private var isShowingPaywall = false
@@ -21,18 +20,18 @@ struct ProLockedView<Content: View>: View {
         ZStack {
             // Content with enhanced visual treatment
             content
-                .blur(radius: entitlements.effectiveIsProUser ? 0 : 5)
-                .opacity(entitlements.effectiveIsProUser ? 1 : 0.4)
-                .scaleEffect(entitlements.effectiveIsProUser ? 1 : 0.98)
-                .animation(.easeInOut(duration: 0.5), value: entitlements.effectiveIsProUser)
-                .onChange(of: entitlements.effectiveIsProUser) { newValue in
+                .blur(radius: entitlementsAdapter.hasProAccess ? 0 : 5)
+                .opacity(entitlementsAdapter.hasProAccess ? 1 : 0.4)
+                .scaleEffect(entitlementsAdapter.hasProAccess ? 1 : 0.98)
+                .animation(.easeInOut(duration: 0.5), value: entitlementsAdapter.hasProAccess)
+                .onChange(of: entitlementsAdapter.hasProAccess) { newValue in
                     withAnimation(.easeInOut(duration: 0.5)) {
                         isContentVisible = newValue
                     }
                 }
 
             // Enhanced overlay for non-pro users
-            if !entitlements.effectiveIsProUser {
+            if !entitlementsAdapter.hasProAccess {
                 VStack(spacing: AppSpacing.m) {
                     // Animated lock icon with glow effect
                     ZStack {
@@ -49,7 +48,7 @@ struct ProLockedView<Content: View>: View {
                         
                         // Lock icon with animated appearance
                         Image(systemName: "lock.fill")
-                            .font(.system(size: AppSpacing.iconSizeLarge, weight: .semibold))
+                            .font(AppTypography.title1(.semibold))
                             .foregroundColor(.theme.accent)
                             .padding(AppSpacing.m)
                             .background(
@@ -160,7 +159,7 @@ struct ProLockedView<Content: View>: View {
                     .padding()
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                .animation(.easeInOut(duration: 0.3), value: entitlements.effectiveIsProUser)
+                .animation(.easeInOut(duration: 0.3), value: entitlementsAdapter.hasProAccess)
             }
         }
         .sheet(isPresented: $isShowingPaywall, onDismiss: {
@@ -200,7 +199,7 @@ struct ProFeatureItem: View {
     var body: some View {
         HStack(spacing: AppSpacing.xxs) {
             Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
+                .font(AppTypography.caption1(.semibold))
                 .foregroundColor(.theme.accent)
             
             Text(text)
@@ -225,7 +224,7 @@ struct ProLockedView_Previews: PreviewProvider {
                     Text("Pro Content")
                         .font(AppTypography.title1())
                     Image(systemName: "star.fill")
-                        .font(.largeTitle)
+                        .font(AppTypography.largeTitle())
                 }
                 .frame(width: 300, height: 300)
                 .background(Color.theme.surface)
@@ -237,7 +236,7 @@ struct ProLockedView_Previews: PreviewProvider {
                     Text("Pro Content")
                         .font(AppTypography.title1())
                     Image(systemName: "star.fill")
-                        .font(.largeTitle)
+                        .font(AppTypography.largeTitle())
                 }
                 .frame(width: 300, height: 300)
                 .background(Color.theme.surface)

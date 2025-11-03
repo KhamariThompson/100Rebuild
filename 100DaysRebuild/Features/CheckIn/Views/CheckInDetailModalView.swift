@@ -502,7 +502,7 @@ struct ShareCard: View {
             
             // Day number
             Text("DAY \(dayNumber)")
-                .font(.system(size: 64, weight: .black, design: .rounded))
+                .font(AppTypography.font(size: 64, weight: .black))
                 .foregroundColor(.theme.accent)
             
             // Date

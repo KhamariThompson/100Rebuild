@@ -46,14 +46,14 @@ struct MilestoneCelebrationModal: View {
                 
                 // Badge or emoji
                 Text(viewModel.getMilestoneEmoji(for: dayNumber))
-                    .font(.system(size: 100))
+                    .font(AppTypography.font(size: 100, weight: .bold))
                     .scaleEffect(animateBadge ? 1.0 : 0.5)
                     .opacity(animateBadge ? 1.0 : 0.0)
                     .padding(.bottom, 10)
                 
                 // Title text
                 Text("You've hit Day \(dayNumber) of 100!")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(AppTypography.largeTitle(.bold))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 20)

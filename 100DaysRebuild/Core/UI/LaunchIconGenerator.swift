@@ -25,7 +25,7 @@ struct LaunchIconGenerator: View {
             
             // Checkmark
             Image(systemName: "checkmark")
-                .font(.system(size: 90, weight: .bold))
+                .font(AppTypography.font(size: 90, weight: .bold))
                 .foregroundColor(.white)
         }
         .frame(width: 300, height: 300)
@@ -42,11 +42,12 @@ struct LaunchIconGenerator: View {
 
 // Helper function to export the view as an image if needed
 extension View {
+    @MainActor
     func asImage(size: CGSize) -> UIImage {
         let controller = UIHostingController(rootView: self)
         controller.view.bounds = CGRect(origin: .zero, size: size)
         controller.view.backgroundColor = .clear
-        
+
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { _ in
             controller.view.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)

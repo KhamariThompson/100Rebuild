@@ -131,36 +131,34 @@ class CheckInHistoryViewModel: ObservableObject {
         }
         
         do {
-            // Upload photo to Firebase Storage
-            let storage = Storage.storage()
-            let storageRef = storage.reference()
-            
-            // Create a unique filename
-            let fileName = "\(UUID().uuidString).jpg"
-            let imageRef = storageRef.child("users/\(userId)/check-ins/\(fileName)")
-            
-            // Compress the image
+            // Compress the image on the actor first
             guard let imageData = newPhoto.jpegData(compressionQuality: 0.7) else {
                 throw NSError(domain: "app", code: 0, userInfo: [NSLocalizedDescriptionKey: "Could not compress image"])
             }
-            
-            // Upload the image
-            let metadata = StorageMetadata()
-            metadata.contentType = "image/jpeg"
-            
-            let _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
-            let downloadURL = try await imageRef.downloadURL()
-            
-            // Update Firestore with new photo URL
+
+            let fileName = "\(UUID().uuidString).jpg"
+
+            // Upload off the MainActor so StorageMetadata doesn't cross actor boundary
+            let downloadURL = try await Task.detached(priority: .userInitiated) { () -> URL in
+                let storage = Storage.storage()
+                let storageRef = storage.reference()
+                let imageRef = storageRef.child("users/\(userId)/check-ins/\(fileName)")
+
+                let metadata = StorageMetadata()
+                metadata.contentType = "image/jpeg"
+
+                _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
+                return try await imageRef.downloadURL()
+            }.value
+
+            // Update Firestore on the MainActor with just the sendable URL string
             let checkInRef = firestore
                 .collection("users").document(userId)
                 .collection("challenges").document(challenge.id.uuidString)
                 .collection("checkIns").document("day\(checkIn.dayNumber)")
-            
-            // Create a Sendable dictionary for Firestore
+
             let updateData: [String: Any] = ["photoURL": downloadURL.absoluteString]
-            
-            // Explicitly run on MainActor to handle the non-Sendable type safely
+
             await MainActor.run {
                 checkInRef.updateData(updateData) { error in
                     if let error = error {

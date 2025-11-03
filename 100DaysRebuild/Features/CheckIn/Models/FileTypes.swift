@@ -3,10 +3,9 @@ import PhotosUI
 
 /// A struct that handles transferable data from PhotosPickerItem
 /// with built-in compression for performance
-@MainActor
 struct PhotoTransferable: Transferable {
     let image: UIImage
-    
+
     static var transferRepresentation: some TransferRepresentation {
         DataRepresentation(importedContentType: .image) { data in
             guard let uiImage = UIImage(data: data) else {

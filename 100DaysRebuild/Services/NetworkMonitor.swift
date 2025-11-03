@@ -2,15 +2,16 @@ import Network
 import Foundation
 import Combine
 
+@MainActor
 public class NetworkMonitor: ObservableObject {
     public static let shared = NetworkMonitor()
     private let monitor = NWPathMonitor()
     private let queue = DispatchQueue(label: "NetworkMonitor")
     
     // Add static notification names
-    public static let networkStatusChanged = Notification.Name("NetworkMonitorStatusChanged")
-    public static let firestoreConnectivityCheckRequested = Notification.Name("FirestoreConnectivityCheckRequested")
-    public static let firestoreConnectivityChanged = Notification.Name("FirestoreConnectivityChanged")
+    nonisolated public static let networkStatusChanged = Notification.Name("NetworkMonitorStatusChanged")
+    nonisolated public static let firestoreConnectivityCheckRequested = Notification.Name("FirestoreConnectivityCheckRequested")
+    nonisolated public static let firestoreConnectivityChanged = Notification.Name("FirestoreConnectivityChanged")
     
     // Add connectionState publisher for Combine support
     public var connectionState: AnyPublisher<Bool, Never> {
@@ -31,9 +32,9 @@ public class NetworkMonitor: ObservableObject {
     private init() {
         startMonitoring()
     }
-    
+
     deinit {
-        stopMonitoring()
+        monitor.cancel()
         print("✅ Singleton released: \(Self.self)")
     }
     

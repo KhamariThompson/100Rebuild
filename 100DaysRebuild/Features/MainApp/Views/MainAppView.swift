@@ -82,9 +82,13 @@ struct MainAppView: View {
                     customTabBar
                 }
                 
-                // Add subscription warning banner at the top
+                // Add grace period or subscription banner at the top
                 VStack {
-                    if subscriptionStore.isPro {
+                    // Show legacy grace banner if user is in grace period
+                    if MigrationManager.shared.isInLegacyGracePeriod() {
+                        LegacyGraceBanner()
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    } else if subscriptionStore.isPro {
                         SubscriptionBanner()
                             .transition(.move(edge: .top).combined(with: .opacity))
                     }
@@ -191,7 +195,7 @@ struct MainAppView: View {
                     }
                 } label: {
                     Text("Cancel")
-                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
                         .foregroundColor(.theme.subtext)
                         .frame(maxWidth: .infinity)
                         .frame(height: 44)
@@ -257,13 +261,13 @@ struct MainAppView: View {
                         }) {
                             VStack(spacing: 4) {
                                 Image(systemName: item.icon)
-                                    .font(.system(size: 20, weight: router.selectedTab == index ? .semibold : .regular))
+                                    .font(AppTypography.title3(router.selectedTab == index ? .semibold : .regular))
                                     .foregroundColor(router.selectedTab == index ?
                                                     Color.theme.accent :
                                                     (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
 
                                 Text(item.text)
-                                    .font(.system(size: 10, weight: router.selectedTab == index ? .semibold : .medium))
+                                    .font(AppTypography.caption2(router.selectedTab == index ? .semibold : .medium))
                                     .foregroundColor(router.selectedTab == index ?
                                                     Color.theme.accent :
                                                     (colorScheme == .dark ? Color.white.opacity(0.7) : Color.theme.subtext.opacity(0.8)))
@@ -289,7 +293,7 @@ struct MainAppView: View {
                     }
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(AppTypography.title3(.semibold))
                         .foregroundColor(colorScheme == .dark ? .black : .white)
                         .frame(width: 50, height: 50)
                         .background(
@@ -365,7 +369,7 @@ struct ActionSheetItem: View {
                         )
                     
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .medium))
+                        .font(AppTypography.title3(.medium))
                         .foregroundColor(isPrimary ? .white : .theme.accent)
                 }
                 
@@ -460,7 +464,7 @@ struct MainAppView_Previews: PreviewProvider {
 struct FliqloView: View {
     var body: some View {
         Text("Timer Coming Soon")
-            .font(.title)
+            .font(AppTypography.title1())
             .foregroundColor(.theme.text)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.theme.background)
@@ -486,7 +490,7 @@ struct NotificationSettingsView: View {
                 // Header
                 HStack {
                     Text("Notification Settings")
-                        .font(.title2)
+                        .font(AppTypography.title2())
                         .fontWeight(.bold)
                         .foregroundColor(.theme.text)
                     
@@ -496,7 +500,7 @@ struct NotificationSettingsView: View {
                         isPresented = false
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
+                            .font(AppTypography.title2())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -505,7 +509,7 @@ struct NotificationSettingsView: View {
                 // Daily Reminder
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Daily Reminder")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Daily Reminder", isOn: $isDailyReminderEnabled)
@@ -530,7 +534,7 @@ struct NotificationSettingsView: View {
                 // Streak Reminder
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Streak Reminder")
-                        .font(.headline)
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                     
                     Toggle("Enable Streak Reminder", isOn: $isStreakReminderEnabled)

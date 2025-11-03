@@ -62,7 +62,7 @@ public struct ChallengeCardComponent: View {
             HStack(alignment: .center, spacing: 12) {
                 // Challenge icon
                 Image(systemName: getChallengeIcon(title: challenge.title))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.white)
                     .frame(width: 32, height: 32)
                     .background(Color.theme.accent)
@@ -70,7 +70,7 @@ public struct ChallengeCardComponent: View {
                 
                 // Challenge title
                 Text(challenge.title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(AppTypography.body(.semibold))
                     .foregroundColor(.theme.text)
                     .lineLimit(1)
                 
@@ -79,13 +79,13 @@ public struct ChallengeCardComponent: View {
                 // Streak counter - animated conditionally
                 HStack(spacing: 4) {
                     Text(challenge.streakEmoji)
-                        .font(.system(size: 15))
+                        .font(AppTypography.callout())
                         .opacity(1.0)
                         .scaleEffect(isAnimating ? 1.1 : 1.0)
                         .animation(Animation.spring(response: 0.3, dampingFraction: 0.6, blendDuration: 0).repeatCount(3, autoreverses: true), value: isAnimating)
                     
                     Text("\(challenge.streakCount)")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(AppTypography.subhead(.medium))
                         .foregroundColor(.theme.subtext)
                 }
                 .padding(.horizontal, 8)
@@ -107,7 +107,7 @@ public struct ChallengeCardComponent: View {
                 HStack {
                     // Show day counter
                     Text(getCountdownText())
-                        .font(.system(size: 13))
+                        .font(AppTypography.footnote())
                         .foregroundColor(.theme.subtext)
                     
                     Spacer()
@@ -116,17 +116,17 @@ public struct ChallengeCardComponent: View {
                     if localHasStreakExpired && challenge.streakCount > 0 && !challenge.isCompletedToday && !challenge.isCompleted && challenge.lastCheckInDate != nil {
                         HStack(spacing: 3) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 11))
+                                .font(AppTypography.caption2())
                                 .foregroundColor(.orange)
                             
                             Text("Streak expired")
-                                .font(.system(size: 12))
+                                .font(AppTypography.caption1())
                                 .foregroundColor(.orange)
                         }
                     } else if challenge.streakCount > 0 && !challenge.isCompletedToday && !challenge.isCompleted {
                         // Show deadline info for active challenges with streaks
                         Text("Keep your streak alive")
-                            .font(.system(size: 12))
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -191,16 +191,22 @@ public struct ChallengeCardComponent: View {
                 print("📱 ChallengeCardComponent received specific update for challenge: \(challengeId)")
                 // Immediately force an update with a slight delay to ensure data is refreshed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.updateLocalExpiredStatus()
+                    Task { @MainActor in
+                        self.updateLocalExpiredStatus()
+                    }
                 }
             } else if let refreshedChallengeId = notification.userInfo?["refreshedChallengeId"] as? UUID,
                       refreshedChallengeId == challengeId {
                 print("📱 ChallengeCardComponent received refresh notification for challenge: \(challengeId)")
                 // Immediately force an update
-                self.updateLocalExpiredStatus()
+                Task { @MainActor in
+                    self.updateLocalExpiredStatus()
+                }
             } else if notification.userInfo == nil || notification.userInfo?.isEmpty == true {
                 // General update - still update
-                self.updateLocalExpiredStatus()
+                Task { @MainActor in
+                    self.updateLocalExpiredStatus()
+                }
             }
         }
     }
@@ -235,7 +241,7 @@ public struct ChallengeCardComponent: View {
                         .foregroundColor(.yellow)
                     
                     Text("Challenge Completed!")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(AppTypography.callout(.semibold))
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -255,7 +261,7 @@ public struct ChallengeCardComponent: View {
                         .foregroundColor(.green)
                     
                     Text("Completed Today")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(AppTypography.callout(.medium))
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -275,7 +281,7 @@ public struct ChallengeCardComponent: View {
                         .foregroundColor(.orange)
                     
                     Text("Streak Expired")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .font(AppTypography.callout(.medium))
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -293,7 +299,7 @@ public struct ChallengeCardComponent: View {
                 Button(action: handleCheckIn) {
                     HStack {
                         Text("Mark Complete ✅")
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
+                            .font(AppTypography.callout(.medium))
                             .foregroundColor(colorScheme == .dark ? .black : .white)
                     }
                     .frame(maxWidth: .infinity)

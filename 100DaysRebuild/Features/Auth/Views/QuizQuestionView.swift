@@ -96,7 +96,7 @@ struct QuizQuestionView: View {
                 // Selection indicator
                 if selectedAnswer == option {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20, weight: .medium))
+                        .font(AppTypography.title3(.medium))
                         .foregroundColor(Color.adaptiveForeground(for: .light))
                         .transition(.scale.combined(with: .opacity))
                 }

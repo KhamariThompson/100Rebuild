@@ -57,17 +57,17 @@ struct ChallengeCardView: View {
             // Title and Streak
             HStack {
                 Text(challenge.title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(AppTypography.font(size: 18, weight: .semibold, design: .rounded))
                     .foregroundColor(.theme.text)
                 
                 Spacer()
                 
                 HStack(spacing: 6) {
                     Text(challenge.streakEmoji)
-                        .font(.title3)
+                        .font(AppTypography.title3())
                     
                     Text("\(challenge.streakCount)")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(AppTypography.subhead(.semibold))
                         .foregroundColor(.theme.subtext)
                 }
                 .padding(.horizontal, 10)
@@ -97,11 +97,11 @@ struct ChallengeCardView: View {
                     
                     VStack(spacing: 0) {
                         Text("\(challenge.daysCompleted)")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(AppTypography.title3(.bold))
                             .foregroundColor(.white)
                         
                         Text("days")
-                            .font(.system(size: 10, weight: .medium))
+                            .font(AppTypography.caption2(.medium))
                             .foregroundColor(.white.opacity(0.9))
                     }
                 }
@@ -124,13 +124,13 @@ struct ChallengeCardView: View {
                     // Days Remaining and Percentage
                     HStack {
                         Text("\(challenge.daysRemaining) days remaining")
-                            .font(.caption)
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                         
                         Spacer()
                         
                         Text("\(Int(challenge.progressPercentage * 100))%")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(AppTypography.caption1(.semibold))
                             .foregroundColor(.theme.accent)
                     }
                 }
@@ -149,7 +149,7 @@ struct ChallengeCardView: View {
                             .foregroundColor(.orange)
                         
                         Text("Streak Expired")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(AppTypography.body(.medium))
                             .foregroundColor(.theme.text)
                     }
                     .frame(maxWidth: .infinity)
@@ -167,11 +167,11 @@ struct ChallengeCardView: View {
                     Button(action: handleCheckIn) {
                         HStack {
                             Text("Check In")
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(AppTypography.headline(.semibold))
                                 .foregroundColor(.white)
                             
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 14))
+                                .font(AppTypography.subhead())
                                 .foregroundColor(.white)
                         }
                         .frame(maxWidth: .infinity)
@@ -195,7 +195,7 @@ struct ChallengeCardView: View {
                         .foregroundColor(.yellow)
                     
                     Text("Challenge Completed!")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(AppTypography.headline(.semibold))
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -214,7 +214,7 @@ struct ChallengeCardView: View {
                         .foregroundColor(.green)
                     
                     Text("Completed Today")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(AppTypography.body(.medium))
                         .foregroundColor(.theme.text)
                 }
                 .frame(maxWidth: .infinity)
@@ -234,10 +234,10 @@ struct ChallengeCardView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(.orange)
-                        .font(.system(size: 12))
+                        .font(AppTypography.caption1())
                     
                     Text("Streak expired! Check in today to start a new streak.")
-                        .font(.system(size: 12))
+                        .font(AppTypography.caption1())
                         .foregroundColor(.orange)
                 }
                 .padding(.horizontal, 10)

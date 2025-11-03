@@ -56,7 +56,7 @@ struct OnboardingFlowView: View {
                         QuizQuestionView(
                             question: question,
                             selectedAnswer: .constant(funnelModel.answers.answers[funnelModel.currentStep]),
-                            freeTextAnswer: $funnelModel.answers.freeTextAnswer
+                            freeTextAnswer: question.id == 0 ? $funnelModel.answers.userName : $funnelModel.answers.customCommitmentName
                         )
                         .opacity(animateContent ? 1 : 0)
                         .offset(y: animateContent ? 0 : 30)
@@ -71,10 +71,6 @@ struct OnboardingFlowView: View {
                                     animateContent = true
                                 }
                             }
-                        }
-                        .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidChangeNotification)) { _ in
-                            // Update model when text changes
-                            funnelModel.setFreeTextAnswer(funnelModel.answers.freeTextAnswer)
                         }
                     }
                 }
@@ -367,7 +363,7 @@ struct StreakSetupView: View {
         HStack(spacing: AppSpacing.m) {
             // Icon
             Image(systemName: icon)
-                .font(.system(size: 20, weight: .medium))
+                .font(AppTypography.title3(.medium))
                 .foregroundColor(isHighlighted ? Color.theme.accent : Color.theme.text)
                 .frame(width: 30)
                 .accessibility(hidden: true)

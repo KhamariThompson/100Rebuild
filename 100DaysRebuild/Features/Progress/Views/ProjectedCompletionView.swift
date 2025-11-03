@@ -36,11 +36,11 @@ struct ProjectedCompletionView: View {
                     
                     VStack(spacing: 0) {
                         Text(formattedMonth(projectedDate))
-                            .font(.system(size: 10, weight: .bold))
+                            .font(AppTypography.caption2(.bold))
                             .foregroundColor(.white)
                         
                         Text(formattedDay(projectedDate))
-                            .font(.system(size: 22, weight: .bold))
+                            .font(AppTypography.title2(.bold))
                             .foregroundColor(.white)
                     }
                 }

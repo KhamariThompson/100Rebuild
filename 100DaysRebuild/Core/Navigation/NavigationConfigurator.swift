@@ -29,20 +29,21 @@ extension View {
 }
 
 /// Fix for layout constraint issues in NavigationView
+@MainActor
 func setupNavigationBarAppearance() {
     let appearance = UINavigationBarAppearance()
     appearance.configureWithTransparentBackground()
     appearance.backgroundColor = UIColor(Color.theme.background)
-    
+
     // Title and button appearance
     appearance.titleTextAttributes = [.foregroundColor: UIColor(Color.theme.text)]
     appearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color.theme.text)]
-    
+
     // Apply to all navigation bars
     UINavigationBar.appearance().standardAppearance = appearance
     UINavigationBar.appearance().scrollEdgeAppearance = appearance
     UINavigationBar.appearance().compactAppearance = appearance
-    
+
     // Set tint color for navigation bar items
     UINavigationBar.appearance().tintColor = UIColor(Color.theme.accent)
 } 

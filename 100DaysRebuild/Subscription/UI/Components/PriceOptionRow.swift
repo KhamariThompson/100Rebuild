@@ -22,12 +22,12 @@ struct PriceOptionRow: View {
                     // Plan name + badge
                     HStack(spacing: DS.Spacing.xs) {
                         Text(plan.displayName)
-                            .font(DS.Typo.headline)
+                            .font(AppTypography.headline())
                             .foregroundStyle(DS.Colors.onSurface)
 
                         if let badge = plan.highlightBadge {
                             Text(badge)
-                                .font(DS.Typo.caption1)
+                                .font(AppTypography.caption1())
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, DS.Spacing.xs)
                                 .padding(.vertical, 2)
@@ -40,21 +40,21 @@ struct PriceOptionRow: View {
                     if showIntroOffer, let introPrice = productInfo?.introOfferPrice {
                         // Show intro offer pricing
                         Text(introPrice)
-                            .font(DS.Typo.body.weight(.semibold))
+                            .font(AppTypography.body(.semibold))
                             .foregroundStyle(DS.Colors.accent)
 
                         Text("Then \(productInfo?.displayPrice ?? plan.displayPrice)")
-                            .font(DS.Typo.caption1)
+                            .font(AppTypography.caption1())
                             .foregroundStyle(DS.Colors.onSurfaceSecondary)
                     } else {
                         // Show standard pricing
                         Text(productInfo?.displayPrice ?? plan.displayPrice)
-                            .font(DS.Typo.body)
+                            .font(AppTypography.body())
                             .foregroundStyle(DS.Colors.onSurface)
 
                         if plan == .annual {
                             Text("Best value for long-term commitment")
-                                .font(DS.Typo.caption1)
+                                .font(AppTypography.caption1())
                                 .foregroundStyle(DS.Colors.onSurfaceSecondary)
                         }
                     }
@@ -90,7 +90,7 @@ struct PriceOptionRow_Previews: PreviewProvider {
                 plan: .annual,
                 isSelected: true,
                 productInfo: ProductInfo(
-                    productId: "com.KhamariThompson.100Days.annualv1",
+                    productId: Constants.ProductID.annualIntro,
                     displayPrice: "$29.99/year",
                     localizedDescription: "Annual subscription",
                     hasIntroOffer: true,
@@ -104,7 +104,7 @@ struct PriceOptionRow_Previews: PreviewProvider {
                 plan: .monthly,
                 isSelected: false,
                 productInfo: ProductInfo(
-                    productId: "com.KhamariThompson.100Days.monthlyv2",
+                    productId: Constants.ProductID.monthly,
                     displayPrice: "$14.99/month",
                     localizedDescription: "Monthly subscription",
                     hasIntroOffer: false,

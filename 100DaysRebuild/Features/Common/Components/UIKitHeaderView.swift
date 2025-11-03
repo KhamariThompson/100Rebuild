@@ -53,6 +53,7 @@ struct UIKitHeaderView: UIViewRepresentable {
             self.parent = parent
         }
         
+        @MainActor
         func didTapBackButton() {
             parent.onBackTapped?()
         }
@@ -60,6 +61,7 @@ struct UIKitHeaderView: UIViewRepresentable {
 }
 
 // MARK: - UIKit Header View
+@MainActor
 protocol UIHeaderViewDelegate: AnyObject {
     func didTapBackButton()
 }

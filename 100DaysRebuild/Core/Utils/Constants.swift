@@ -64,15 +64,97 @@ enum Constants {
         static let userEmail = "userEmail"
     }
 
-    // MARK: - Product Identifiers
-    enum Products {
-        static let monthlySubscription = "com.KhamariThompson.100Days.monthlyv2"
+    // MARK: - Product Identifiers (DEPRECATED - Use SubscriptionIDs instead)
+    /// ⚠️ DEPRECATED: Use SubscriptionIDs.ProductID instead
+    /// This enum is kept for backward compatibility during migration
+    enum ProductID {
+        static let monthly       = SubscriptionIDs.ProductID.monthly
+        static let annualIntro   = SubscriptionIDs.ProductID.annualIntro
+        static let annualNoIntro = SubscriptionIDs.ProductID.annualNoIntro
     }
 
-    // MARK: - RevenueCat
+    // MARK: - Founders Campaign
+    enum FoundersCampaign {
+        /// Campaign start date: November 1, 2025
+        static let startDate: Date = {
+            var comps = DateComponents()
+            comps.year = 2025
+            comps.month = 11
+            comps.day = 1
+            comps.timeZone = TimeZone.current
+            return Calendar.current.date(from: comps)!
+        }()
+
+        /// Check if campaign is live (date >= Nov 1, 2025)
+        static var isLive: Bool {
+            Date() >= startDate
+        }
+    }
+
+    // MARK: - Onboarding & Grandfathering
+    enum Onboarding {
+        /// Legacy cutoff date: November 1, 2025 (00:00 UTC)
+        /// Users registered BEFORE this date get grandfathered access (1 year free Pro)
+        /// Users registered ON OR AFTER this date are new users (must see funnel → paywall)
+        static let newFunnelStartDate: Date = {
+            var comps = DateComponents()
+            comps.year = 2025
+            comps.month = 11
+            comps.day = 1
+            comps.hour = 0
+            comps.minute = 0
+            comps.second = 0
+            comps.timeZone = TimeZone(identifier: "UTC")
+            return Calendar.current.date(from: comps)!
+        }()
+
+        /// Founder window cutoff: October 10, 2025 (00:00 UTC)
+        /// Users who registered before this date may be eligible for special founder pricing
+        static let founderWindowCutoff: Date = {
+            var comps = DateComponents()
+            comps.year = 2025
+            comps.month = 10
+            comps.day = 10
+            comps.hour = 0
+            comps.minute = 0
+            comps.second = 0
+            comps.timeZone = TimeZone(identifier: "UTC")
+            return Calendar.current.date(from: comps)!
+        }()
+
+        /// Grandfathered users get 1 year of free Pro from their account creation date
+        static let grandfatherDuration: TimeInterval = 365 * 24 * 60 * 60 // 1 year in seconds
+
+        /// Current funnel schema version - bump this to force re-showing funnel if design changes
+        static let funnelSchemaVersion = 1
+
+        /// Grace period for new signups (time window to consider a user "new")
+        /// Only users who signed up within this window should see the funnel
+        static let newSignupGracePeriod: TimeInterval = 10 * 60 // 10 minutes
+
+        /// Entitlements load timeout - maximum time to wait for RevenueCat before routing
+        static let entitlementsLoadTimeout: TimeInterval = 4.0 // 4 seconds
+    }
+
+    // MARK: - Feature Flags
+    enum FeatureFlags {
+        /// Enable new routing v2 logic
+        /// Set to false to revert to legacy routing behavior
+        static var routingV2Enabled: Bool {
+            UserDefaults.standard.object(forKey: "routing.v2.enabled") as? Bool ?? true
+        }
+
+        /// Manual override to skip funnel (for support/debug only)
+        static var overrideNoFunnel: Bool {
+            UserDefaults.standard.bool(forKey: "override.no_funnel")
+        }
+    }
+
+    // MARK: - RevenueCat (DEPRECATED - Use SubscriptionIDs instead)
+    /// ⚠️ DEPRECATED: Use SubscriptionIDs instead
     enum RevenueCat {
-        static let proEntitlementID = "Pro"
-        static let defaultOfferingID = "default_offerings"
+        static let proEntitlementID = SubscriptionIDs.proEntitlementID
+        static let defaultOfferingID = SubscriptionIDs.defaultOfferingID
 
         /// Get the RevenueCat API key from Info.plist
         /// - Returns: API key string
@@ -83,12 +165,13 @@ enum Constants {
             }
 
             #if DEBUG
-            print("⚠️ REVENUECAT_API_KEY not found in Info.plist, using fallback key")
-            print("⚠️ Please add the key to Info.plist for better security")
+            print("⚠️ REVENUECAT_API_KEY not found in Info.plist.")
+            print("⚠️ Please add REVENUECAT_API_KEY to Info.plist or provide it via CI environment for production builds.")
             #endif
 
-            // Fallback for backwards compatibility (will be removed after migration)
-            return "appl_BmXAuCdWBmPoVBAOgxODhJddUvc"
+            // Do NOT return a hardcoded API key. Return an empty string so misconfiguration
+            // is visible and fails loudly when attempting to configure Purchases in production.
+            return ""
         }
     }
 

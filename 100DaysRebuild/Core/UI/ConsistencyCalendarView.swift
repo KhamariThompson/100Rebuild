@@ -59,7 +59,7 @@ struct ConsistencyCalendarView: View {
             HStack(spacing: cellSpacing) {
                 ForEach(Array(Calendar.current.veryShortWeekdaySymbols.enumerated()), id: \.offset) { index, day in
                     Text(day)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(AppTypography.caption1(.semibold))
                         .foregroundColor(.theme.subtext)
                         .frame(width: cellSize)
                 }
@@ -130,7 +130,7 @@ struct ConsistencyCalendarView: View {
                 .frame(width: 14, height: 14)
             
             Text(text)
-                .font(.system(size: 12, weight: .medium))
+                .font(AppTypography.caption1(.medium))
                 .foregroundColor(.theme.subtext)
         }
     }

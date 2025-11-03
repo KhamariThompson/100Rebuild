@@ -15,7 +15,7 @@ struct AdMobBannerView: View {
                 // Header with upgrade option
                 HStack {
                     Text("Ad-free experience with Pro")
-                        .font(.footnote)
+                        .font(AppTypography.footnote())
                         .foregroundColor(.theme.subtext)
                     
                     Spacer()
@@ -28,7 +28,7 @@ struct AdMobBannerView: View {
                         generator.impactOccurred()
                     }) {
                         Text("Upgrade")
-                            .font(.footnote)
+                            .font(AppTypography.footnote())
                             .fontWeight(.semibold)
                             .foregroundColor(.theme.accent)
                     }
