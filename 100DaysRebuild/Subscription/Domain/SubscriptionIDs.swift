@@ -75,21 +75,8 @@ enum SubscriptionIDs {
     /// Call this at app launch in DEBUG mode
     static func printDiagnostics(offerings: Any?) {
         #if DEBUG
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("🔐 REVENUECAT CONFIGURATION DIAGNOSTICS")
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        print("")
-        print("Expected Configuration:")
-        print("  Offering ID: \(defaultOfferingID)")
-        print("")
-        print("Expected Packages → Products:")
-        for (packageID, productID) in packageProductMap.sorted(by: { $0.key < $1.key }) {
-            print("  • \(packageID) → \(productID)")
-        }
-        print("")
-        print("Entitlement:")
-        print("  • \(proEntitlementID)")
-        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        // Diagnostics available only in debug builds
+        // Configuration: Offering ID=\(defaultOfferingID), Entitlement=\(proEntitlementID)
         #endif
     }
 }

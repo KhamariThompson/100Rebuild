@@ -682,11 +682,11 @@ class FriendService: ObservableObject, FriendServiceProtocol {
                         profileImageURL: photoURL
                     )
                 }
-                
+
                 // Update the published property
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self.friends = friends
-                    
+
                     // Notify about the updated friend list
                     NotificationCenter.default.post(
                         name: Self.friendsDidUpdateNotification,
@@ -719,11 +719,11 @@ class FriendService: ObservableObject, FriendServiceProtocol {
                 
                 // Convert documents to FriendRequest objects
                 let requests = snapshot.documents.compactMap { FriendRequest(from: $0) }
-                
+
                 // Update the published property
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self.incomingRequests = requests
-                    
+
                     // Notify about the updated request list
                     NotificationCenter.default.post(
                         name: Self.friendRequestsDidUpdateNotification,
@@ -756,11 +756,11 @@ class FriendService: ObservableObject, FriendServiceProtocol {
                 
                 // Convert documents to FriendRequest objects
                 let requests = snapshot.documents.compactMap { FriendRequest(from: $0) }
-                
+
                 // Update the published property
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self.outgoingRequests = requests
-                    
+
                     // Notify about the updated request list
                     NotificationCenter.default.post(
                         name: Self.friendRequestsDidUpdateNotification,

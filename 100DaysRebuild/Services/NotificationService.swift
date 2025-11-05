@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import SwiftUI
+import FirebaseCore
 import FirebaseFirestore
 
 // Using canonical Challenge model
@@ -83,7 +84,7 @@ class NotificationService: NSObject, ObservableObject {
     
     private func checkAuthorizationStatus() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isAuthorized = settings.authorizationStatus == .authorized
             }
         }
@@ -156,7 +157,14 @@ class NotificationService: NSObject, ObservableObject {
         let userId = userSession.currentUser?.uid
         guard let userId = userId else { return }
         
-        let challenges = try await ChallengeService.shared.loadChallenges(for: userId)
+        let challenges: [Challenge]
+        do {
+            challenges = try await ChallengeService.shared.loadChallenges(for: userId)
+        } catch {
+            print("NotificationService: Failed to load challenges for streak reminder: \(error)")
+            return
+        }
+
         let hasActiveChallenges = !challenges.isEmpty
         let hasCheckedInToday = challenges.contains { $0.isCompletedToday }
         
@@ -182,7 +190,12 @@ class NotificationService: NSObject, ObservableObject {
             )
             
             // Schedule notification
-            try await UNUserNotificationCenter.current().add(request)
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
+                print("NotificationService: Failed to add streak reminder notification: \(error)")
+                return
+            }
             
             // Update local state
             isStreakReminderEnabled = true
@@ -284,16 +297,26 @@ class NotificationService: NSObject, ObservableObject {
             UserDefaults.standard.set(3, forKey: "streakExpirationWarningHours")
         }
         
-        // Load from Firestore if user is logged in
+        // Load from Firestore if user is logged in and Firebase is configured
         Task {
-            await loadSettingsFromFirestore()
+            if FirebaseApp.app() != nil {
+                await loadSettingsFromFirestore()
+            } else {
+                print("NotificationService: Firebase not configured yet - skipping Firestore load")
+            }
         }
     }
     
     /// Load notification settings from Firestore for the current user
     func loadSettingsFromFirestore() async {
+        // Defensive: ensure Firebase is configured before touching Firestore
+        guard FirebaseApp.app() != nil else {
+            print("NotificationService: Firebase not configured yet - skipping Firestore load")
+            return
+        }
+
         guard let userId = userSession.currentUser?.uid else { return }
-        
+
         do {
             let document = try await Firestore.firestore()
                 .collection("users")
@@ -301,9 +324,9 @@ class NotificationService: NSObject, ObservableObject {
                 .collection("preferences")
                 .document("notifications")
                 .getDocument()
-            
+
             guard document.exists, let data = document.data() else { return }
-            
+
             // Load the settings from Firestore and update local state
             await MainActor.run {
                 // Daily reminder
@@ -311,44 +334,44 @@ class NotificationService: NSObject, ObservableObject {
                     self.isDailyReminderEnabled = dailyReminderEnabled
                     UserDefaults.standard.set(dailyReminderEnabled, forKey: "isDailyReminderEnabled")
                 }
-                
+
                 // Reminder time
                 if let reminderTimestamp = data["reminderTime"] as? Timestamp {
                     self.reminderTime = reminderTimestamp.dateValue()
                     UserDefaults.standard.set(self.reminderTime, forKey: "reminderTime")
                 }
-                
+
                 // Streak reminder
                 if let streakReminderEnabled = data["streakReminderEnabled"] as? Bool {
                     self.isStreakReminderEnabled = streakReminderEnabled
                     UserDefaults.standard.set(streakReminderEnabled, forKey: "isStreakReminderEnabled")
                 }
-                
+
                 // Streak expiration warning
                 if let streakExpirationWarningEnabled = data["streakExpirationWarningEnabled"] as? Bool {
                     self.isStreakExpirationWarningEnabled = streakExpirationWarningEnabled
                     UserDefaults.standard.set(streakExpirationWarningEnabled, forKey: "isStreakExpirationWarningEnabled")
                 }
-                
+
                 // Streak expiration warning hours
                 if let hours = data["streakExpirationWarningHours"] as? Int {
                     self.streakExpirationWarningHours = hours
                     UserDefaults.standard.set(hours, forKey: "streakExpirationWarningHours")
                 }
             }
-            
-            // Schedule notifications if they're enabled
+
+            // Schedule notifications if they're enabled. Wrap each scheduling call to avoid unhandled errors
             if isAuthorized {
                 if isDailyReminderEnabled {
-                    try? await scheduleDailyReminder()
+                    do { try await scheduleDailyReminder() } catch { print("NotificationService: Failed to schedule daily reminder: \(error)") }
                 }
-                
+
                 if isStreakReminderEnabled {
-                    try? await scheduleStreakReminder()
+                    do { try await scheduleStreakReminder() } catch { print("NotificationService: Failed to schedule streak reminder: \(error)") }
                 }
-                
+
                 if isStreakExpirationWarningEnabled {
-                    try? await scheduleStreakExpirationWarning()
+                    do { try await scheduleStreakExpirationWarning() } catch { print("NotificationService: Failed to schedule streak expiration warning: \(error)") }
                 }
             }
         } catch {
@@ -399,7 +422,14 @@ class NotificationService: NSObject, ObservableObject {
         let userId = userSession.currentUser?.uid
         guard let userId = userId else { return }
         
-        let challenges = try await ChallengeService.shared.loadChallenges(for: userId)
+        let challenges: [Challenge]
+        do {
+            challenges = try await ChallengeService.shared.loadChallenges(for: userId)
+        } catch {
+            print("NotificationService: Failed to load challenges for expiration warning: \(error)")
+            return
+        }
+
         let activeChallenges = challenges.filter { !$0.isCompleted && $0.streakCount > 0 && !$0.hasStreakExpired }
         
         if !activeChallenges.isEmpty {
@@ -448,7 +478,12 @@ class NotificationService: NSObject, ObservableObject {
             )
             
             // Schedule notification
-            try await UNUserNotificationCenter.current().add(request)
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+            } catch {
+                print("NotificationService: Failed to add streak expiration warning notification: \(error)")
+                return
+            }
             
             // Update settings
             isStreakExpirationWarningEnabled = true

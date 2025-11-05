@@ -80,10 +80,10 @@ class SubscriptionService: NSObject, ObservableObject {
     private override init() {
         // Call super.init() first before using self
         super.init()
-        
-        // Configure custom error handling
-        setupRevenueCatErrorHandling()
-        
+
+        // Note: RevenueCat log handler is now set up in RevenueCatManager.configureIfNeeded()
+        // This ensures it's set BEFORE Purchases.configure() is called
+
         // Add observer for deleted account cases
         NotificationCenter.default.addObserver(
             self,
@@ -147,44 +147,7 @@ class SubscriptionService: NSObject, ObservableObject {
             await updateSubscriptionStatus()
         }
     }
-    
-    // Add method to set up custom error handling for RevenueCat
-    private func setupRevenueCatErrorHandling() {
-        #if DEBUG
-        print("Configuring RevenueCat error handling...")
-        #endif
-        
-        // This will be called by the RevenueCat SDK after configure
-        Purchases.logHandler = { level, message in
-            // Filter out the offerings not configured errors that are expected during development
-            if message.contains("There are no products registered in the RevenueCat dashboard for your offerings") {
-                // Just log that we're using fallback pricing mechanism
-                #if DEBUG
-                print("No products registered in RevenueCat dashboard, using fallback pricing mechanism")
-                #endif
-                return
-            }
-            
-            // Log other messages as usual, but only errors in production
-            #if DEBUG
-            if level == .debug {
-                print("RC: ℹ️ \(message)")
-            } else if level == .info {
-                print("RC: ℹ️ \(message)")
-            } else if level == .warn {
-                print("RC: ⚠️ \(message)")
-            } else if level == .error {
-                print("RC: ❌ \(message)")
-            }
-            #else
-            // In production, only log errors but without sensitive information
-            if level == .error {
-                print("RC: Error occurred in RevenueCat SDK")
-            }
-            #endif
-        }
-    }
-    
+
     // Public method to identify the current user with RevenueCat
     func identifyCurrentUser() async {
         if let currentUser = Auth.auth().currentUser {

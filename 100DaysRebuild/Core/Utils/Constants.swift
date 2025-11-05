@@ -158,19 +158,12 @@ enum Constants {
 
         /// Get the RevenueCat API key from Info.plist
         /// - Returns: API key string
-        /// - Note: Falls back to hardcoded key if not found in plist (for backwards compatibility during migration)
         static var apiKey: String {
             if let key = Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_API_KEY") as? String {
                 return key
             }
 
-            #if DEBUG
-            print("⚠️ REVENUECAT_API_KEY not found in Info.plist.")
-            print("⚠️ Please add REVENUECAT_API_KEY to Info.plist or provide it via CI environment for production builds.")
-            #endif
-
-            // Do NOT return a hardcoded API key. Return an empty string so misconfiguration
-            // is visible and fails loudly when attempting to configure Purchases in production.
+            // Return empty string if not found - configuration error will be caught at runtime
             return ""
         }
     }

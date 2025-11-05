@@ -276,14 +276,12 @@ class ChallengeService: ObservableObject {
         
         // Post notification to explicitly inform all observers that this challenge was restarted
         // This is crucial for updating the UI components like ChallengeCardComponent
-        DispatchQueue.main.async {
-            print("📢 Posting challengesDidUpdateNotification after challenge restart")
-            NotificationCenter.default.post(
-                name: ChallengeStore.challengesDidUpdateNotification,
-                object: nil,
-                userInfo: ["restartedChallengeId": challenge.id]
-            )
-        }
+        print("📢 Posting challengesDidUpdateNotification after challenge restart")
+        NotificationCenter.default.post(
+            name: ChallengeStore.challengesDidUpdateNotification,
+            object: nil,
+            userInfo: ["restartedChallengeId": challenge.id]
+        )
         
         return restartedChallenge
     }

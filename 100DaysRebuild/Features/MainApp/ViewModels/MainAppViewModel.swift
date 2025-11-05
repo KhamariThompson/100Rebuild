@@ -89,11 +89,9 @@ class MainAppViewModel: ObservableObject {
         EntitlementsAdapter.shared.$hasProAccess
             .sink { [weak self] hasProAccess in
                 guard let self = self else { return }
-                DispatchQueue.main.async {
-                    if self.isProUser != hasProAccess {
-                        print("🔐 RevenueCat: MainAppViewModel - Pro status changed to: \(hasProAccess)")
-                        self.isProUser = hasProAccess
-                    }
+                if self.isProUser != hasProAccess {
+                    print("🔐 RevenueCat: MainAppViewModel - Pro status changed to: \(hasProAccess)")
+                    self.isProUser = hasProAccess
                 }
             }
             .store(in: &cancellables)
@@ -103,11 +101,9 @@ class MainAppViewModel: ObservableObject {
             .sink { [weak self] notification in
                 guard let self = self else { return }
                 if let isProUser = notification.userInfo?["isProUser"] as? Bool {
-                    DispatchQueue.main.async {
-                        if self.isProUser != isProUser {
-                            print("🔐 RevenueCat: MainAppViewModel - Subscription status notification: isProUser=\(isProUser)")
-                            self.isProUser = isProUser
-                        }
+                    if self.isProUser != isProUser {
+                        print("🔐 RevenueCat: MainAppViewModel - Subscription status notification: isProUser=\(isProUser)")
+                        self.isProUser = isProUser
                     }
                 }
             }

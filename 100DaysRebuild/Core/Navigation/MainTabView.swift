@@ -111,12 +111,13 @@ struct MainTabView: View {
                                     
                                     // Print for debugging
                                     print("New Challenge button tapped")
-                                    
+
                                     // Set a short delay to ensure proper view sequencing
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
                                         // Force navigation to Challenges tab
                                         router.selectedTab = 0
-                                        
+
                                         // Show the new challenge sheet with animation
                                         withAnimation(.easeInOut(duration: 0.2)) {
                                             viewModel.showNewChallengeSheet = true

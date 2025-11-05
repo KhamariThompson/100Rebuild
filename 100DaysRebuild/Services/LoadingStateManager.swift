@@ -26,69 +26,63 @@ class LoadingStateManager: ObservableObject {
     
     /// Start loading state with optional message and ID
     func startLoading(message: String = "Loading...", operationId: String = UUID().uuidString) {
-        DispatchQueue.main.async {
-            // Generate unique ID for this loading operation
-            let uuid = UUID()
-            self.activeOperations[operationId] = uuid
-            
-            // Update loading state
-            self.loadingMessage = message
-            self.isLoading = true
-            self.loadingProgress = nil
-            
-            // Safety timeout to prevent infinite loading states
-            DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
-                guard let self = self else { return }
-                
-                // Only timeout if this is still the active operation
-                if self.activeOperations[operationId] == uuid {
-                    self.endLoading(operationId: operationId)
-                    
-                    // Log warning about long operation
-                    print("WARNING: Loading operation \(operationId) timed out after 20 seconds")
-                }
+        // Generate unique ID for this loading operation
+        let uuid = UUID()
+        self.activeOperations[operationId] = uuid
+
+        // Update loading state
+        self.loadingMessage = message
+        self.isLoading = true
+        self.loadingProgress = nil
+
+        // Safety timeout to prevent infinite loading states
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 20_000_000_000) // 20 seconds
+            guard let self = self else { return }
+
+            // Only timeout if this is still the active operation
+            if self.activeOperations[operationId] == uuid {
+                self.endLoading(operationId: operationId)
+
+                // Log warning about long operation
+                print("WARNING: Loading operation \(operationId) timed out after 20 seconds")
             }
         }
     }
     
     /// Update loading progress (0.0 to 1.0)
     func updateProgress(_ progress: Double, operationId: String) {
-        DispatchQueue.main.async {
-            // Only update if this operation is still active
-            guard self.activeOperations[operationId] != nil else { return }
-            
-            self.loadingProgress = min(max(progress, 0.0), 1.0)
-        }
+        // Only update if this operation is still active
+        guard self.activeOperations[operationId] != nil else { return }
+
+        self.loadingProgress = min(max(progress, 0.0), 1.0)
     }
     
     /// End loading state for a specific operation
     func endLoading(operationId: String) {
-        DispatchQueue.main.async {
-            // Remove this operation
-            self.activeOperations.removeValue(forKey: operationId)
-            
-            // Only turn off loading if no more operations are active
-            if self.activeOperations.isEmpty {
-                self.isLoading = false
-                self.loadingProgress = nil
-                self.loadingMessage = ""
-            }
+        // Remove this operation
+        self.activeOperations.removeValue(forKey: operationId)
+
+        // Only turn off loading if no more operations are active
+        if self.activeOperations.isEmpty {
+            self.isLoading = false
+            self.loadingProgress = nil
+            self.loadingMessage = ""
         }
     }
     
     /// Show error message
     func showError(_ message: String, autoDismiss: Bool = true) {
-        DispatchQueue.main.async {
-            self.errorMessage = message
-            self.isShowingError = true
-            
-            // Auto-dismiss after delay if requested
-            if autoDismiss {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-                    guard let self = self else { return }
-                    if self.errorMessage == message {
-                        self.isShowingError = false
-                    }
+        self.errorMessage = message
+        self.isShowingError = true
+
+        // Auto-dismiss after delay if requested
+        if autoDismiss {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                guard let self = self else { return }
+                if self.errorMessage == message {
+                    self.isShowingError = false
                 }
             }
         }
@@ -96,21 +90,17 @@ class LoadingStateManager: ObservableObject {
     
     /// Dismiss current error message
     func dismissError() {
-        DispatchQueue.main.async {
-            self.isShowingError = false
-        }
+        self.isShowingError = false
     }
     
     /// Reset all loading states
     func reset() {
-        DispatchQueue.main.async {
-            self.activeOperations.removeAll()
-            self.isLoading = false
-            self.loadingProgress = nil
-            self.loadingMessage = ""
-            self.isShowingError = false
-            self.errorMessage = ""
-        }
+        self.activeOperations.removeAll()
+        self.isLoading = false
+        self.loadingProgress = nil
+        self.loadingMessage = ""
+        self.isShowingError = false
+        self.errorMessage = ""
     }
     
     /// Setup timeout for error messages

@@ -18,9 +18,9 @@ class BadgeService: ObservableObject {
     // Notification for badge updates
     static let badgesDidUpdateNotification = Notification.Name("badgesDidUpdate")
     static let badgeUnlockedNotification = Notification.Name("badgeUnlocked")
-    
+
     // Dependencies
-    private let firestore = Firestore.firestore()
+    private lazy var firestore = Firestore.firestore()
     private let challengeStore = ChallengeStore.shared
     private var cancellables = Set<AnyCancellable>()
     private var loadTask: Task<Void, Never>? = nil

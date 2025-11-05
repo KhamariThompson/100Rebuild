@@ -40,12 +40,13 @@ public class NetworkMonitor: ObservableObject {
     
     private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
-            DispatchQueue.main.async {
-                let wasConnected = self?.isConnected ?? false
-                self?.isConnected = path.status == .satisfied
-                self?.connectionType = self?.checkConnectionType(path) ?? .unknown
-                self?.hasDNSIssues = path.isDNSIssues
-                
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                let wasConnected = self.isConnected
+                self.isConnected = path.status == .satisfied
+                self.connectionType = self.checkConnectionType(path)
+                self.hasDNSIssues = path.isDNSIssues
+
                 // Post notification when network status changes
                 if wasConnected != (path.status == .satisfied) {
                     NotificationCenter.default.post(
@@ -54,9 +55,9 @@ public class NetworkMonitor: ObservableObject {
                         userInfo: ["isConnected": path.status == .satisfied]
                     )
                 }
-                
+
                 print("Network connectivity changed: \(path.status == .satisfied ? "Connected" : "Disconnected")")
-                print("Network status changed: \(path.status == .satisfied ? "Connected" : "Disconnected") - Interface: \(self?.connectionType.description ?? "Unknown") - DNS Issues: \(path.isDNSIssues)")
+                print("Network status changed: \(path.status == .satisfied ? "Connected" : "Disconnected") - Interface: \(self.connectionType.description) - DNS Issues: \(path.isDNSIssues)")
             }
         }
         monitor.start(queue: queue)

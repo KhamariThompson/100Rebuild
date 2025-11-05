@@ -382,9 +382,9 @@ class ProgressDashboardViewModel: ObservableObject {
         let month: String
         let consistency: Int
     }
-    
+
     // Dependencies
-    private let firestore = Firestore.firestore()
+    private lazy var firestore = Firestore.firestore()
     @MainActor private var loadTask: Task<Void, Never>?
     @MainActor private var userStatsService: UserStatsService { UserStatsService.shared }
     @MainActor private var challengeStore: ChallengeStore { ChallengeStore.shared }

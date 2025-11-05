@@ -68,7 +68,7 @@ public class FirebaseAvailabilityService {
             guard let userInfo = notification.userInfo,
                   let isConnected = userInfo["isConnected"] as? Bool else { return }
 
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if isConnected {
                     // Reset retry count and attempt to initialize on the MainActor
@@ -112,19 +112,19 @@ public class FirebaseAvailabilityService {
                    error.localizedDescription.contains("lookup error") ||
                    error.localizedDescription.contains("Domain name not found") {
                     print("⚠️ Firestore DNS resolution error detected, attempting recovery...")
-                    DispatchQueue.main.async { [weak self] in
+                    Task { @MainActor [weak self] in
                         self?.attemptFirestoreDNSRecovery()
                         self?.isFirestoreConnected = false
                     }
                 } else {
                     print("⚠️ Firestore error: \(error.localizedDescription)")
-                    DispatchQueue.main.async { [weak self] in
+                    Task { @MainActor [weak self] in
                         self?.isFirestoreConnected = false
                     }
                 }
             } else {
                 print("✅ Firestore connection established")
-                DispatchQueue.main.async { [weak self] in
+                Task { @MainActor [weak self] in
                     self?.isFirestoreConnected = true
                 }
             }
@@ -145,7 +145,7 @@ public class FirebaseAvailabilityService {
                 return
             }
 
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if self.networkMonitor.isConnected {
                     print("Attempting to reconnect to Firestore...")
@@ -158,7 +158,7 @@ public class FirebaseAvailabilityService {
                         guard let self = self else { return }
                         if error == nil {
                             print("✅ Successfully reconnected to Firestore")
-                            DispatchQueue.main.async { [weak self] in
+                            Task { @MainActor [weak self] in
                                 guard let self = self else { return }
                                 self.isFirestoreConnected = true
                                 self.firestoreReconnectTimer?.invalidate()
@@ -213,7 +213,8 @@ public class FirebaseAvailabilityService {
         initRetryCount += 1
         if initRetryCount <= maxRetries {
             print("Firebase initialization failed, retrying (\(initRetryCount)/\(maxRetries))...")
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(initRetryCount)) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: UInt64(Double(initRetryCount) * 1_000_000_000))
                 self.ensureFirebaseIsInitialized()
             }
         } else {
@@ -232,7 +233,7 @@ public class FirebaseAvailabilityService {
                 return
             }
 
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 let isCurrentlyAvailable = self.isInitialized
                 if isCurrentlyAvailable {

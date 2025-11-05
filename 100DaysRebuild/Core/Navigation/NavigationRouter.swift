@@ -48,20 +48,19 @@ class NavigationRouter: ObservableObject {
         withAnimation(.easeOut(duration: 0.1)) {
             // Keep tab unchanged but set to changing state to trigger opacity animation
         }
-        
-        // After brief fade out, change tab on the main queue
+
+        // After brief fade out, change tab
         let tabToSelect = tab
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
             guard let self = self else { return }
             // Change tab without animation
             self.selectedTab = tabToSelect
 
             // After tab change, fade in new tab
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-                guard let self = self else { return }
-                withAnimation(.easeIn(duration: 0.15)) {
-                    self.tabIsChanging = false
-                }
+            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+            withAnimation(.easeIn(duration: 0.15)) {
+                self.tabIsChanging = false
             }
         }
     }
@@ -70,9 +69,10 @@ class NavigationRouter: ObservableObject {
     func showNewChallengeSheet() {
         // First navigate to the challenges tab
         changeTab(to: 0)
-        
+
         // Then after a small delay, set the flag to show the new challenge sheet
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
             guard let self = self else { return }
             withAnimation {
                 self.isShowingNewChallengeSheet = true

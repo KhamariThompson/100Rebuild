@@ -18,7 +18,7 @@ class MigrationManager: ObservableObject {
     @Published var migrationStatus: MigrationStatus = .pending
     @Published var legacyUserGracePeriodEnd: Date?
 
-    private let db = Firestore.firestore()
+    private lazy var db = Firestore.firestore()
     private let userDefaults = UserDefaults.standard
 
     // MARK: - Constants
@@ -89,10 +89,17 @@ class MigrationManager: ObservableObject {
         // Get user registration date from Firestore
         let userDoc = try await db.collection("users").document(userId).getDocument()
 
-        guard let data = userDoc.data(),
-              let createdAtTimestamp = data["createdAt"] as? Timestamp else {
+        guard let data = userDoc.data() else {
             // No data means new user - they should NOT get legacy access
             print("⚠️ MigrationManager: No Firestore data found - treating as NEW USER")
+            return .newUser
+        }
+
+        // Try both field names: accountCreatedAt (new) and createdAt (old)
+        let createdAtTimestamp: Timestamp? = data["accountCreatedAt"] as? Timestamp ?? data["createdAt"] as? Timestamp
+
+        guard let createdAtTimestamp = createdAtTimestamp else {
+            print("⚠️ MigrationManager: No createdAt or accountCreatedAt timestamp - treating as NEW USER")
             return .newUser
         }
 

@@ -24,9 +24,9 @@ class ChallengeStore: ObservableObject {
     @Published private(set) var longestStreak: Int = 0
     @Published private(set) var overallCompletionPercentage: Double = 0
     @Published private(set) var lastCheckInDate: Date? = nil
-    
+
     // Dependencies
-    private let firestore = Firestore.firestore()
+    private lazy var firestore = Firestore.firestore()
     private var loadTask: Task<Void, Never>? = nil
     private var cancellables = Set<AnyCancellable>()
     private let userSession = UserSession.shared

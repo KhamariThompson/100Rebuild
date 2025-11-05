@@ -132,9 +132,7 @@ class SocialViewModel: ObservableObject {
     // Handle network status changes
     @objc private func networkStatusChanged(_ notification: Notification) {
         if let isConnected = notification.userInfo?["isConnected"] as? Bool {
-            DispatchQueue.main.async {
-                self.isOffline = !isConnected
-            }
+            self.isOffline = !isConnected
         }
     }
     

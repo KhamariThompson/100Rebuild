@@ -22,7 +22,7 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
     // Persistence keys
     private let foundersWindowKey = "founders_window_state_v1"
 
-    init(repository: SubscriptionRepository) {
+    nonisolated init(repository: SubscriptionRepository) {
         self.repository = repository
         super.init()
 
@@ -30,8 +30,11 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
         print("🔐 SubscriptionStore.init id=\(ObjectIdentifier(self))")
         #endif
 
-        // Set self as RevenueCat delegate
-        Purchases.shared.delegate = self
+        // Set delegate on MainActor to avoid dispatch queue assertion
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            Purchases.shared.delegate = self
+        }
     }
 
     // MARK: - PurchasesDelegate

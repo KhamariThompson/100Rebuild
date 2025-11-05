@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseCore
 @preconcurrency import FirebaseAuth
 @preconcurrency import FirebaseFirestore
 import Network
@@ -44,8 +45,11 @@ enum AuthState: Equatable {
 
 @MainActor
 class UserSession: ObservableObject {
-    static let shared = UserSession()
-    
+    nonisolated(unsafe) static let shared: UserSession = {
+        let instance = UserSession()
+        return instance
+    }()
+
     @Published var authState: AuthState = .loading
     @Published var isAuthenticated = false
     @Published private(set) var hasCompletedOnboarding = false
@@ -57,30 +61,58 @@ class UserSession: ObservableObject {
     @Published var isNetworkAvailable = true
     @Published var errorMessage: String?
     @Published var lastSignInTime: Date?
-    
+
     // Add a handler that other components can set to be notified of auth changes
     var authStateDidChangeHandler: (() -> Void)?
-    
-    private let auth = Auth.auth()
-    private let firestore = Firestore.firestore()
-    private var stateListener: AuthStateDidChangeListenerHandle?
+
+    private lazy var auth = Auth.auth()
+    private lazy var firestore = Firestore.firestore()
+    private var stateListener: AuthStateDidChangeListenerHandle? = nil
+    // No stored observer token; use selector-based observer to avoid Sendable closure issues
     private let networkMonitor = NWPathMonitor()
     private let networkQueue = DispatchQueue(label: "UserSession.NetworkMonitor")
 
     // Migration manager for subscription model transition
-    private let migrationManager = MigrationManager.shared
-    
-    private init() {
+    private lazy var migrationManager = MigrationManager.shared
+
+    private var setupCompleted = false
+
+    nonisolated private init() {
+        // Init is now simple - all properties initialized, no self usage
+        // Schedule setup to happen asynchronously on MainActor
+        Task { @MainActor [weak self] in
+            await self?.performSetup()
+        }
+    }
+
+    @MainActor
+    private func performSetup() async {
+        guard !setupCompleted else { return }
+        setupCompleted = true
+
+        // Set up network monitoring (nonisolated)
         setupNetworkMonitoring()
-        setupAuthStateListener()
-        
-        // Listen for network status notification from AppDelegate
+
+        // Use selector-based observer to avoid main actor isolation issues
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleNetworkStatusChange),
             name: NSNotification.Name("NetworkStatusChanged"),
             object: nil
         )
+
+        // If Firebase is already configured, set up the auth listener immediately.
+        // Otherwise defer setup until Firebase is configured.
+        if FirebaseApp.app() != nil {
+            setupAuthStateListener()
+        } else {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(handleFirebaseConfigured),
+                name: NSNotification.Name("FirebaseConfigured"),
+                object: nil
+            )
+        }
     }
     
     deinit {
@@ -94,7 +126,7 @@ class UserSession: ObservableObject {
         #endif
     }
     
-    private func setupNetworkMonitoring() {
+    nonisolated private func setupNetworkMonitoring() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             let isConnected = path.status == .satisfied
             Task { @MainActor in
@@ -213,6 +245,14 @@ class UserSession: ObservableObject {
                     object: nil
                 )
             }
+        }
+    }
+
+    @objc private func handleFirebaseConfigured(_ notification: Notification) {
+        Task { @MainActor in
+            setupAuthStateListener()
+            // Remove the observer now that we've configured
+            NotificationCenter.default.removeObserver(self, name: NSNotification.Name("FirebaseConfigured"), object: nil)
         }
     }
     
