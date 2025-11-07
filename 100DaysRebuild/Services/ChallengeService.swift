@@ -44,28 +44,19 @@ enum ChallengeError: Error, LocalizedError {
 @MainActor
 class ChallengeService: ObservableObject {
     static let shared = ChallengeService()
-    
+
     private let challengeStore = ChallengeStore.shared
     private let subscriptionService = SubscriptionService.shared
-    private let maxChallengesForFreeUsers = 2
-    
+    // No challenge limits - unlimited for all users
+
     @Published var isDeleting = false
     @Published var deletionError: String? = nil
-    
+
     private init() {}
-    
-    /// Create a new challenge
+
+    /// Create a new challenge - unlimited for all users
     func createChallenge(_ challenge: Challenge) async throws {
-        if !subscriptionService.isProUser {
-            // Get count of active challenges only (not including archived)
-            let activeCount = challengeStore.getActiveChallenges().count
-            if activeCount >= maxChallengesForFreeUsers {
-                subscriptionService.showPaywall = true
-                throw ChallengeError.proFeatureRequired
-            }
-        }
-        
-        // Save challenge through the centralized store
+        // No limits - all users can create unlimited challenges
         try await challengeStore.saveChallenge(challenge)
     }
     
@@ -106,21 +97,10 @@ class ChallengeService: ObservableObject {
     // MARK: - CRUD Operations
     
     func createChallenge(title: String, userId: String) async throws -> Challenge {
-        // Check free user limit using active challenges only
-        if !subscriptionService.isProUser {
-            // Get only active (non-archived) challenges
-            let activeChallenges = challengeStore.getActiveChallenges()
-            // Compare active count against limit
-            if activeChallenges.count >= maxChallengesForFreeUsers {
-                // Show paywall
-                subscriptionService.showPaywall = true
-                throw ChallengeError.freeUserLimitExceeded
-            }
-        }
-        
+        // No limits - all users can create unlimited challenges
         let challenge = Challenge(
             id: UUID(),
-            title: title, 
+            title: title,
             startDate: Date(),
             lastCheckInDate: nil,
             streakCount: 0,
@@ -130,24 +110,16 @@ class ChallengeService: ObservableObject {
             ownerId: userId,
             lastModified: Date()
         )
-        
+
         // Save through the centralized store
         try await challengeStore.saveChallenge(challenge)
         return challenge
     }
     
-    /// Returns true if user has reached their free challenge limit
+    /// Returns true if user has reached their challenge limit - always false (no limits)
     func hasReachedFreeLimit(userId: String) async -> Bool {
-        // If the user is a pro subscriber, they never reach the limit
-        if subscriptionService.isProUser {
-            return false
-        }
-        
-        // Use the store to get the count of ACTIVE (non-archived) challenges only
-        let activeCount = challengeStore.getActiveChallenges().count
-        
-        // Compare active (non-archived) count against the limit
-        return activeCount >= maxChallengesForFreeUsers
+        // No limits - all users can create unlimited challenges
+        return false
     }
     
     func loadChallenges(for userId: String) async throws -> [Challenge] {

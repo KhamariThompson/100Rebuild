@@ -29,13 +29,9 @@ struct GroupChallengesView: View {
                                 )
                             
                             Spacer()
-                            
+
                             Button(action: {
-                                if subscriptionService.isProUser || viewModel.createdChallenges.count < 1 {
-                                    showingNewChallengeSheet = true
-                                } else {
-                                    subscriptionService.showPaywall = true
-                                }
+                                showingNewChallengeSheet = true
                             }) {
                                 Image(systemName: "plus.circle.fill")
                                     .font(AppTypography.title2())
@@ -120,11 +116,7 @@ struct GroupChallengesView: View {
                         .padding(.horizontal, 40)
                     
                     Button(action: {
-                        if subscriptionService.isProUser || viewModel.createdChallenges.count < 1 {
-                            showingNewChallengeSheet = true
-                        } else {
-                            subscriptionService.showPaywall = true
-                        }
+                        showingNewChallengeSheet = true
                     }) {
                         Text("Create Challenge")
                             .font(.headline)
@@ -357,31 +349,23 @@ struct NewGroupChallengeView: View {
                             Text("Maximum Participants")
                                 .font(.headline)
                                 .foregroundColor(Color.theme.text)
-                            
-                            if !subscriptionService.isProUser {
-                                Text("Free users can create challenges with up to 2 participants (1-on-1)")
-                                    .font(.caption)
-                                    .foregroundColor(Color.theme.subtext)
-                                    .padding(.horizontal, 4)
-                            }
-                            
+
                             HStack {
                                 Text("2")
                                     .foregroundColor(Color.theme.text)
-                                
+
                                 Slider(value: Binding(
                                     get: { Double(maxParticipants) },
                                     set: { maxParticipants = Int($0) }
                                 ), in: 2...10, step: 1)
-                                .disabled(!subscriptionService.isProUser)
-                                
+
                                 Text("10")
                                     .foregroundColor(Color.theme.text)
                             }
                             .padding()
                             .background(Color.theme.surface)
                             .cornerRadius(10)
-                            
+
                             Text("Current: \(maxParticipants) participants")
                                 .font(.caption)
                                 .foregroundColor(Color.theme.subtext)
@@ -447,23 +431,19 @@ struct NewGroupChallengeView: View {
     }
     
     private var isFormValid: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        (subscriptionService.isProUser || maxParticipants <= 2)
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    
+
     private func createChallenge() {
-        // Force max participants to 2 for free users
-        let finalMaxParticipants = subscriptionService.isProUser ? maxParticipants : 2
-        
-        // Create the challenge request
+        // Create the challenge request - no participant limits
         let request = GroupChallengeCreateRequest(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             description: description.trimmingCharacters(in: .whitespacesAndNewlines),
             isPublic: isPublic,
-            maxParticipants: finalMaxParticipants,
+            maxParticipants: maxParticipants,
             durationDays: duration
         )
-        
+
         onCreateChallenge(request)
     }
 }

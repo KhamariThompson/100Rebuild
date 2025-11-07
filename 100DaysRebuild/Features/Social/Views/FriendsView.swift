@@ -71,38 +71,6 @@ struct FriendsView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
-                        
-                        // Friend limit warning for non-Pro users
-                        if !subscriptionService.isProUser && friendService.friends.count >= 5 {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(Color.orange)
-                                
-                                Text("Free users are limited to 5 friends. Upgrade to Pro for unlimited friends.")
-                                    .font(AppTypography.caption1())
-                                    .foregroundColor(Color.orange)
-                                    .lineLimit(2)
-                                
-                                Spacer()
-                                
-                                Button(action: {
-                                    subscriptionService.showPaywall = true
-                                }) {
-                                    Text("Upgrade")
-                                        .font(AppTypography.caption1())
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.theme.accent)
-                                        .cornerRadius(8)
-                                }
-                            }
-                            .padding(10)
-                            .background(Color.orange.opacity(0.15))
-                            .cornerRadius(8)
-                            .padding(.horizontal)
-                        }
                     }
                     .padding(.top)
                     .background(Color.theme.background)
@@ -130,16 +98,11 @@ struct FriendsView: View {
                                             SuggestedFriendCard(
                                                 suggestion: suggestion,
                                                 onAddFriend: {
-                                                    let atLimit = !subscriptionService.isProUser && friendService.friends.count >= 5
-                                                    if atLimit {
-                                                        subscriptionService.showPaywall = true
-                                                    } else {
-                                                        Task {
-                                                            try? await friendService.sendFriendRequest(to: suggestion.username)
-                                                        }
+                                                    Task {
+                                                        try? await friendService.sendFriendRequest(to: suggestion.username)
                                                     }
                                                 },
-                                                isAtFriendLimit: !subscriptionService.isProUser && friendService.friends.count >= 5
+                                                isAtFriendLimit: false
                                             )
                                         }
                                     }
@@ -219,23 +182,17 @@ struct FriendsView: View {
                         // Local computed flags use FriendService state to avoid missing viewModel helpers
                         let isSent = friendService.outgoingRequests.contains(where: { $0.toUserId == user.id })
                         let isFriend = friendService.friends.contains(where: { $0.id == user.id })
-                        let atLimit = !subscriptionService.isProUser && friendService.friends.count >= 5
 
                         SearchResultRow(
                             user: user,
                             onAddFriend: {
-                                // Check if user has reached friend limit
-                                if atLimit {
-                                    subscriptionService.showPaywall = true
-                                } else {
-                                    Task {
-                                        try? await friendService.sendFriendRequest(to: user.username)
-                                    }
+                                Task {
+                                    try? await friendService.sendFriendRequest(to: user.username)
                                 }
                             },
                             isFriendRequestSent: isSent,
                             isFriend: isFriend,
-                            isAtFriendLimit: atLimit
+                            isAtFriendLimit: false
                         )
                     }
                 }
@@ -290,18 +247,6 @@ struct FriendsView: View {
                 .foregroundColor(Color.theme.subtext)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            
-            if !subscriptionService.isProUser {
-                HStack(spacing: 4) {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(Color.theme.accent)
-                    
-                    Text("Free accounts can have up to 5 friends")
-                        .font(AppTypography.footnote())
-                        .foregroundColor(Color.theme.subtext)
-                }
-                .padding(.top, 8)
-            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 60)

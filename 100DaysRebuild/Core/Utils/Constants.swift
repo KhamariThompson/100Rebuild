@@ -170,8 +170,7 @@ enum Constants {
 
     // MARK: - App Configuration
     enum App {
-        static let freeUserFriendLimit = 5
-        static let freeUserChallengeLimit = 3
+        // No free tier limits - all users get unlimited access
         static let firebaseCacheSizeBytes: Int64 = 5_242_880 // 5MB
         static let memoryWarningCheckInterval: TimeInterval = 5.0 // Seconds
         static let friendListPageSize = 20
@@ -193,8 +192,7 @@ enum Constants {
         static let networkOffline = "You're offline. Please check your internet connection."
         static let subscriptionFailed = "The purchase failed to complete."
         static let restoreFailed = "Failed to restore purchases."
-        static let friendLimitReached = "You've reached the maximum number of friends for the free tier. Upgrade to Pro for unlimited friends."
-        static let challengeLimitReached = "You've reached the maximum number of challenges for the free tier. Upgrade to Pro for unlimited challenges."
+        static let proRequired = "Pro subscription required to access this feature."
     }
 
     // MARK: - Animation Durations

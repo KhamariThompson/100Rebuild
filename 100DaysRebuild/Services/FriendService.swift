@@ -29,8 +29,7 @@ class FriendService: ObservableObject, FriendServiceProtocol {
     // Cache TTL in seconds
     private let usernameClaimCacheTTL: TimeInterval = 300 // 5 minutes
     
-    // Friend limit for free users
-    private let FREE_USER_FRIEND_LIMIT = 5
+    // No friend limits - unlimited for all users
     
     // Notification names
     static let friendsDidUpdateNotification = Notification.Name("friendsDidUpdate")
@@ -95,16 +94,10 @@ class FriendService: ObservableObject, FriendServiceProtocol {
         return Int(truncating: snapshot.count)
     }
     
-    /// Check if the user can add more friends based on their subscription status
+    /// Check if the user can add more friends - unlimited for all users
     func canAddMoreFriends() async throws -> Bool {
-        // If user is Pro, they can add unlimited friends
-        if SubscriptionService.shared.isProUser {
-            return true
-        }
-        
-        // Free users are limited to FREE_USER_FRIEND_LIMIT friends
-        let friendsCount = try await getFriendsCount()
-        return friendsCount < FREE_USER_FRIEND_LIMIT
+        // Unlimited friends for all users
+        return true
     }
     
     /// Search for users by username

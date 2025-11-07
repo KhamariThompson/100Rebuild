@@ -12,7 +12,7 @@ enum SocialError: Error, LocalizedError {
         case .proFeatureRequired:
             return "This feature requires a Pro subscription"
         case .friendLimitReached:
-            return "Free users can have a maximum of 5 friends. Upgrade to Pro for unlimited friends."
+            return "Friend limit reached."
         case .networkError:
             return "A network error occurred. Please try again."
         case .notFound:
@@ -25,8 +25,8 @@ enum SocialError: Error, LocalizedError {
 class SocialService: ObservableObject {
     static let shared = SocialService()
     private let subscriptionService = SubscriptionService.shared
-    private let maxFriendCountForFreeUsers = 5
-    
+    // No friend limits - unlimited for all users
+
     private init() {}
     
     // MARK: - Future Social Features
@@ -43,34 +43,13 @@ class SocialService: ObservableObject {
     }
     
     func sendFriendRequest(to userId: String) async throws {
-        // Check friend limit for free users
-        if !subscriptionService.isProUser {
-            let friendCount = try await getFriendCount()
-            if friendCount >= maxFriendCountForFreeUsers {
-                // Update UI on main thread
-                await MainActor.run {
-                    subscriptionService.showPaywall = true
-                }
-                throw SocialError.friendLimitReached
-            }
-        }
-        
+        // No friend limits - unlimited for all users
         // Implementation pending
     }
     
     func acceptFriendRequest(from userId: String) async throws {
-        // Check friend limit for free users before accepting
-        if !subscriptionService.isProUser {
-            let friendCount = try await getFriendCount()
-            if friendCount >= maxFriendCountForFreeUsers {
-                // Update UI on main thread
-                await MainActor.run {
-                    subscriptionService.showPaywall = true
-                }
-                throw SocialError.friendLimitReached
-            }
-        }
-        
+        // No friend limits - unlimited for all users
+
         // Implementation pending
     }
     

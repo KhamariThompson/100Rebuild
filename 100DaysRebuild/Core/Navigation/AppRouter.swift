@@ -15,7 +15,7 @@ class AppRouter: ObservableObject {
         case loading
         case funnel
         case mainPro
-        case mainFree
+        case paywall  // Show paywall for users without Pro who didn't convert
     }
 
     // MARK: - Entitlements Load State
@@ -80,7 +80,7 @@ class AppRouter: ObservableObject {
 
         // Manual override check - support/debug only
         if Constants.FeatureFlags.overrideNoFunnel {
-            return isAuthenticated ? (isPro ? .mainPro : .mainFree) : .auth
+            return isAuthenticated ? (isPro ? .mainPro : .paywall) : .auth
         }
 
         // Step 1: Auth gate
@@ -128,15 +128,20 @@ class AppRouter: ObservableObject {
         }()
 
         // Step 6: Make routing decision
+        // Users MUST have Pro to access main app (includes RC Pro + Grandfather Pro)
         let route: Route
         if effectiveIsProUser {
+            // User has Pro (either from subscription or legacy grace period)
             route = .mainPro
         } else if completedOnboarding {
-            route = .mainFree
+            // User completed onboarding but doesn't have Pro - show paywall
+            route = .paywall
         } else if isNewSignup {
+            // New user - show funnel first
             route = .funnel
         } else {
-            route = .mainFree
+            // No Pro access and not recently signed up - show paywall
+            route = .paywall
         }
 
         return route
@@ -156,7 +161,8 @@ class AppRouter: ObservableObject {
         } else if !entitlementsLoaded {
             return .loading
         } else {
-            return .funnel
+            // No Pro - show paywall
+            return .paywall
         }
     }
 

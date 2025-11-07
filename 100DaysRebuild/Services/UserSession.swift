@@ -114,6 +114,15 @@ class UserSession: ObservableObject {
             )
         }
     }
+
+    /// Wait for UserSession setup to complete - call this before using UserSession
+    @MainActor
+    public func waitForSetup() async {
+        // Wait for setup to complete
+        while !setupCompleted {
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        }
+    }
     
     deinit {
         #if DEBUG
@@ -185,10 +194,6 @@ class UserSession: ObservableObject {
     }
     
     private func setupAuthStateListener() {
-        #if DEBUG
-        print("Setting up auth state listener in UserSession")
-        #endif
-
         // Check for existing listener and remove it
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
@@ -203,9 +208,6 @@ class UserSession: ObservableObject {
                 guard let self = weakSelf else { return }
 
                 if let user = user {
-                    #if DEBUG
-                    print("UserSession: User authenticated - \(user.uid)")
-                    #endif
                     self.currentUser = user
                     self.isAuthenticated = true
                     self.authState = .signedIn(user)
@@ -215,18 +217,10 @@ class UserSession: ObservableObject {
                     // Check and perform migration for the subscription model
                     do {
                         try await self.migrationManager.checkAndMigrate(for: user.uid)
-                        #if DEBUG
-                        print("✅ UserSession: Migration check completed for user \(user.uid)")
-                        #endif
                     } catch {
-                        #if DEBUG
-                        print("❌ UserSession: Migration check failed: \(error.localizedDescription)")
-                        #endif
+                        // Silent failure in Release
                     }
                 } else {
-                    #if DEBUG
-                    print("UserSession: No active user")
-                    #endif
                     self.authState = .signedOut
                     self.currentUser = nil
                     self.isAuthenticated = false
@@ -257,23 +251,14 @@ class UserSession: ObservableObject {
     }
     
     private func loadUserProfile() async {
-        guard let userId = currentUser?.uid else {
-            #if DEBUG
-            print("UserSession: No user ID available for profile loading")
-            #endif
-            return
-        }
+        guard let userId = currentUser?.uid else { return }
 
         // Clear error message on new profile load attempt
         errorMessage = nil
-        #if DEBUG
-        print("UserSession: Loading profile for user \(userId)")
-        #endif
-        
+
         do {
             // Check network availability before making request
             guard isNetworkAvailable else {
-                print("UserSession: Network unavailable, trying cache")
                 // Try to get from cache first
                 do {
                     let document = try await firestore
@@ -316,7 +301,6 @@ class UserSession: ObservableObject {
             }
             
             // Network is available, make the request
-            print("UserSession: Fetching profile from Firestore")
             let profileRef = firestore.collection("users").document(userId)
             let document = try await profileRef.getDocument()
 
@@ -574,10 +558,9 @@ class UserSession: ObservableObject {
             ProgressDashboardViewModel.shared.prepareForSignOut()
         }
         
-        // 3. Add a small delay to allow views to complete their cleanup
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-        
-        // 4. Remove auth state listener
+        // PRODUCTION: No delays - cleanup is event-driven via notifications
+
+        // 3. Remove auth state listener
         if let listener = stateListener {
             auth.removeStateDidChangeListener(listener)
             stateListener = nil
@@ -806,9 +789,9 @@ class UserSession: ObservableObject {
                          userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
         }
         
-        // Create a timeout task
+        // PRODUCTION: Create timeout task with reduced time for faster user feedback
         let timeoutTask = Task {
-            try await Task.sleep(nanoseconds: 30_000_000_000) // 30 seconds
+            try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds (reduced from 30)
             throw NSError(domain: "UserSession", code: 102,
                          userInfo: [NSLocalizedDescriptionKey: "Account deletion timed out. Please try again later."])
         }
@@ -869,10 +852,9 @@ class UserSession: ObservableObject {
             
             // Cancel the timeout task
             timeoutTask.cancel()
-            
-            // Add a small delay to allow state updates to propagate
-            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            
+
+            // PRODUCTION: No delays - state updates are synchronous on MainActor
+
             // 6. Reinitialize auth state listener for future sign-ins
             setupAuthStateListener()
             

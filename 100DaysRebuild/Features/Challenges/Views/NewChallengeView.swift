@@ -678,11 +678,11 @@ struct NewChallengeView: View {
                 Spacer()
             }
             
-            Text("Free users can create up to 2 active challenges")
+            Text("Create unlimited challenges and track your progress")
                 .font(AppTypography.callout())
                 .foregroundColor(.theme.text)
-            
-            Text("Upgrade to Pro to create unlimited challenges, access premium icons, and unlock timer features")
+
+            Text("Access premium icons and timer features")
                 .font(AppTypography.subhead())
                 .foregroundColor(.theme.subtext)
                 .padding(.top, AppSpacing.xxs)
