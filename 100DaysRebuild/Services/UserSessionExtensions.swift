@@ -31,32 +31,37 @@ extension UserSession {
     
     /// Complete the onboarding funnel and mark timestamp
     /// NOTE: This does NOT grant app access - user must subscribe first
-    func completeFunnel() {
+    /// CHANGED: Now async to ensure Firestore write completes before caching
+    func completeFunnel() async throws {
         let now = Date()
 
-        // Store locally
-        UserDefaults.standard.set(now, forKey: StorageKeys.onboardingCompletedAt)
-
-        // Update Firestore if user is authenticated
-        // IMPORTANT: We do NOT set hasCompletedOnboarding here
-        // That only happens after successful subscription purchase
-        if let userId = currentUser?.uid {
-            Task {
-                do {
-                    try await Firestore.firestore().collection("users").document(userId).updateData([
-                        "onboardingCompletedAt": now,
-                        "funnelCompleted": true
-                        // NOTE: hasCompletedOnboarding is NOT set here
-                    ])
-
-                    print("✅ UserSession: Funnel completion saved to Firestore (not granting app access)")
-                } catch {
-                    print("❌ UserSession: Failed to save funnel completion to Firestore - \(error.localizedDescription)")
-                }
-            }
+        // Step 1: Write to Firestore FIRST (SSOT)
+        guard let userId = currentUser?.uid else {
+            print("⚠️ UserSession: Cannot complete funnel - no user logged in")
+            throw NSError(domain: "UserSession", code: 1000, userInfo: [NSLocalizedDescriptionKey: "No user is signed in"])
         }
 
-        // Sync with RevenueCat subscriber attributes
+        do {
+            // Use setData with merge to handle document creation/update atomically
+            try await Firestore.firestore().collection("users").document(userId).setData([
+                "onboardingCompletedAt": Timestamp(date: now),
+                "funnelCompleted": true
+                // NOTE: hasCompletedOnboarding is NOT set here - only after Pro purchase
+            ], merge: true)
+
+            print("✅ UserSession: Funnel completion saved to Firestore (not granting app access)")
+
+            // Step 2: Cache to UserDefaults AFTER Firestore succeeds
+            UserDefaults.standard.set(now, forKey: StorageKeys.onboardingCompletedAt)
+            print("✅ UserSession: Cached funnel completion to UserDefaults")
+
+        } catch {
+            print("❌ UserSession: Failed to save funnel completion to Firestore - \(error.localizedDescription)")
+            // DO NOT cache to UserDefaults if Firestore write fails
+            throw error  // Propagate error to caller
+        }
+
+        // Step 3: Sync with RevenueCat subscriber attributes
         syncFunnelAttributesToRevenueCat()
 
         // DO NOT call completeOnboarding() here - that only happens after Pro purchase

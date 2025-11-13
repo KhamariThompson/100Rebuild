@@ -4,7 +4,7 @@ import FirebaseAuth
 
 struct ExploreChallengesView: View {
     @StateObject private var viewModel = ExploreChallengesViewModel()
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @State private var searchText = ""
     @State private var selectedFilter: ChallengeFilter = .all
     

@@ -30,6 +30,7 @@ struct ChallengesView: View {
     @State private var showErrorAlert = false
     @State private var scrollOffset: CGFloat = 0
     @State private var showUpgradePrompt = false
+    @State private var isShowingTimerSession = false
     @Environment(\.colorScheme) private var colorScheme
     
     // Gradient for challenges header styling
@@ -149,6 +150,17 @@ struct ChallengesView: View {
             .environmentObject(entitlementsAdapter)
             .environmentObject(ThemeManager.shared)
             .environmentObject(userSession)
+        }
+        .sheet(isPresented: $isShowingTimerSession) {
+            if let challenge = challengeToCheckIn {
+                TimerSessionView(challenge: challenge)
+                    .onDisappear {
+                        // Refresh challenges after timer session
+                        Task {
+                            await viewModel.loadChallenges()
+                        }
+                    }
+            }
         }
         .alert(isPresented: $viewModel.showError) {
             Alert(
@@ -347,15 +359,24 @@ struct ChallengesView: View {
                     ForEach(viewModel.challenges) { challenge in
                         ChallengeCardComponent(challenge: challenge) {
                             // Only show the check-in sheet if not already completed today and streak hasn't expired
-                            if !challenge.isCompletedToday && !challenge.isCompleted && 
+                            if !challenge.isCompletedToday && !challenge.isCompleted &&
                                !(challenge.hasStreakExpired && challenge.lastCheckInDate != nil && challenge.streakCount > 0) {
-                                // Use transaction to disable animation when setting state
-                                withTransaction(Transaction(animation: nil)) {
-                                    // Set the challenge and show sheet immediately without any delay
-                                    self.challengeToCheckIn = challenge
-                                    self.isShowingCheckInSheet = true
+                                // Check if this is a timed challenge
+                                if challenge.isTimed {
+                                    // Show timer session view for timed challenges
+                                    withTransaction(Transaction(animation: nil)) {
+                                        self.challengeToCheckIn = challenge
+                                        self.isShowingTimerSession = true
+                                    }
+                                } else {
+                                    // Use transaction to disable animation when setting state
+                                    withTransaction(Transaction(animation: nil)) {
+                                        // Set the challenge and show sheet immediately without any delay
+                                        self.challengeToCheckIn = challenge
+                                        self.isShowingCheckInSheet = true
+                                    }
                                 }
-                                
+
                                 // Optional print statements for debugging
                                 print("Button tapped at \(Date())")
                                 print("Setting sheet state at \(Date())")

@@ -1,4 +1,5 @@
 import Foundation
+import RevenueCat
 
 enum SubscriptionIDs {
     /// RevenueCat entitlement identifier (case-sensitive)
@@ -60,13 +61,82 @@ enum SubscriptionIDs {
     /// Call this at app launch to ensure RevenueCat is configured correctly
     /// - Parameter offerings: Current offerings from RevenueCat
     /// - Returns: Validation errors, or empty array if valid
-    static func validateConfiguration(offerings: Any?) -> [String] {
+    @MainActor
+    static func validateConfiguration(offerings: Offerings?) async -> [String] {
         var errors: [String] = []
 
-        // Add validation logic here if needed
-        // For now, just return empty (validation happens at runtime in diagnostics)
+        guard let offerings = offerings else {
+            errors.append("No offerings available from RevenueCat")
+            return errors
+        }
+
+        // 1. Check default offering exists
+        guard let defaultOffering = offerings.offering(identifier: offeringID) else {
+            errors.append("Required offering '\(offeringID)' not found in RevenueCat")
+            return errors
+        }
+
+        print("✅ RC Validation: Found offering '\(offeringID)'")
+
+        // 2. Validate expected packages exist
+        let expectedPackages = [Package.monthly, Package.annual, Package.annualNoIntro]
+        for packageId in expectedPackages {
+            if let package = defaultOffering.package(identifier: packageId) {
+                // Package found - validate product ID matches
+                let expectedProductId = packageProductMap[packageId]
+                let actualProductId = package.storeProduct.productIdentifier
+
+                if let expected = expectedProductId, expected != actualProductId {
+                    errors.append("Package '\(packageId)' has product ID '\(actualProductId)' but expected '\(expected)'")
+                } else {
+                    print("✅ RC Validation: Package '\(packageId)' → '\(actualProductId)'")
+                }
+            } else {
+                errors.append("Required package '\(packageId)' not found in offering '\(offeringID)'")
+            }
+        }
+
+        // 3. Validate entitlement exists in customer info
+        do {
+            let customerInfo = try await Purchases.shared.customerInfo()
+            let hasProEntitlement = customerInfo.entitlements.all.keys.contains(entitlement)
+
+            if !hasProEntitlement {
+                // Not an error if user hasn't subscribed yet, just log
+                print("ℹ️ RC Validation: Entitlement '\(entitlement)' not in customer info (user may not have subscribed)")
+            } else {
+                print("✅ RC Validation: Entitlement '\(entitlement)' found")
+            }
+        } catch {
+            print("⚠️ RC Validation: Unable to check entitlements: \(error.localizedDescription)")
+        }
 
         return errors
+    }
+
+    /// Perform runtime validation and log results
+    /// Non-fatal - logs errors but doesn't crash
+    @MainActor
+    static func performRuntimeValidation() async {
+        do {
+            let offerings = try await Purchases.shared.offerings()
+            let errors = await validateConfiguration(offerings: offerings)
+
+            if errors.isEmpty {
+                print("✅ RC Validation: All checks passed")
+            } else {
+                print("❌ RC Validation: Found \(errors.count) error(s):")
+                for error in errors {
+                    print("   - \(error)")
+                }
+                // Log to analytics/crash reporting in production
+                #if !DEBUG
+                // TODO: Send validation errors to analytics
+                #endif
+            }
+        } catch {
+            print("❌ RC Validation: Failed to fetch offerings: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Diagnostics

@@ -24,7 +24,7 @@ enum SocialError: Error, LocalizedError {
 @MainActor
 class SocialService: ObservableObject {
     static let shared = SocialService()
-    private let subscriptionService = SubscriptionService.shared
+    private let subscriptionStore = SubscriptionStore.shared
     // No friend limits - unlimited for all users
 
     private init() {}
@@ -55,11 +55,8 @@ class SocialService: ObservableObject {
     
     func createGroupChallenge(title: String, participants: [String]) async throws {
         // Group challenges are a Pro feature
-        guard subscriptionService.isProUser else {
-            // Update UI on main thread
-            await MainActor.run {
-                subscriptionService.showPaywall = true
-            }
+        guard subscriptionStore.isPro else {
+            // Note: showPaywall removed from SubscriptionStore - handle in UI layer
             throw SocialError.proFeatureRequired
         }
         
@@ -68,11 +65,8 @@ class SocialService: ObservableObject {
     
     func joinGroupChallenge(challengeId: String) async throws {
         // Group challenges are a Pro feature
-        guard subscriptionService.isProUser else {
-            // Update UI on main thread
-            await MainActor.run {
-                subscriptionService.showPaywall = true
-            }
+        guard subscriptionStore.isPro else {
+            // Note: showPaywall removed from SubscriptionStore - handle in UI layer
             throw SocialError.proFeatureRequired
         }
         
@@ -81,11 +75,8 @@ class SocialService: ObservableObject {
     
     func shareMilestone(challengeId: String, message: String) async throws {
         // Shareable milestones are a Pro feature
-        guard subscriptionService.isProUser else {
-            // Update UI on main thread
-            await MainActor.run {
-                subscriptionService.showPaywall = true
-            }
+        guard subscriptionStore.isPro else {
+            // Note: showPaywall removed from SubscriptionStore - handle in UI layer
             throw SocialError.proFeatureRequired
         }
         

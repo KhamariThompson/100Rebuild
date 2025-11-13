@@ -96,17 +96,10 @@ enum Constants {
         /// Legacy cutoff date: November 1, 2025 (00:00 UTC)
         /// Users registered BEFORE this date get grandfathered access (1 year free Pro)
         /// Users registered ON OR AFTER this date are new users (must see funnel → paywall)
-        static let newFunnelStartDate: Date = {
-            var comps = DateComponents()
-            comps.year = 2025
-            comps.month = 11
-            comps.day = 1
-            comps.hour = 0
-            comps.minute = 0
-            comps.second = 0
-            comps.timeZone = TimeZone(identifier: "UTC")
-            return Calendar.current.date(from: comps)!
-        }()
+        /// ⚠️ SINGLE SOURCE OF TRUTH: SubscriptionPolicy.grandfatherCutoffUTC
+        static var newFunnelStartDate: Date {
+            SubscriptionPolicy.grandfatherCutoffUTC
+        }
 
         /// Founder window cutoff: October 10, 2025 (00:00 UTC)
         /// Users who registered before this date may be eligible for special founder pricing
@@ -123,7 +116,8 @@ enum Constants {
         }()
 
         /// Grandfathered users get 1 year of free Pro from their account creation date
-        static let grandfatherDuration: TimeInterval = 365 * 24 * 60 * 60 // 1 year in seconds
+        /// ⚠️ SINGLE SOURCE OF TRUTH: SubscriptionPolicy.grandfatherDurationYears
+        static let grandfatherDuration: TimeInterval = 365 * 24 * 60 * 60 // 1 year in seconds (kept for backwards compatibility)
 
         /// Current funnel schema version - bump this to force re-showing funnel if design changes
         static let funnelSchemaVersion = 1
@@ -141,12 +135,21 @@ enum Constants {
         /// Enable new routing v2 logic
         /// Set to false to revert to legacy routing behavior
         static var routingV2Enabled: Bool {
-            UserDefaults.standard.object(forKey: "routing.v2.enabled") as? Bool ?? true
+            #if DEBUG
+            return UserDefaults.standard.object(forKey: "routing.v2.enabled") as? Bool ?? true
+            #else
+            return true  // Always enabled in Release
+            #endif
         }
 
         /// Manual override to skip funnel (for support/debug only)
+        /// ⚠️ DISABLED in Release builds to prevent revenue bypass
         static var overrideNoFunnel: Bool {
-            UserDefaults.standard.bool(forKey: "override.no_funnel")
+            #if DEBUG
+            return UserDefaults.standard.bool(forKey: "override.no_funnel")
+            #else
+            return false  // Always false in Release - no funnel skipping
+            #endif
         }
     }
 
@@ -200,7 +203,7 @@ enum Constants {
         static let short: TimeInterval = 0.2
         static let medium: TimeInterval = 0.3
         static let long: TimeInterval = 0.5
-        static let splash: TimeInterval = 0.5
+        static let splash: TimeInterval = 1.5  // Minimum splash screen display duration
     }
 
     // MARK: - URLs

@@ -14,23 +14,25 @@ public struct FunnelHeroHeader: View {
     }
 
     public var body: some View {
-        VStack(spacing: DS.Spacing.sm) {
-            // Solid color title for better readability
+        VStack(spacing: 16) {
+            // Enhanced title with consistent typography
             Text(title)
-                .font(AppTypography.largeTitle(.bold))
+                .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundStyle(DS.Colors.accent)
                 .multilineTextAlignment(.center)
+                .lineSpacing(2)
                 .accessibilityLabel(title)
                 .accessibilityAddTraits(.isHeader)
 
             Text(subtitle)
-                .font(AppTypography.body())
-                .foregroundStyle(DS.Colors.onSurface.opacity(0.8))
+                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .foregroundStyle(DS.Colors.onSurface.opacity(0.75))
                 .multilineTextAlignment(.center)
+                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, DS.Spacing.xl)
-        .padding(.horizontal, DS.Spacing.xl)
+        .padding(.horizontal, 24)
     }
 }
 
@@ -88,29 +90,41 @@ public struct BenefitsGrid: View {
 
     @ViewBuilder
     private func benefitCard(_ benefit: Benefit) -> some View {
-        DS.Card(padding: DS.Spacing.md) {
-            HStack(alignment: .top, spacing: DS.Spacing.sm) {
-                // Icon
-                DS.Icon(benefit.icon, size: 24, color: DS.Colors.accent)
-                    .frame(width: 28, height: 28)
+        DS.Card(padding: 16) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Icon with gradient background
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [DS.Colors.accent.opacity(0.15), DS.Colors.accent.opacity(0.08)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
 
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
+                    DS.Icon(benefit.icon, size: 20, color: DS.Colors.accent)
+                }
+
+                // Text content with enhanced typography
+                VStack(alignment: .leading, spacing: 6) {
                     Text(benefit.title)
-                        .font(AppTypography.headline())
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(DS.Colors.onSurface)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     Text(benefit.caption)
-                        .font(AppTypography.subhead())
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(DS.Colors.onSurfaceSecondary)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(minHeight: 56)
+        .frame(minHeight: 120)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(benefit.title). \(benefit.caption)")
     }
@@ -135,21 +149,45 @@ public struct FunnelProgressBar: View {
     }
 
     public var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                // Background track
-                Capsule()
-                    .fill(DS.Colors.onSurface.opacity(0.12))
+        VStack(spacing: 12) {
+            // Progress percentage and step text
+            HStack {
+                Text("Step \(current) of \(total)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(DS.Colors.onSurfaceSecondary)
 
-                // Progress fill
-                Capsule()
-                    .fill(DS.Colors.accent)
-                    .frame(width: max(0, progress * geometry.size.width))
-                    .animation(.easeOut(duration: 0.35), value: current)
+                Spacer()
+
+                Text("\(Int(progress * 100))%")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(DS.Colors.accent)
             }
+            .padding(.horizontal, 24)
+
+            // Enhanced progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track with gradient
+                    Capsule()
+                        .fill(DS.Colors.onSurface.opacity(0.08))
+
+                    // Progress fill with gradient and glow
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [DS.Colors.accent, DS.Colors.accent.opacity(0.85)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(0, progress * geometry.size.width))
+                        .shadow(color: DS.Colors.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.7), value: current)
+                }
+            }
+            .frame(height: 10)
+            .padding(.horizontal, 24)
         }
-        .frame(height: 8)
-        .padding(.horizontal, DS.Spacing.xl)
         .accessibilityLabel("Step \(current) of \(total)")
         .accessibilityValue("\(Int(progress * 100)) percent complete")
     }
@@ -177,24 +215,59 @@ public struct CTAStack: View {
     }
 
     public var body: some View {
-        VStack(spacing: DS.Spacing.sm) {
-            // Primary button
-            Button(primaryTitle, action: primaryAction)
-                .ds(.primary)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .accessibilityHint("Primary action")
+        VStack(spacing: 12) {
+            // Enhanced primary button
+            Button(action: primaryAction) {
+                Text(primaryTitle)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        ZStack {
+                            LinearGradient(
+                                colors: [DS.Colors.accent, DS.Colors.accent.opacity(0.85)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
 
-            // Optional secondary button
+                            // Subtle shine effect
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.15), Color.clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: DS.Colors.accent.opacity(0.4), radius: 12, x: 0, y: 6)
+                    .shadow(color: Color.black.opacity(0.1), radius: 3, x: 0, y: 2)
+            }
+            .accessibilityHint("Primary action")
+
+            // Optional enhanced secondary button
             if let secondaryTitle = secondaryTitle,
                let secondaryAction = secondaryAction {
-                Button(secondaryTitle, action: secondaryAction)
-                    .ds(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .accessibilityHint("Secondary action")
+                Button(action: secondaryAction) {
+                    Text(secondaryTitle)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(DS.Colors.accent)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(DS.Colors.accent.opacity(0.3), lineWidth: 1.5)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .fill(DS.Colors.accent.opacity(0.06))
+                                )
+                        )
+                }
+                .accessibilityHint("Secondary action")
             }
         }
-        .padding(.horizontal, DS.Spacing.xl)
-        .padding(.bottom, DS.Spacing.xl)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
     }
 }
 

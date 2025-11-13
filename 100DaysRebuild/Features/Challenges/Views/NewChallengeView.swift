@@ -1,46 +1,29 @@
 import SwiftUI
 
-/// An enhanced view for creating a new challenge with multiple configuration options
+/// Create a new 100-day challenge
+/// Simplified and optimized with proper typography matching the app
 struct NewChallengeView: View {
     @Binding var isPresented: Bool
     @Binding var challengeTitle: String
     let onCreateChallenge: (String, Bool) -> Void
-    
+
     // Challenge configuration
     @State private var isTimed: Bool = false
-    @State private var isPublic: Bool = true
-    @State private var selectedCategory: ChallengeCategory = .general
-    @State private var minDuration: Int = 15
-    @State private var selectedIcon: String = "checkmark.circle.fill"
-    @State private var showCategoryPicker = false
-    @State private var showIconPicker = false
-    @State private var challengeDescription: String = ""
-    
+
     // UI state
-    @State private var showTimedInfo: Bool = false
     @State private var animateElements: Bool = false
     @FocusState private var isTitleFocused: Bool
-    @FocusState private var isDescriptionFocused: Bool
-    
-    // Constants for text limits
+
+    // Constants
     private let titleCharLimit = 50
-    private let descriptionCharLimit = 200
-    
+
     // Environment
     @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @EnvironmentObject private var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject private var themeManager: ThemeManager
     @EnvironmentObject private var userSession: UserSession
-    
-    // Icon choices
-    private let iconOptions = [
-        "checkmark.circle.fill", "figure.run", "book.fill", "heart.fill", 
-        "brain.head.profile", "drop.fill", "camera.fill", "music.note",
-        "paintbrush.fill", "gamecontroller.fill", "leaf.fill", "sun.max.fill",
-        "moon.fill", "music.note.list", "briefcase.fill", "pills.fill",
-        "fork.knife", "cup.and.saucer.fill", "bicycle", "clock.fill"
-    ]
-    
+    @Environment(\.colorScheme) private var colorScheme
+
     // Popular challenge suggestions
     private let challengeSuggestions = [
         "Go to the gym",
@@ -48,356 +31,40 @@ struct NewChallengeView: View {
         "No sugar",
         "Code every day",
         "Meditate",
-        "Drink a gallon of water",
-        "Write journal entry",
-        "Take a daily photo",
-        "Practice an instrument"
+        "Drink water",
+        "Write journal",
+        "Take a photo",
+        "Practice music"
     ]
-    
-    // Categories
-    private enum ChallengeCategory: String, CaseIterable, Identifiable {
-        case general = "General"
-        case fitness = "Fitness"
-        case mindfulness = "Mindfulness"
-        case productivity = "Productivity"
-        case creativity = "Creativity"
-        case health = "Health"
-        case learning = "Learning"
-        
-        var id: String { rawValue }
-        
-        var icon: String {
-            switch self {
-            case .general: return "star.fill"
-            case .fitness: return "figure.run"
-            case .mindfulness: return "brain.head.profile"
-            case .productivity: return "checkmark.circle.fill"
-            case .creativity: return "paintbrush.fill"
-            case .health: return "heart.fill"
-            case .learning: return "book.fill"
-            }
-        }
-        
-        var color: Color {
-            switch self {
-            case .general: return .blue
-            case .fitness: return .orange
-            case .mindfulness: return .purple
-            case .productivity: return .green
-            case .creativity: return .pink
-            case .health: return .red
-            case .learning: return .yellow
-            }
-        }
-    }
-    
+
     var body: some View {
         NavigationView {
             ZStack {
                 // Background
                 Color.theme.background.ignoresSafeArea()
-                
-                // Main content
-                ScrollView {
-                    VStack(spacing: AppSpacing.xl) {
-                        // Challenge title input
-                        VStack(alignment: .leading, spacing: AppSpacing.s) {
-                            HStack {
-                                Text("What do you want to do for 100 days?")
-                                    .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
-                                    .foregroundColor(.theme.text)
-                                
-                                Spacer()
-                                
-                                // Character counter
-                                Text("\(challengeTitle.count)/\(titleCharLimit)")
-                                    .font(AppTypography.caption1())
-                                    .foregroundColor(challengeTitle.count > Int(Double(titleCharLimit) * 0.8) 
-                                        ? (challengeTitle.count >= titleCharLimit ? .red : .orange) 
-                                        : .theme.subtext)
-                            }
-                            
-                            ZStack(alignment: .leading) {
-                                if challengeTitle.isEmpty {
-                                    Text("e.g., Read 10 pages, Meditate, No sugar")
-                                        .foregroundColor(.theme.subtext.opacity(0.6))
-                                        .padding(.leading, AppSpacing.m)
-                                }
-                                
-                                TextField("", text: Binding(
-                                    get: { challengeTitle },
-                                    set: { challengeTitle = String($0.prefix(titleCharLimit)) }
-                                ))
-                                .font(AppTypography.title3())
-                                .padding(AppSpacing.m)
-                                .frame(minHeight: 44)
-                                .background(Color.theme.surface)
-                                .cornerRadius(AppSpacing.cardCornerRadius)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                        .stroke(Color.theme.subtext.opacity(0.2), lineWidth: 1)
-                                )
-                                .focused($isTitleFocused)
-                                .submitLabel(.done)
-                                .toolbar {
-                                    ToolbarItemGroup(placement: .keyboard) {
-                                        Spacer()
-                                        Button("Done") {
-                                            isTitleFocused = false
-                                            isDescriptionFocused = false
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.top, AppSpacing.m)
-                        .offset(y: animateElements ? 0 : 20)
-                        .opacity(animateElements ? 1 : 0)
-                        
-                        // Challenge icon & category selection
-                        HStack(spacing: AppSpacing.l) {
-                            // Icon selector
-                            VStack(alignment: .center, spacing: AppSpacing.xs) {
-                                Text("Icon")
-                                    .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(.theme.subtext)
-                                
-                                Button(action: {
-                                    hideKeyboard()
-                                    withAnimation {
-                                        showIconPicker.toggle()
-                                    }
-                                }) {
-                                    ZStack {
-                                        Circle()
-                                            .fill(Color.theme.accent.opacity(0.1))
-                                            .frame(width: 60, height: 60)
-                                        
-                                        Image(systemName: selectedIcon)
-                                            .font(AppTypography.title1())
-                                            .foregroundColor(Color.theme.accent)
-                                    }
-                                }
-                            }
-                            
-                            // Category selector
-                            VStack(alignment: .center, spacing: AppSpacing.xs) {
-                                Text("Category")
-                                    .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
-                                    .foregroundColor(.theme.subtext)
-                                
-                                Button(action: {
-                                    hideKeyboard()
-                                    withAnimation {
-                                        showCategoryPicker.toggle()
-                                    }
-                                }) {
-                                    HStack(spacing: AppSpacing.xs) {
-                                        Image(systemName: selectedCategory.icon)
-                                            .foregroundColor(selectedCategory.color)
-                                        
-                                        Text(selectedCategory.rawValue)
-                                            .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
-                                            .foregroundColor(.theme.text)
-                                        
-                                        Image(systemName: "chevron.down")
-                                            .font(AppTypography.caption1())
-                                            .foregroundColor(.theme.subtext)
-                                    }
-                                    .padding(.horizontal, AppSpacing.m)
-                                    .padding(.vertical, AppSpacing.s)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                            .fill(Color.theme.surface)
-                                    )
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal)
-                        .offset(y: animateElements ? 0 : 20)
-                        .opacity(animateElements ? 1 : 0)
-                        
-                        // Configuration cards
-                        VStack(spacing: AppSpacing.m) {
-                            // Description (optional)
-                            VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                                HStack {
-                                    Text("Description (optional)")
-                                        .font(AppTypography.footnote())
-                                        .foregroundColor(.theme.subtext)
-                                    
-                                    Spacer()
-                                    
-                                    // Character counter
-                                    Text("\(challengeDescription.count)/\(descriptionCharLimit)")
-                                        .font(AppTypography.caption1())
-                                        .foregroundColor(challengeDescription.count > Int(Double(descriptionCharLimit) * 0.8) 
-                                            ? (challengeDescription.count >= descriptionCharLimit ? .red : .orange) 
-                                            : .theme.subtext)
-                                }
-                                
-                                ZStack(alignment: .topLeading) {
-                                    if challengeDescription.isEmpty {
-                                        Text("What's your goal? Be specific to stay motivated.")
-                                            .font(AppTypography.subhead())
-                                            .foregroundColor(.theme.subtext.opacity(0.6))
-                                            .padding(.top, AppSpacing.m)
-                                            .padding(.leading, AppSpacing.m)
-                                    }
-                                    
-                                    TextEditor(text: Binding(
-                                        get: { challengeDescription },
-                                        set: { challengeDescription = String($0.prefix(descriptionCharLimit)) }
-                                    ))
-                                    .font(AppTypography.subhead())
-                                    .frame(minHeight: 80)
-                                    .padding(AppSpacing.xs)
-                                    .background(Color.theme.surface)
-                                    .cornerRadius(AppSpacing.cardCornerRadius)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                            .stroke(Color.theme.subtext.opacity(0.2), lineWidth: 1)
-                                    )
-                                    .focused($isDescriptionFocused)
-                                }
-                                .frame(height: 100)
-                            }
-                            .padding(.horizontal)
-                            .padding(.vertical, AppSpacing.s)
-                            .background(
-                                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                                    .fill(Color.theme.surface)
-                            )
-                            
-                            // Timer option
-                            configCard(title: "Timer Challenge") {
-                                VStack(alignment: .leading, spacing: AppSpacing.s) {
-                                    Toggle(isOn: $isTimed) {
-                                        HStack {
-                                            Image(systemName: "timer")
-                                                .foregroundColor(.theme.accent)
-                                            
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("Require timer to check in")
-                                                    .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
-                                                    .foregroundColor(.theme.text)
-                                                
-                                                Text("Great for focused activities like meditation")
-                                                    .font(AppTypography.caption1())
-                                                    .foregroundColor(.theme.subtext)
-                                            }
-                                            
-                                            Spacer()
-                                        }
-                                    }
-                                    .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
-                                    .padding(.vertical, 6)
-                                    
-                                    if isTimed {
-                                        Divider()
-                                        
-                                        VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                                            Text("Minimum Session Duration")
-                                                .font(AppTypography.font(size: 14, weight: .medium, design: .rounded))
-                                                .foregroundColor(.theme.text)
-                                            
-                                            Picker("Duration", selection: $minDuration) {
-                                                Text("5 minutes").tag(5)
-                                                Text("10 minutes").tag(10)
-                                                Text("15 minutes").tag(15)
-                                                Text("20 minutes").tag(20)
-                                                Text("30 minutes").tag(30)
-                                                Text("45 minutes").tag(45)
-                                                Text("60 minutes").tag(60)
-                                            }
-                                            .pickerStyle(SegmentedPickerStyle())
-                                            .colorMultiply(Color.theme.accent)
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            Divider()
-                                .padding(.horizontal)
-                                .opacity(0.6)
-                            
-                            // Visibility option
-                            configCard(title: "Challenge Privacy") {
-                                Toggle(isOn: $isPublic) {
-                                    HStack {
-                                        Image(systemName: isPublic ? "eye.fill" : "eye.slash.fill")
-                                            .foregroundColor(isPublic ? .theme.accent : .theme.subtext)
-                                        
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(isPublic ? "Public Challenge" : "Private Challenge")
-                                                .font(AppTypography.font(size: 16, weight: .medium, design: .rounded))
-                                                .foregroundColor(.theme.text)
-                                            
-                                            Text(isPublic ? "Others can see your progress" : "Only you can see this challenge")
-                                                .font(AppTypography.caption1())
-                                                .foregroundColor(.theme.subtext)
-                                        }
-                                        
-                                        Spacer()
-                                    }
-                                }
-                                .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
-                                .padding(.vertical, 6)
-                            }
-                        }
-                        .offset(y: animateElements ? 0 : 20)
-                        .opacity(animateElements ? 1 : 0)
-                        
-                        // Popular suggestions
-                        VStack(alignment: .leading, spacing: AppSpacing.s) {
-                            Text("Popular challenge ideas")
-                                .font(AppTypography.font(size: 16, weight: .semibold, design: .rounded))
-                                .foregroundColor(.theme.text)
-                                .padding(.horizontal)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: AppSpacing.s) {
-                                    ForEach(Array(challengeSuggestions.enumerated()), id: \.offset) { index, suggestion in
-                                        Button(action: {
-                                            challengeTitle = suggestion
-                                            hideKeyboard()
-                                        }) {
-                                            HStack {
-                                                Image(systemName: iconForSuggestion(index))
-                                                    .foregroundColor(.theme.accent)
-                                                
-                                                Text(suggestion)
-                                                    .font(AppTypography.font(size: 15, weight: .medium, design: .rounded))
-                                                    .foregroundColor(.theme.text)
-                                            }
-                                            .padding(.horizontal, AppSpacing.m)
-                                            .padding(.vertical, AppSpacing.s)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.theme.surface)
-                                                    .shadow(color: Color.theme.shadow.opacity(0.05), radius: 2, x: 0, y: 1)
-                                            )
-                                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                                        }
-                                    }
-                                }
-                                .padding(.horizontal)
-                                .padding(.vertical, AppSpacing.xs)
-                            }
-                        }
-                        .offset(y: animateElements ? 0 : 20)
-                        .opacity(animateElements ? 1 : 0)
 
-                        // Pro limit warning
-                        if !entitlementsAdapter.hasProAccess {
-                            proLimitWarning
-                                .padding(.horizontal)
-                                .offset(y: animateElements ? 0 : 20)
-                                .opacity(animateElements ? 1 : 0)
+                // Main content
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: AppSpacing.xl) {
+                        // Hero Section
+                        heroSection
+                            .padding(.top, AppSpacing.m)
+
+                        // Main Form Content
+                        VStack(spacing: AppSpacing.l) {
+                            // Challenge Title Input
+                            titleInputSection
+
+                            // Timer Challenge Toggle
+                            timerSection
+
+                            // Popular Suggestions
+                            suggestionsSection
                         }
-                        
-                        Spacer(minLength: 100)
+                        .padding(.horizontal, AppSpacing.l)
+
+                        // Bottom spacing for create button
+                        Spacer(minLength: 120)
                     }
                     .padding(.bottom, 100)
                 }
@@ -406,47 +73,26 @@ struct NewChallengeView: View {
                         hideKeyboard()
                     }
                 )
-                
-                // Bottom action button
+
+                // Floating Create Button
                 VStack {
                     Spacer()
-                    
                     createButton
-                        .offset(y: animateElements ? 0 : 40)
-                        .opacity(animateElements ? 1 : 0)
-                }
-                
-                // Category picker sheet
-                if showCategoryPicker {
-                    categoryPickerOverlay
-                }
-                
-                // Icon picker sheet
-                if showIconPicker {
-                    iconPickerOverlay
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("New Challenge")
-                        .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
+                        .font(AppTypography.headline())
                         .foregroundColor(.theme.text)
                 }
-                
+
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: { isPresented = false }) {
                         Text("Cancel")
+                            .font(AppTypography.body())
                             .foregroundColor(.theme.accent)
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isTitleFocused || isDescriptionFocused {
-                        Button(action: { hideKeyboard() }) {
-                            Text("Done")
-                                .foregroundColor(.theme.accent)
-                        }
                     }
                 }
             }
@@ -455,7 +101,7 @@ struct NewChallengeView: View {
                     withAnimation(.easeOut(duration: 0.5)) {
                         animateElements = true
                     }
-                    
+
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         isTitleFocused = true
                     }
@@ -463,270 +109,314 @@ struct NewChallengeView: View {
             }
         }
     }
-    
-    // Helper function to hide keyboard
-    private func hideKeyboard() {
-        isTitleFocused = false
-        isDescriptionFocused = false
+
+    // MARK: - Hero Section
+
+    private var heroSection: some View {
+        VStack(spacing: AppSpacing.s) {
+            Group {
+                if #available(iOS 17.0, *) {
+                    Image(systemName: "sparkles")
+                        .font(AppTypography.largeTitle(.bold))
+                        .foregroundColor(.theme.accent)
+                        .symbolEffect(.bounce, value: animateElements)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(AppTypography.largeTitle(.bold))
+                        .foregroundColor(.theme.accent)
+                }
+            }
+
+            Text("Start Your 100-Day Journey")
+                .font(AppTypography.title3())
+                .foregroundColor(.theme.text)
+
+            Text("Commit to a daily habit and track your progress")
+                .font(AppTypography.subhead())
+                .foregroundColor(.theme.subtext)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, AppSpacing.xl)
+        }
+        .frame(maxWidth: .infinity)
+        .opacity(animateElements ? 1 : 0)
+        .offset(y: animateElements ? 0 : -20)
     }
-    
-    // Create button that stays at the bottom
-    private var createButton: some View {
-        Button(action: {
-            onCreateChallenge(challengeTitle, isTimed)
-        }) {
-            Text("Start 100-Day Challenge")
-                .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(themeManager.currentTheme == .dark ? .black : .white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppSpacing.m)
+
+    // MARK: - Title Input Section
+
+    private var titleInputSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.m) {
+            HStack {
+                Text("What do you want to do for 100 days?")
+                    .font(AppTypography.headline())
+                    .foregroundColor(.theme.text)
+
+                Spacer()
+
+                Text("\(challengeTitle.count)/\(titleCharLimit)")
+                    .font(AppTypography.subhead())
+                    .foregroundColor(characterCountColor(count: challengeTitle.count, limit: titleCharLimit))
+            }
+
+            ZStack(alignment: .leading) {
+                if challengeTitle.isEmpty && !isTitleFocused {
+                    Text("e.g., Read 10 pages, Meditate, No sugar")
+                        .font(AppTypography.body())
+                        .foregroundColor(.theme.subtext.opacity(0.5))
+                        .padding(.leading, AppSpacing.m)
+                        .padding(.vertical, AppSpacing.m)
+                }
+
+                TextField("", text: Binding(
+                    get: { challengeTitle },
+                    set: { challengeTitle = String($0.prefix(titleCharLimit)) }
+                ))
+                .font(AppTypography.headline())
+                .padding(AppSpacing.m)
                 .background(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .fill(Color.theme.surface)
                 )
-        }
-        .buttonStyle(AppScaleButtonStyle())
-        .padding(.horizontal, AppSpacing.l)
-        .padding(.bottom, AppSpacing.l)
-        .disabled(challengeTitle.isEmpty)
-        .opacity(challengeTitle.isEmpty ? 0.5 : 1.0)
-        .background(
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(
-                            colors: [
-                                Color.theme.background.opacity(0),
-                                Color.theme.background
-                            ]
-                        ),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .stroke(isTitleFocused ? Color.theme.accent : Color.theme.surface.opacity(0.1), lineWidth: isTitleFocused ? 2 : 1)
                 )
-                .frame(height: 100)
-                .edgesIgnoringSafeArea(.bottom)
-        )
-    }
-    
-    // Category picker overlay
-    private var categoryPickerOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation {
-                        showCategoryPicker = false
-                    }
-                }
-            
-            VStack(alignment: .leading, spacing: AppSpacing.m) {
-                Text("Select Category")
-                    .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .padding(.top, AppSpacing.m)
-                
-                Divider()
-                
-                ScrollView {
-                    VStack(spacing: AppSpacing.s) {
-                        ForEach(ChallengeCategory.allCases) { category in
-                            Button(action: {
-                                selectedCategory = category
-                                withAnimation {
-                                    showCategoryPicker = false
-                                }
-                            }) {
-                                HStack(spacing: AppSpacing.m) {
-                                    Image(systemName: category.icon)
-                                        .font(AppTypography.title3())
-                                        .foregroundColor(category.color)
-                                        .frame(width: 24)
-                                    
-                                    Text(category.rawValue)
-                                        .font(AppTypography.headline())
-                                        .foregroundColor(.theme.text)
-                                    
-                                    Spacer()
-                                    
-                                    if category == selectedCategory {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(.theme.accent)
-                                    }
-                                }
-                                .padding(.vertical, AppSpacing.s)
-                            }
-                        }
+                .focused($isTitleFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    if !challengeTitle.isEmpty {
+                        hideKeyboard()
                     }
                 }
             }
-            .padding(.horizontal, AppSpacing.l)
-            .padding(.bottom, AppSpacing.m)
-            .frame(maxWidth: .infinity, maxHeight: 400)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.theme.background)
-                    .shadow(color: Color.black.opacity(0.2), radius: 16, x: 0, y: 5)
-            )
-            .padding(.horizontal, AppSpacing.l)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-        .zIndex(10)
-    }
-    
-    // Icon picker overlay
-    private var iconPickerOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation {
-                        showIconPicker = false
-                    }
-                }
-            
-            VStack(alignment: .leading, spacing: AppSpacing.m) {
-                Text("Select Icon")
-                    .font(AppTypography.font(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.text)
-                    .padding(.top, AppSpacing.m)
-                
-                Divider()
-                
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: AppSpacing.m), count: 5), spacing: AppSpacing.m) {
-                    ForEach(iconOptions, id: \.self) { icon in
-                        Button(action: {
-                            selectedIcon = icon
-                            withAnimation {
-                                showIconPicker = false
-                            }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(icon == selectedIcon ? Color.theme.accent.opacity(0.15) : Color.theme.surface)
-                                    .frame(width: 56, height: 56)
-                                
-                                Image(systemName: icon)
-                                    .font(AppTypography.title2())
-                                    .foregroundColor(icon == selectedIcon ? Color.theme.accent : .theme.text)
-                            }
-                            .overlay(
-                                Circle()
-                                    .stroke(icon == selectedIcon ? Color.theme.accent : Color.clear, lineWidth: 2)
-                            )
-                        }
-                    }
-                }
-                .padding(.bottom, AppSpacing.m)
-            }
-            .padding(.horizontal, AppSpacing.l)
-            .frame(maxWidth: .infinity, maxHeight: 380)
-            .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.theme.background)
-                    .shadow(color: Color.black.opacity(0.2), radius: 16, x: 0, y: 5)
-            )
-            .padding(.horizontal, AppSpacing.l)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-        .zIndex(10)
-    }
-    
-    // Configuration card helper
-    private func configCard<Content: View>(title: String, @ViewBuilder content: @escaping () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: AppSpacing.s) {
-            content()
-        }
-        .padding(.horizontal)
-        .padding(.vertical, AppSpacing.m)
+        .padding(AppSpacing.m)
         .background(
             RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
                 .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 2, x: 0, y: 1)
+                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 4, x: 0, y: 2)
         )
-        .padding(.horizontal)
+        .opacity(animateElements ? 1 : 0)
+        .offset(y: animateElements ? 0 : 20)
     }
-    
-    // Pro limit warning when user has 3+ challenges as a free user
-    private var proLimitWarning: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.s) {
-            HStack {
-                Image(systemName: "crown.fill")
-                    .foregroundColor(.yellow)
-                
-                Text("Pro Feature")
-                    .font(AppTypography.font(size: 16, weight: .bold, design: .rounded))
-                    .foregroundColor(.theme.accent)
-                
-                Button(action: {
-                    // Show a tooltip or alert with Pro benefits
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                    
-                    // You could add an alert here, but we'll just trigger haptic feedback
-                }) {
-                    Image(systemName: "questionmark.circle")
-                        .font(AppTypography.footnote())
-                        .foregroundColor(.theme.subtext)
-                }
-                
-                Spacer()
-            }
-            
-            Text("Create unlimited challenges and track your progress")
-                .font(AppTypography.callout())
-                .foregroundColor(.theme.text)
 
-            Text("Access premium icons and timer features")
-                .font(AppTypography.subhead())
-                .foregroundColor(.theme.subtext)
-                .padding(.top, AppSpacing.xxs)
+    // MARK: - Timer Section
+
+    private var timerSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.m) {
+            Toggle(isOn: $isTimed) {
+                HStack(spacing: AppSpacing.m) {
+                    ZStack {
+                        Circle()
+                            .fill(isTimed ? Color.theme.accent.opacity(0.15) : Color.theme.surface)
+                            .frame(width: 48, height: 48)
+
+                        Image(systemName: "timer")
+                            .font(AppTypography.title3())
+                            .foregroundColor(isTimed ? .theme.accent : .theme.subtext)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Timer Challenge")
+                            .font(AppTypography.headline())
+                            .foregroundColor(.theme.text)
+
+                        Text("Require a timer for each check-in")
+                            .font(AppTypography.subhead())
+                            .foregroundColor(.theme.subtext)
+                    }
+
+                    Spacer()
+                }
+            }
+            .toggleStyle(SwitchToggleStyle(tint: .theme.accent))
+
+            if isTimed {
+                VStack(alignment: .leading, spacing: AppSpacing.xs) {
+                    Text("Perfect for activities like meditation, exercise, or focused work sessions")
+                        .font(AppTypography.subhead())
+                        .foregroundColor(.theme.subtext)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, AppSpacing.xs)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .padding()
+        .padding(AppSpacing.m)
         .background(
             RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                .fill(
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.theme.accent.opacity(0.1), Color.theme.surface]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.theme.shadow.opacity(0.05), radius: 4, x: 0, y: 2)
         )
+        .opacity(animateElements ? 1 : 0)
+        .offset(y: animateElements ? 0 : 20)
     }
-    
-    // Helper to get appropriate icon for a suggestion
-    private func iconForSuggestion(_ index: Int) -> String {
-        switch index % 9 {
-        case 0: return "figure.run"
-        case 1: return "book.fill"
-        case 2: return "carrot.fill"
-        case 3: return "laptopcomputer"
-        case 4: return "brain.head.profile"
-        case 5: return "drop.fill"
-        case 6: return "doc.text.fill" 
-        case 7: return "camera.fill"
-        case 8: return "music.note"
-        default: return "star.fill"
+
+    // MARK: - Suggestions Section
+
+    private var suggestionsSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.m) {
+            Text("Popular challenge ideas")
+                .font(AppTypography.headline())
+                .foregroundColor(.theme.text)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.s) {
+                    ForEach(Array(challengeSuggestions.enumerated()), id: \.offset) { index, suggestion in
+                        Button(action: {
+                            challengeTitle = suggestion
+                            hideKeyboard()
+                            let generator = UIImpactFeedbackGenerator(style: .light)
+                            generator.impactOccurred()
+                        }) {
+                            HStack(spacing: AppSpacing.xs) {
+                                Image(systemName: iconForSuggestion(index))
+                                    .font(AppTypography.subhead())
+                                    .foregroundColor(.theme.accent)
+
+                                Text(suggestion)
+                                    .font(AppTypography.body())
+                                    .foregroundColor(.theme.text)
+                            }
+                            .padding(.horizontal, AppSpacing.m)
+                            .padding(.vertical, AppSpacing.s)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.theme.surface)
+                                    .shadow(color: Color.theme.shadow.opacity(0.05), radius: 2, x: 0, y: 1)
+                            )
+                        }
+                        .buttonStyle(ChallengeScaleButtonStyle())
+                    }
+                }
+                .padding(.vertical, 2)
+            }
         }
+        .opacity(animateElements ? 1 : 0)
+        .offset(y: animateElements ? 0 : 20)
+    }
+
+    // MARK: - Create Button
+
+    private var createButton: some View {
+        VStack(spacing: 0) {
+            // Gradient fade effect
+            LinearGradient(
+                gradient: Gradient(
+                    colors: [
+                        Color.theme.background.opacity(0),
+                        Color.theme.background.opacity(0.95),
+                        Color.theme.background
+                    ]
+                ),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 40)
+
+            Button(action: {
+                hideKeyboard()
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                onCreateChallenge(challengeTitle, isTimed)
+            }) {
+                HStack(spacing: AppSpacing.s) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(AppTypography.headline())
+
+                    Text("Start 100-Day Challenge")
+                        .font(AppTypography.headline())
+                }
+                .foregroundColor(colorScheme == .dark ? .black : .white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, AppSpacing.m)
+                .background(
+                    RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.theme.accent,
+                                    Color.theme.accent.opacity(0.8)
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
+                )
+            }
+            .buttonStyle(ChallengeScaleButtonStyle())
+            .disabled(challengeTitle.isEmpty)
+            .opacity(challengeTitle.isEmpty ? 0.5 : 1.0)
+            .padding(.horizontal, AppSpacing.l)
+            .padding(.bottom, AppSpacing.l)
+            .background(Color.theme.background)
+        }
+        .opacity(animateElements ? 1 : 0)
+        .offset(y: animateElements ? 0 : 40)
+    }
+
+    // MARK: - Helper Functions
+
+    private func hideKeyboard() {
+        isTitleFocused = false
+    }
+
+    private func characterCountColor(count: Int, limit: Int) -> Color {
+        let ratio = Double(count) / Double(limit)
+        if ratio >= 1.0 {
+            return .red
+        } else if ratio >= 0.8 {
+            return .orange
+        } else {
+            return .theme.subtext
+        }
+    }
+
+    private func iconForSuggestion(_ index: Int) -> String {
+        let icons = ["figure.run", "book.fill", "carrot.fill", "laptopcomputer", "brain.head.profile", "drop.fill", "doc.text.fill", "camera.fill", "music.note"]
+        return icons[index % icons.count]
     }
 }
 
+// MARK: - Scale Button Style
+
+struct ChallengeScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Preview
+
 struct NewChallengeView_Previews: PreviewProvider {
     static var previews: some View {
-        NewChallengeView(
-            isPresented: .constant(true),
-            challengeTitle: .constant(""),
-            onCreateChallenge: { _, _ in }
-        )
-        .environmentObject(SubscriptionStore.shared)
-        .environmentObject(EntitlementsAdapter.shared)
-        .environmentObject(ThemeManager.shared)
+        Group {
+            NewChallengeView(
+                isPresented: .constant(true),
+                challengeTitle: .constant(""),
+                onCreateChallenge: { _, _ in }
+            )
+            .environmentObject(SubscriptionStore.shared)
+            .environmentObject(EntitlementsAdapter.shared)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(UserSession.shared)
+            .preferredColorScheme(.dark)
+            .previewDisplayName("Dark Mode")
+
+            NewChallengeView(
+                isPresented: .constant(true),
+                challengeTitle: .constant("Read 10 pages"),
+                onCreateChallenge: { _, _ in }
+            )
+            .environmentObject(SubscriptionStore.shared)
+            .environmentObject(EntitlementsAdapter.shared)
+            .environmentObject(ThemeManager.shared)
+            .environmentObject(UserSession.shared)
+            .preferredColorScheme(.light)
+            .previewDisplayName("Light Mode - With Text")
+        }
     }
-} 
+}

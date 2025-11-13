@@ -22,16 +22,16 @@ struct TimerSessionView: View {
                 
                 VStack(spacing: 30) {
                     // Timer header
-                    VStack(spacing: 8) {
+                    VStack(spacing: 12) {
                         Text(challenge.title)
-                            .font(.title2)
-                            .fontWeight(.bold)
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
                             .foregroundColor(.theme.text)
                             .multilineTextAlignment(.center)
+                            .lineSpacing(2)
                             .padding(.horizontal)
-                        
+
                         Text("Complete this timer to check in")
-                            .font(.subheadline)
+                            .font(.system(size: 16, weight: .medium, design: .rounded))
                             .foregroundColor(.theme.subtext)
                     }
                     .padding(.top)
@@ -53,15 +53,15 @@ struct TimerSessionView: View {
                             .animation(.linear, value: viewModel.progress)
                         
                         // Time display
-                        VStack(spacing: 5) {
+                        VStack(spacing: 8) {
                             Text(viewModel.timeString)
-                                .font(AppTypography.font(size: 60, weight: .bold))
+                                .font(.system(size: 60, weight: .bold, design: .rounded))
                                 .foregroundColor(.theme.text)
                                 .monospacedDigit()
-                            
+
                             if viewModel.isRunning {
                                 Text("remaining")
-                                    .font(.caption)
+                                    .font(.system(size: 14, weight: .medium, design: .rounded))
                                     .foregroundColor(.theme.subtext)
                             }
                         }
@@ -134,32 +134,41 @@ struct TimerSessionView: View {
     private var completedControls: some View {
         VStack(spacing: 20) {
             Image(systemName: "checkmark.circle.fill")
-                .font(AppTypography.font(size: 70, weight: .bold))
+                .font(.system(size: 70, weight: .bold))
                 .foregroundColor(.green)
-            
+
             Text("Great job!")
-                .font(.title2)
-                .fontWeight(.bold)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
-            
+
             Text("You've completed your timer session")
-                .font(.subheadline)
+                .font(.system(size: 16, weight: .medium, design: .rounded))
                 .foregroundColor(.theme.subtext)
                 .multilineTextAlignment(.center)
-            
+
             Button {
                 viewModel.completeCheckIn(for: challenge)
                 dismiss()
             } label: {
-                Text("Check In & Complete")
-                    .font(.headline)
-                    .foregroundColor(.black)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.accent)
+                HStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .bold))
+
+                    Text("Check In & Complete")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    LinearGradient(
+                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.85)],
+                        startPoint: .leading,
+                        endPoint: .trailing
                     )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: Color.theme.accent.opacity(0.4), radius: 12, x: 0, y: 6)
             }
             .padding(.top, 10)
         }
@@ -172,51 +181,58 @@ struct TimerSessionView: View {
                 Button {
                     viewModel.resetTimer()
                 } label: {
-                    VStack {
+                    VStack(spacing: 8) {
                         Image(systemName: "arrow.counterclockwise")
-                            .font(AppTypography.largeTitle())
+                            .font(.system(size: 32, weight: .semibold))
                             .foregroundColor(.theme.subtext)
-                        
+
                         Text("Reset")
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundColor(.theme.subtext)
                     }
                 }
             }
-            
+
             // Start/Pause button
             Button {
                 viewModel.isRunning ? viewModel.pauseTimer() : viewModel.startTimer()
             } label: {
-                VStack {
+                VStack(spacing: 8) {
                     ZStack {
                         Circle()
-                            .fill(Color.theme.accent)
-                            .frame(width: 70, height: 70)
-                        
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.theme.accent, Color.theme.accent.opacity(0.9)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 80, height: 80)
+                            .shadow(color: Color.theme.accent.opacity(0.4), radius: 12, x: 0, y: 6)
+
                         Image(systemName: viewModel.isRunning ? "pause.fill" : "play.fill")
-                            .font(AppTypography.largeTitle())
+                            .font(.system(size: 36, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    
+
                     Text(viewModel.isRunning ? "Pause" : "Start")
-                        .font(.caption)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundColor(.theme.text)
                 }
             }
-            
+
             // Skip button (only when timer is running, for demo purposes)
             if viewModel.isRunning && viewModel.enableDebugSkip {
                 Button {
                     viewModel.completeTimer()
                 } label: {
-                    VStack {
+                    VStack(spacing: 8) {
                         Image(systemName: "forward.fill")
-                            .font(AppTypography.largeTitle())
+                            .font(.system(size: 32, weight: .semibold))
                             .foregroundColor(.theme.subtext)
-                        
+
                         Text("Skip")
-                            .font(.caption)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundColor(.theme.subtext)
                     }
                 }
@@ -225,37 +241,47 @@ struct TimerSessionView: View {
     }
     
     private var durationPicker: some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 16) {
             Text("Timer Duration")
-                .font(.headline)
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .foregroundColor(.theme.text)
-            
-            HStack {
-                ForEach([5, 10, 15, 25, 30, 45, 60], id: \.self) { minutes in
-                    Button {
-                        viewModel.timerDuration = TimeInterval(minutes * 60)
-                    } label: {
-                        Text("\(minutes)m")
-                            .font(AppTypography.body())
-                            .fontWeight(viewModel.timerDuration == TimeInterval(minutes * 60) ? .bold : .regular)
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(viewModel.timerDuration == TimeInterval(minutes * 60) ? 
-                                         Color.theme.accent : Color.theme.surface)
-                            )
-                            .foregroundColor(viewModel.timerDuration == TimeInterval(minutes * 60) ? 
-                                            .black : .theme.text)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach([5, 10, 15, 25, 30, 45, 60], id: \.self) { minutes in
+                        Button {
+                            viewModel.timerDuration = TimeInterval(minutes * 60)
+                        } label: {
+                            Text("\(minutes)m")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundColor(viewModel.timerDuration == TimeInterval(minutes * 60) ? .white : .theme.text)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(viewModel.timerDuration == TimeInterval(minutes * 60) ?
+                                             Color.theme.accent : Color.theme.surface)
+                                        .shadow(
+                                            color: viewModel.timerDuration == TimeInterval(minutes * 60) ?
+                                                Color.theme.accent.opacity(0.3) : Color.clear,
+                                            radius: 6,
+                                            x: 0,
+                                            y: 3
+                                        )
+                                )
+                        }
                     }
                 }
             }
-            .padding(.horizontal)
         }
-        .padding()
+        .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface.opacity(0.7))
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.theme.surface.opacity(0.8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.theme.border.opacity(0.2), lineWidth: 1)
+                )
         )
     }
 }

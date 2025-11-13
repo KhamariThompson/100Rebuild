@@ -12,15 +12,98 @@ import StoreKit
 
 // MARK: - Splash Screen
 struct SplashScreen: View {
+    @State private var isAnimating = false
+    @State private var showContent = false
+    @State private var progressValue: CGFloat = 0.0
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ZStack {
-            Color.theme.background.ignoresSafeArea()
-            VStack(spacing: 20) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.theme.accent)
-                Text("100Days")
-                    .font(.largeTitle.bold())
+            // Animated gradient background
+            LinearGradient(
+                colors: colorScheme == .dark ?
+                    [Color.theme.background, Color.theme.accent.opacity(0.15)] :
+                    [Color.theme.background, Color.theme.accent.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            .hueRotation(.degrees(isAnimating ? 10 : 0))
+            .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isAnimating)
+
+            VStack(spacing: 32) {
+                // Animated circular progress with "100" inside
+                ZStack {
+                    // Outer glow ring
+                    Circle()
+                        .stroke(
+                            Color.theme.accent.opacity(0.2),
+                            lineWidth: 2
+                        )
+                        .frame(width: 140, height: 140)
+                        .scaleEffect(isAnimating ? 1.1 : 1.0)
+                        .opacity(isAnimating ? 0.3 : 0.8)
+                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+
+                    // Animated progress ring
+                    Circle()
+                        .trim(from: 0, to: progressValue)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.theme.accent, Color.theme.accent.opacity(0.6)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
+                        )
+                        .frame(width: 120, height: 120)
+                        .rotationEffect(.degrees(-90))
+                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                        .animation(.linear(duration: 2.0).repeatForever(autoreverses: false), value: isAnimating)
+
+                    // Inner circle background
+                    Circle()
+                        .fill(colorScheme == .dark ? Color.theme.background : Color.white)
+                        .frame(width: 100, height: 100)
+                        .shadow(color: Color.theme.accent.opacity(0.3), radius: 20, x: 0, y: 5)
+
+                    // "100" text
+                    Text("100")
+                        .font(AppTypography.display(.bold))
+                        .foregroundColor(.theme.accent)
+                        .opacity(showContent ? 1 : 0)
+                        .scaleEffect(showContent ? 1 : 0.5)
+                }
+                .opacity(showContent ? 1 : 0)
+                .scaleEffect(showContent ? 1 : 0.8)
+
+                // App name with animated appearance
+                VStack(spacing: 8) {
+                    Text("100Days")
+                        .font(AppTypography.largeTitle(.bold))
+                        .foregroundColor(.primary)
+                        .opacity(showContent ? 1 : 0)
+                        .offset(y: showContent ? 0 : 20)
+
+                    Text("Start Your Journey")
+                        .font(AppTypography.callout(.medium))
+                        .foregroundColor(.secondary)
+                        .opacity(showContent ? 0.7 : 0)
+                        .offset(y: showContent ? 0 : 20)
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.6)) {
+                showContent = true
+            }
+
+            withAnimation(.easeInOut(duration: 1.2).delay(0.2)) {
+                progressValue = 0.75
+            }
+
+            withAnimation(.linear(duration: 0.1).delay(0.3)) {
+                isAnimating = true
             }
         }
     }
@@ -92,10 +175,15 @@ class StartupCoordinator: ObservableObject {
 
     private var userSession: UserSession?
     private var subscriptionStore: SubscriptionStore?
-    private var subscriptionService: SubscriptionService?
+    #if DEBUG
+    private var subscriptionService: SubscriptionService?  // DEBUG only
+    #endif
     private var networkMonitor: NetworkMonitor?
 
     func start() async {
+        // Track startup time to ensure minimum splash display duration
+        let startTime = Date()
+
         // Step 1: Configure Firebase (blocking but necessary)
         if FirebaseApp.app() == nil {
             FirebaseApp.configure()
@@ -113,23 +201,36 @@ class StartupCoordinator: ObservableObject {
         // Step 2: Configure RevenueCat AFTER Firebase
         RevenueCatManager.configureIfNeeded()
 
+        // Step 2.5: Validate RevenueCat configuration (non-blocking)
+        Task {
+            await SubscriptionIDs.performRuntimeValidation()
+        }
+
         // Step 3: Initialize critical services (lazy - won't init until accessed)
         userSession = UserSession.shared
         subscriptionStore = SubscriptionStore.shared
-        subscriptionService = SubscriptionService.shared
+        #if DEBUG
+        subscriptionService = SubscriptionService.shared  // DEBUG only - use subscriptionStore in Release
+        #endif
         networkMonitor = NetworkMonitor.shared
 
-        // Step 3.5: Wait for UserSession to complete its async setup
-        // This ensures the auth state listener is set up before showing UI
-        await userSession?.waitForSetup()
+        // Step 4: Ensure minimum splash screen display time
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minimumDuration = Constants.Animation.splash
+        if elapsed < minimumDuration {
+            let remainingTime = minimumDuration - elapsed
+            try? await Task.sleep(nanoseconds: UInt64(remainingTime * 1_000_000_000))
+        }
 
-        // Step 4: Mark ready
+        // Step 5: Mark ready - services handle their own async initialization
         isReady = true
     }
 
     func getUserSession() -> UserSession { userSession ?? UserSession.shared }
     func getSubscriptionStore() -> SubscriptionStore { subscriptionStore ?? SubscriptionStore.shared }
+    #if DEBUG
     func getSubscriptionService() -> SubscriptionService { subscriptionService ?? SubscriptionService.shared }
+    #endif
     func getNetworkMonitor() -> NetworkMonitor { networkMonitor ?? NetworkMonitor.shared }
 }
 
@@ -146,7 +247,9 @@ struct App100Days: App {
                 AppContentView()
                     .environmentObject(startupCoordinator.getUserSession())
                     .environmentObject(startupCoordinator.getSubscriptionStore())
+                    #if DEBUG
                     .environmentObject(startupCoordinator.getSubscriptionService())
+                    #endif
                     .environmentObject(EntitlementsAdapter(store: startupCoordinator.getSubscriptionStore()))
                     .environmentObject(NotificationService.shared)
                     .environmentObject(themeManager)
@@ -157,20 +260,11 @@ struct App100Days: App {
                     .environmentObject(BadgeService.shared)
                     .environmentObject(AnalyticsService.shared)
             } else {
-                // Show immediately - minimal splash
-                ZStack {
-                    Color.theme.background.ignoresSafeArea()
-                    VStack(spacing: 20) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.theme.accent)
-                        Text("100Days")
-                            .font(.largeTitle.bold())
+                // Show immediately - enhanced splash
+                SplashScreen()
+                    .task {
+                        await startupCoordinator.start()
                     }
-                }
-                .task {
-                    await startupCoordinator.start()
-                }
             }
         }
     }
@@ -180,7 +274,9 @@ struct App100Days: App {
 struct AppContentView: View {
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var subscriptionStore: SubscriptionStore
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    #if DEBUG
+    @EnvironmentObject var subscriptionService: SubscriptionService  // DEBUG only
+    #endif
     @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var themeManager: ThemeManager
@@ -197,6 +293,7 @@ struct AppContentView: View {
     @State private var completedOnboarding = false
     @State private var previousAuthState: Bool? = nil
     @State private var isAuthResolved = true
+    @State private var checkDataTask: Task<Void, Never>? = nil
 
     var body: some View {
         ZStack {
@@ -219,6 +316,7 @@ struct AppContentView: View {
                     isAuthenticated: userSession.isAuthenticated,
                     accountCreatedAt: accountCreatedAt,
                     completedOnboarding: completedOnboarding,
+                    hasCompletedFunnel: userSession.hasCompletedFunnel,
                     isPro: subscriptionStore.isPro,
                     entitlementsLoaded: subscriptionLoaded
                 )
@@ -250,8 +348,15 @@ struct AppContentView: View {
                             .transition(.opacity)
 
                     case .paywall:
-                        PaywallView()
-                            .transition(.opacity)
+                        // Show Founder's Offer if 5-minute window is active, otherwise regular paywall
+                        Group {
+                            if let window = subscriptionStore.getFiveMinuteWindow(), window.isActive {
+                                FoundersOfferView()
+                            } else {
+                                PaywallView()
+                            }
+                        }
+                        .transition(.opacity)
                     }
                 }
                 .environmentObject(navigationRouter)
@@ -263,39 +368,6 @@ struct AppContentView: View {
                         withAnimation {
                             isAuthResolved = true
                         }
-                    }
-                }
-                .onChange(of: subscriptionLoaded) { loaded in
-                    Task { @MainActor in
-                        if loaded {
-                            appRouter.markEntitlementsLoaded()
-                        } else if userSession.isAuthenticated {
-                            appRouter.startEntitlementsTimer()
-                        }
-                    }
-                }
-                .onChange(of: userSession.accountCreatedAt) { newValue in
-                    accountCreatedAt = newValue
-                    checkIfDataLoaded()
-                }
-                .onChange(of: userSession.hasCompletedOnboarding) { newValue in
-                    completedOnboarding = newValue
-                    checkIfDataLoaded()
-                }
-                .onChange(of: subscriptionStore.isPro) { _ in
-                    checkIfDataLoaded()
-                }
-                .onChange(of: subscriptionStore.state.isGrandfatherActive) { _ in
-                    checkIfDataLoaded()
-                }
-                .task {
-                    accountCreatedAt = userSession.accountCreatedAt
-                    completedOnboarding = userSession.hasCompletedOnboarding
-                    checkIfDataLoaded()
-                }
-                .onChange(of: userSession.isAuthenticated) { isAuth in
-                    Task {
-                        await handleAuthChange(isAuth: isAuth)
                     }
                 }
             }
@@ -310,11 +382,52 @@ struct AppContentView: View {
                 .zIndex(100)
             }
         }
+        // CRITICAL: These handlers must be outside the if/else to prevent deadlock
+        // where authenticated users get stuck on splash because onChange never fires
+        .task {
+            // Initialize state from services immediately on appear
+            accountCreatedAt = userSession.accountCreatedAt
+            completedOnboarding = userSession.hasCompletedOnboarding
+            checkIfDataLoaded()
+        }
+        .onChange(of: subscriptionLoaded) { loaded in
+            Task { @MainActor in
+                if loaded {
+                    appRouter.markEntitlementsLoaded()
+                } else if userSession.isAuthenticated {
+                    appRouter.startEntitlementsTimer()
+                }
+            }
+        }
+        .onChange(of: userSession.accountCreatedAt) { newValue in
+            accountCreatedAt = newValue
+            checkIfDataLoaded()
+        }
+        .onChange(of: userSession.hasCompletedOnboarding) { newValue in
+            completedOnboarding = newValue
+            checkIfDataLoaded()
+        }
+        .onChange(of: subscriptionStore.isPro) { _ in
+            checkIfDataLoaded()
+        }
+        .onChange(of: subscriptionStore.state.isGrandfatherActive) { _ in
+            checkIfDataLoaded()
+        }
+        .onChange(of: subscriptionStore.isLoading) { _ in
+            // Also check when loading state changes
+            checkIfDataLoaded()
+        }
         .onChange(of: userSession.isAuthenticated) { newValue in
+            // Handle auth state changes
             if let previous = previousAuthState, previous != newValue {
                 previousAuthState = newValue
             } else {
                 previousAuthState = newValue
+            }
+
+            // Trigger auth change handler
+            Task {
+                await handleAuthChange(isAuth: newValue)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ForceNavigateToWelcome"))) { _ in
@@ -354,6 +467,8 @@ struct AppContentView: View {
         if isAuth {
             await MainActor.run {
                 subscriptionLoaded = false
+                accountCreatedAt = nil
+                completedOnboarding = false
             }
 
             guard let userId = Auth.auth().currentUser?.uid else { return }
@@ -365,9 +480,13 @@ struct AppContentView: View {
                 subscriptionLoaded = true
             }
         } else {
+            // User signed out - reset all state
             await subscriptionStore.reset()
             await MainActor.run {
                 subscriptionLoaded = false
+                accountCreatedAt = nil
+                completedOnboarding = false
+                isAuthResolved = false
             }
         }
     }
@@ -384,16 +503,41 @@ struct AppContentView: View {
     }
 
     private func checkIfDataLoaded() {
-        let hasAccountData = userSession.accountCreatedAt != nil
-        let hasSubscriptionData = !subscriptionStore.isLoading
+        // Cancel any pending check to debounce rapid calls
+        checkDataTask?.cancel()
 
-        let isReady = hasAccountData || hasSubscriptionData
+        // Debounce rapid calls by delaying execution slightly
+        checkDataTask = Task { @MainActor in
+            // Small delay to coalesce multiple rapid calls
+            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
 
-        if isReady {
+            guard !Task.isCancelled else { return }
+
+            let hasAccountData = userSession.accountCreatedAt != nil
+            let hasSubscriptionData = !subscriptionStore.isLoading
+
+            // For authenticated users, require BOTH account and subscription data
+            // For non-authenticated users, just subscription data is enough
+            let isReady: Bool
+            if userSession.isAuthenticated {
+                isReady = hasAccountData && hasSubscriptionData
+            } else {
+                isReady = hasSubscriptionData
+            }
+
             #if DEBUG
-            print("✅ AppContentView: Data loaded - accountData: \(hasAccountData), subscriptionData: \(hasSubscriptionData)")
+            print("🔍 AppContentView.checkIfDataLoaded:")
+            print("   - userSession.isAuthenticated: \(userSession.isAuthenticated)")
+            print("   - hasAccountData: \(hasAccountData), hasSubscriptionData: \(hasSubscriptionData)")
+            print("   - isReady: \(isReady), subscriptionLoaded: \(subscriptionLoaded)")
             #endif
-            subscriptionLoaded = true
+
+            if isReady {
+                #if DEBUG
+                print("✅ AppContentView: Data loaded - setting subscriptionLoaded = true")
+                #endif
+                subscriptionLoaded = true
+            }
         }
     }
 }

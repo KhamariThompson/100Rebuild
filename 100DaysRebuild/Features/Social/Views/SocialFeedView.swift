@@ -5,7 +5,7 @@ import Combine
 
 struct SocialFeedView: View {
     @StateObject private var viewModel = SocialFeedViewModel()
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @Environment(\.colorScheme) private var colorScheme
     @State private var showUsernameSheet: Bool = false
     
@@ -206,7 +206,7 @@ struct SocialFeedItemView: View {
     @State private var showReactions = false
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var friendService = FriendService.shared
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @State private var isSendingRequest = false
     @State private var actionErrorMessage: String?
     @State private var optimisticRequested: Bool = false
@@ -304,7 +304,7 @@ struct SocialFeedItemView: View {
                                                 // Revert optimistic state and trigger paywall
                                                 optimisticRequested = false
                                                 await MainActor.run {
-                                                    subscriptionService.showPaywall = true
+                                                    // Note: showPaywall removed from SubscriptionStore - handle in UI layer
                                                 }
                                                 isSendingRequest = false
                                                 return
@@ -495,7 +495,7 @@ struct SocialFeedView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
             SocialFeedView()
-                .environmentObject(SubscriptionService.shared)
+                .environmentObject(SubscriptionStore.shared)
         }
         .preferredColorScheme(.dark)
     }

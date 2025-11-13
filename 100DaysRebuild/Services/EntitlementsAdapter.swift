@@ -3,12 +3,12 @@ import SwiftUI
 import Combine
 
 /// Thin adapter that wraps SubscriptionStore for legacy compatibility
-/// This provides a migration path from the old Entitlements system to SubscriptionStore
+/// Mirrors SubscriptionStore state without business logic overrides
 @MainActor
 final class EntitlementsAdapter: ObservableObject {
     @Published private(set) var isPro: Bool = false
     @Published private(set) var isLoading: Bool = false
-    /// Published combined pro access flag that includes migration/grace period logic.
+    /// Published combined pro access flag - mirrors store state
     @Published private(set) var hasProAccess: Bool = false
 
     private let store: SubscriptionStore
@@ -18,17 +18,14 @@ final class EntitlementsAdapter: ObservableObject {
     init(store: SubscriptionStore) {
         self.store = store
 
-        // Observe store state changes
+        // Mirror SubscriptionStore isPro state (SSOT)
         store.$state
-            .map { $0.isPro }
+            .map { $0.isPro }  // Read actual Pro status from store
             .assign(to: &$isPro)
 
-        // Update combined hasProAccess whenever store state changes.
+        // Mirror combined Pro access from store
         store.$state
-            .map { [migrationManager] state in
-                // Effective pro includes store's isPro OR legacy grace period
-                return state.isPro || migrationManager.isInLegacyGracePeriod()
-            }
+            .map { $0.isPro }  // Read actual Pro status from store
             .receive(on: DispatchQueue.main)
             .assign(to: &$hasProAccess)
 
@@ -36,15 +33,10 @@ final class EntitlementsAdapter: ObservableObject {
             .assign(to: &$isLoading)
     }
 
-    /// Effective Pro status including legacy grace period
+    /// Effective Pro status - reads from SSOT
     var effectiveIsProUser: Bool {
-        // Keep compatibility: reflect the latest published combined value
-        let result = hasProAccess
-        print("🔐 EntitlementsAdapter.effectiveIsProUser check:")
-        print("   - RevenueCat isPro: \(isPro)")
-        print("   - Legacy grace period: \(migrationManager.isInLegacyGracePeriod())")
-        print("   - RESULT (hasProAccess): \(result)")
-        return result
+        // Read from single source of truth
+        return store.isPro
     }
 
     /// Refresh subscription status

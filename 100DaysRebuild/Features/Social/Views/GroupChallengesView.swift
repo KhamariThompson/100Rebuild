@@ -4,7 +4,10 @@ import Combine
 
 struct GroupChallengesView: View {
     @StateObject private var viewModel = GroupChallengesViewModel()
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
+    #if DEBUG
     @EnvironmentObject private var subscriptionService: SubscriptionService
+    #endif
     @State private var showingNewChallengeSheet = false
     @State private var selectedTab = 0
     
@@ -83,7 +86,9 @@ struct GroupChallengesView: View {
                         showingNewChallengeSheet = false
                     }
                 }
+                #if DEBUG
                 .environmentObject(subscriptionService)
+                #endif
             }
             .alert(isPresented: $viewModel.showError) {
                 Alert(
@@ -285,7 +290,7 @@ struct NewGroupChallengeView: View {
     @State private var maxParticipants = 5
     @State private var duration = 100
     @Environment(\.presentationMode) private var presentationMode
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     
     var body: some View {
         NavigationView {

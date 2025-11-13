@@ -4,7 +4,7 @@ import FirebaseFirestore
 // Using a different name to avoid conflicts with ProgressContentView in ProgressView.swift
 struct DetailedProgressView: View {
     @ObservedObject var viewModel: UPViewModel
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
     @Binding var showAnalytics: Bool
@@ -204,7 +204,7 @@ struct DetailedProgressView: View {
                     .foregroundColor(.theme.text)
             }
             
-            if subscriptionService.isProUser {
+            if subscriptionStore.isPro {
                 if viewModel.dateIntensityMap.isEmpty {
                     Text("No activity data available yet")
                         .foregroundColor(.theme.subtext)
@@ -453,7 +453,7 @@ struct DetailedProgressView: View {
                 .font(.title3)
                 .foregroundColor(.theme.text)
             
-            if subscriptionService.isProUser {
+            if subscriptionStore.isPro {
                 if let projectedDate = viewModel.projectedCompletionDate {
                     ProjectedCompletionView(
                         projectedDate: projectedDate,
@@ -493,7 +493,7 @@ struct DetailedProgressView: View {
                 .font(.title3)
                 .foregroundColor(.theme.text)
             
-            if subscriptionService.isProUser {
+            if subscriptionStore.isPro {
                 if viewModel.dailyCheckInsData.isEmpty {
                     Text("Not enough data to show consistency graph yet")
                         .foregroundColor(.theme.subtext)

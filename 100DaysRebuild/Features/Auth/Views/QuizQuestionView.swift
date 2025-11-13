@@ -40,22 +40,24 @@ struct QuizQuestionView: View {
     // MARK: - Question Header
     
     private var questionHeader: some View {
-        VStack(spacing: AppSpacing.s) {
+        VStack(spacing: 12) {
             Text(question.question)
-                .font(AppTypography.title2(.semibold))
+                .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundColor(.theme.text)
                 .multilineTextAlignment(.center)
-                .lineLimit(nil)
-            
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+
             if let subtitle = question.subtitle {
                 Text(subtitle)
-                    .font(AppTypography.subhead(.regular))
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
                     .foregroundColor(.theme.subtext)
                     .multilineTextAlignment(.center)
-                    .lineLimit(nil)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.horizontal, AppSpacing.m)
+        .padding(.horizontal, 24)
     }
     
     // MARK: - Multiple Choice Options
@@ -85,44 +87,59 @@ struct QuizQuestionView: View {
                 selectedAnswer = option
             }
         }) {
-            HStack {
+            HStack(spacing: 14) {
                 Text(option)
-                    .font(AppTypography.body(.medium))
-                    .foregroundColor(selectedAnswer == option ? Color.adaptiveForeground(for: .light) : .theme.text)
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .foregroundColor(selectedAnswer == option ? .white : .theme.text)
                     .multilineTextAlignment(.leading)
-                
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Spacer()
-                
+
                 // Selection indicator
                 if selectedAnswer == option {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(AppTypography.title3(.medium))
-                        .foregroundColor(Color.adaptiveForeground(for: .light))
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            .padding(.horizontal, AppSpacing.m)
-            .padding(.vertical, AppSpacing.buttonVerticalPadding)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
             .background(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                    .fill(selectedAnswer == option ? Color.theme.accent : Color.theme.surface)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
-                            .stroke(
-                                selectedAnswer == option ? Color.theme.accent : Color.theme.border,
-                                lineWidth: selectedAnswer == option ? 2 : 1
+                ZStack {
+                    if selectedAnswer == option {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.theme.accent, Color.theme.accent.opacity(0.9)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                    )
+                    } else {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.theme.surface)
+                    }
+
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            selectedAnswer == option
+                                ? Color.theme.accent.opacity(0.5)
+                                : Color.theme.border.opacity(0.3),
+                            lineWidth: selectedAnswer == option ? 2 : 1
+                        )
+                }
             )
             .shadow(
-                color: selectedAnswer == option 
-                    ? Color.theme.accent.opacity(0.2)
+                color: selectedAnswer == option
+                    ? Color.theme.accent.opacity(0.3)
                     : Color.theme.shadow.opacity(0.05),
-                radius: selectedAnswer == option ? 8 : 4,
+                radius: selectedAnswer == option ? 12 : 4,
                 x: 0,
-                y: selectedAnswer == option ? 4 : 2
+                y: selectedAnswer == option ? 6 : 2
             )
-            .scaleEffect(selectedAnswer == option ? 1.02 : 1.0)
         }
         .buttonStyle(PlainButtonStyle())
                 .accessibilityLabel(option)
@@ -134,26 +151,37 @@ struct QuizQuestionView: View {
     // MARK: - Free Text Input
     
     private var freeTextInput: some View {
-        VStack(spacing: AppSpacing.m) {
-            // Input field
-            VStack(alignment: .leading, spacing: AppSpacing.xs) {
+        VStack(spacing: 20) {
+            // Input field with enhanced styling
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Your commitment:")
-                    .font(AppTypography.subhead(.medium))
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundColor(.theme.text)
-                
+
                 TextField("e.g., Exercise for 30 minutes daily", text: $freeTextAnswer)
-                    .font(AppTypography.body(.regular))
-                    .padding(.horizontal, AppSpacing.m)
-                    .padding(.vertical, AppSpacing.buttonVerticalPadding)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .foregroundColor(.theme.text)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 18)
                     .background(
-                        RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(Color.theme.surface)
                             .overlay(
-                                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                                RoundedRectangle(cornerRadius: 16)
                                     .stroke(
-                                        isTextFieldFocused ? Color.theme.accent : Color.theme.border,
+                                        isTextFieldFocused
+                                            ? Color.theme.accent.opacity(0.5)
+                                            : Color.theme.border.opacity(0.3),
                                         lineWidth: isTextFieldFocused ? 2 : 1
                                     )
+                            )
+                            .shadow(
+                                color: isTextFieldFocused
+                                    ? Color.theme.accent.opacity(0.15)
+                                    : Color.clear,
+                                radius: 8,
+                                x: 0,
+                                y: 4
                             )
                     )
                     .focused($isTextFieldFocused)
@@ -161,13 +189,13 @@ struct QuizQuestionView: View {
                     .onSubmit {
                         isTextFieldFocused = false
                     }
-                
-                // Character hint
+
+                // Character hint with better typography
                 HStack {
                     Spacer()
                     Text("\(freeTextAnswer.count)/100")
-                        .font(AppTypography.caption1(.regular))
-                        .foregroundColor(freeTextAnswer.count > 100 ? .theme.error : .theme.subtext)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(freeTextAnswer.count > 100 ? .theme.error : .theme.subtext.opacity(0.7))
                 }
             }
             
@@ -184,43 +212,43 @@ struct QuizQuestionView: View {
     }
     
     private var suggestionChips: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xs) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("Need inspiration?")
-                .font(AppTypography.caption1(.medium))
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundColor(.theme.subtext)
-            
+
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: AppSpacing.xs) {
+                HStack(spacing: 10) {
                     ForEach(suggestionExamples, id: \.self) { suggestion in
                         suggestionChip(suggestion)
                     }
                 }
-                .padding(.horizontal, AppSpacing.m)
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, -AppSpacing.m)
+            .padding(.horizontal, -24)
         }
     }
-    
+
     private func suggestionChip(_ suggestion: String) -> some View {
         Button(action: {
             withAnimation(.easeInOut(duration: 0.2)) {
                 freeTextAnswer = suggestion
             }
-            
+
             let generator = UIImpactFeedbackGenerator(style: .light)
             generator.impactOccurred()
         }) {
             Text(suggestion)
-                .font(AppTypography.caption1(.medium))
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.theme.accent)
-                .padding(.horizontal, AppSpacing.s)
-                .padding(.vertical, AppSpacing.xs)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.theme.accent.opacity(0.1))
+                        .fill(Color.theme.accent.opacity(0.12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                                .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1.5)
                         )
                 )
         }

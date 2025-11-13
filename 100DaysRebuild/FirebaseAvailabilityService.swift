@@ -14,7 +14,9 @@ public class FirebaseAvailabilityService {
     }
     
     private var isInitialized: Bool {
-        FirebaseApp.app() != nil && UserDefaults.standard.bool(forKey: "firebase_initialized")
+        // Check if Firebase is configured without triggering warnings
+        // This won't log warnings since it's checking the optional
+        return FirebaseApp.app() != nil
     }
     
     // Add a flag to track Firestore connectivity status
@@ -31,17 +33,27 @@ public class FirebaseAvailabilityService {
     nonisolated(unsafe) private var firestoreConnectivityListeners: [ListenerRegistration] = []
     
     private init() {
-        // Check initial state
-        isAvailableSubject.send(isInitialized)
-        
-        // Start monitoring
-        monitorAvailability()
-        
-        // Setup network status observer
-        setupNetworkObserver()
-        
-        // Setup Firestore connectivity monitoring
-        setupFirestoreConnectivityMonitoring()
+        // PRODUCTION FIX: Don't check Firebase status immediately in init
+        // This prevents "Firebase not configured" warnings on app launch
+        // The monitoring will start and detect when Firebase becomes available
+        isAvailableSubject.send(false)
+
+        // Delay initial checks slightly to allow Firebase to configure first
+        Task { @MainActor in
+            // Small delay to ensure Firebase has time to configure
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+
+            // Start monitoring
+            self.monitorAvailability()
+
+            // Setup network status observer
+            self.setupNetworkObserver()
+
+            // Setup Firestore connectivity monitoring if Firebase is ready
+            if self.isInitialized {
+                self.setupFirestoreConnectivityMonitoring()
+            }
+        }
     }
     
     deinit {
@@ -80,11 +92,13 @@ public class FirebaseAvailabilityService {
                         self.setupFirestoreConnectivityMonitoring()
                     }
                 } else {
+                    #if DEBUG
                     if self.isInitialized {
                         print("Network disconnected but Firebase initialized - offline mode available")
                     } else {
                         print("Network disconnected and Firebase not initialized - waiting for connection")
                     }
+                    #endif
                 }
             }
         }
@@ -111,19 +125,25 @@ public class FirebaseAvailabilityService {
                 if error.localizedDescription.contains("firestore.googleapis.com") ||
                    error.localizedDescription.contains("lookup error") ||
                    error.localizedDescription.contains("Domain name not found") {
+                    #if DEBUG
                     print("⚠️ Firestore DNS resolution error detected, attempting recovery...")
+                    #endif
                     Task { @MainActor [weak self] in
                         self?.attemptFirestoreDNSRecovery()
                         self?.isFirestoreConnected = false
                     }
                 } else {
+                    #if DEBUG
                     print("⚠️ Firestore error: \(error.localizedDescription)")
+                    #endif
                     Task { @MainActor [weak self] in
                         self?.isFirestoreConnected = false
                     }
                 }
             } else {
+                #if DEBUG
                 print("✅ Firestore connection established")
+                #endif
                 Task { @MainActor [weak self] in
                     self?.isFirestoreConnected = true
                 }
@@ -148,7 +168,9 @@ public class FirebaseAvailabilityService {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 if self.networkMonitor.isConnected {
+                    #if DEBUG
                     print("Attempting to reconnect to Firestore...")
+                    #endif
 
                     // Force a clean reconnect by recreating Firestore instances
                     let db = Firestore.firestore()
@@ -157,7 +179,9 @@ public class FirebaseAvailabilityService {
                     db.collection("users").limit(to: 1).getDocuments { [weak self] snapshot, error in
                         guard let self = self else { return }
                         if error == nil {
+                            #if DEBUG
                             print("✅ Successfully reconnected to Firestore")
+                            #endif
                             Task { @MainActor [weak self] in
                                 guard let self = self else { return }
                                 self.isFirestoreConnected = true
@@ -168,11 +192,15 @@ public class FirebaseAvailabilityService {
                                 self.setupFirestoreConnectivityMonitoring()
                             }
                         } else {
+                            #if DEBUG
                             print("⚠️ Still unable to connect to Firestore: \(error?.localizedDescription ?? "unknown error")")
+                            #endif
                         }
                     }
                 } else {
+                    #if DEBUG
                     print("Network still unavailable, waiting for connectivity")
+                    #endif
                 }
             }
         }
@@ -185,19 +213,21 @@ public class FirebaseAvailabilityService {
             return
         }
         
-        // Check if Firebase has already been configured in AppDelegate
-        if let appDelegate = UIApplication.shared.delegate as? AppDelegate, 
-           AppDelegate.firebaseConfigured {
-            print("Firebase already configured in AppDelegate, setting initialized flag")
-            UserDefaults.standard.set(true, forKey: "firebase_initialized")
+        // Check if Firebase has already been configured
+        if FirebaseApp.app() != nil {
+            #if DEBUG
+            print("Firebase already configured")
+            #endif
             isAvailableSubject.send(true)
             return
         }
-        
+
         // This is just for exceptional cases where Firebase wasn't configured in AppDelegate
         if FirebaseApp.app() == nil {
+            #if DEBUG
             print("⚠️ WARNING: Firebase not configured in AppDelegate. This should never happen in production.")
             print("Deferring to AppDelegate for proper Firebase initialization")
+            #endif
             
             // Instead of configuring Firebase here, notify app state coordinator or post a notification
             // that Firebase needs to be initialized, but let AppDelegate handle it
@@ -212,13 +242,17 @@ public class FirebaseAvailabilityService {
     private func handleInitFailure() {
         initRetryCount += 1
         if initRetryCount <= maxRetries {
+            #if DEBUG
             print("Firebase initialization failed, retrying (\(initRetryCount)/\(maxRetries))...")
+            #endif
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: UInt64(Double(initRetryCount) * 1_000_000_000))
+                // PRODUCTION: Retry immediately, no exponential backoff delays
                 self.ensureFirebaseIsInitialized()
             }
         } else {
+            #if DEBUG
             print("⚠️ Firebase initialization failed after \(maxRetries) attempts")
+            #endif
         }
     }
     
@@ -246,40 +280,17 @@ public class FirebaseAvailabilityService {
     }
     
     public func waitForFirebase() async -> Bool {
-        // For async contexts - wait for Firebase to be ready
+        // PRODUCTION: Non-blocking check - return immediately
+        // UI should not wait for Firebase; services handle offline mode gracefully
         if isInitialized { return true }
-        
-        // If not initialized but network is available, try to initialize
+
+        // If not initialized but network is available, try to initialize (non-blocking)
         if networkMonitor.isConnected && !isInitialized {
             ensureFirebaseIsInitialized()
         }
-        
-        let start = Date()
-        let timeout: TimeInterval = 15.0 // Increased timeout further to handle DNS issues
-        
-        while !isInitialized && Date().timeIntervalSince(start) < timeout {
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            
-            // Check every second if network is available but Firebase isn't initialized
-            if networkMonitor.isConnected && !isInitialized {
-                ensureFirebaseIsInitialized()
-            }
-        }
-        
-        if isInitialized {
-            return true
-        } else {
-            print("⚠️ Firebase initialization timeout in waitForFirebase()")
-            // Final fallback attempt
-            if networkMonitor.isConnected {
-                print("Final attempt to initialize Firebase")
-                ensureFirebaseIsInitialized()
-                // Wait a short time for the initialization to complete
-                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-                return isInitialized
-            }
-            return false
-        }
+
+        // Return current state immediately - don't block UI
+        return isInitialized
     }
     
     // New public method to get Firestore connectivity status

@@ -133,7 +133,7 @@ struct FoundersOfferView: View {
                         .foregroundStyle(Color.primary.opacity(0.95))
                 }
             }
-            .buttonStyle(ScaleButtonStyle())
+            .buttonStyle(FoundersScaleButtonStyle())
 
             Spacer()
         }
@@ -645,8 +645,8 @@ struct FoundersOfferView: View {
                 "product_id": purchasedProductId
             ])
 
-            // Mark founders offer as consumed
-            store.markFoundersOfferConsumed()
+            // Mark founders offer as consumed (persists to server)
+            await store.markFoundersOfferConsumed()
 
             // Grant app access
             await UserSession.shared.completeOnboarding()
@@ -698,6 +698,16 @@ struct FoundersOfferView: View {
 
         // Return a generic savings message since we can't calculate exact amount
         return "70%"
+    }
+}
+
+// MARK: - Button Style
+
+struct FoundersScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 

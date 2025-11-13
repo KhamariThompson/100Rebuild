@@ -336,6 +336,16 @@ class UserSession: ObservableObject {
                 #endif
                 self.hasCompletedOnboarding = data["hasCompletedOnboarding"] as? Bool ?? false
 
+                // NEW: Load funnelCompleted from Firestore (SSOT) and cache to UserDefaults
+                if let funnelCompleted = data["funnelCompleted"] as? Bool, funnelCompleted {
+                    let completedAt = (data["onboardingCompletedAt"] as? Timestamp)?.dateValue() ?? Date()
+                    // Sync to UserDefaults cache
+                    UserDefaults.standard.set(completedAt, forKey: "onboardingCompletedAt")
+                    #if DEBUG
+                    print("✅ UserSession: Loaded funnelCompleted=true from Firestore, cached to UserDefaults")
+                    #endif
+                }
+
                 if let photoURLString = data["photoURL"] as? String,
                    let url = URL(string: photoURLString) {
                     self.photoURL = url

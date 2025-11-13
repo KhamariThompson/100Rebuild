@@ -28,9 +28,9 @@ struct SimpleCheckInSheet: View {
     @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @Environment(\.colorScheme) private var colorScheme
 
-    // Photo limit based on subscription status
+    // Photo limit - everyone gets 1 photo per check-in
     private var photoLimit: Int {
-        entitlementsAdapter.hasProAccess ? 3 : 1
+        return 1
     }
     
     private var photosRemaining: Int {
@@ -72,57 +72,105 @@ struct SimpleCheckInSheet: View {
     
     var body: some View {
         ZStack {
-            // Blurred background overlay - removing blur for better performance
-            Color.black.opacity(0.4)
+            // Beautiful backdrop blur
+            Color.black.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture {
                     dismissKeyboard()
                     onDismiss()
                 }
-            
-            // Main floating card
-            VStack(spacing: AppSpacing.m) {
-                // Header with done button and close button
-                HStack {
-                    headerSection
-                    
-                    Spacer()
-                    
-                    // X button to close the sheet
-                    Button(action: {
-                        dismissKeyboard()
-                        onDismiss()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(AppTypography.title2())
-                            .foregroundColor(.theme.subtext)
+
+            // Main floating card with premium design
+            VStack(spacing: 0) {
+                // Enhanced header section
+                VStack(spacing: 12) {
+                    HStack {
+                        Spacer()
+
+                        // Close button
+                        Button(action: {
+                            dismissKeyboard()
+                            onDismiss()
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.theme.surface.opacity(0.8))
+                                    .frame(width: 32, height: 32)
+
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.theme.subtext)
+                            }
+                        }
+                        .buttonStyle(AppScaleButtonStyle())
                     }
-                    .buttonStyle(AppScaleButtonStyle())
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+
+                    headerSection
+                        .padding(.horizontal, 24)
                 }
-                
-                // Journal
-                journalSection
-                
-                // Photo
-                photoSection
-                
-                // Check-in button
-                checkInButtonSection
+                .padding(.bottom, 24)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color.theme.accent.opacity(0.08),
+                            Color.theme.background.opacity(0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        // Journal
+                        journalSection
+
+                        // Photo
+                        photoSection
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 20)
+                }
+
+                // Check-in button - fixed at bottom
+                VStack(spacing: 0) {
+                    Divider()
+                        .background(Color.theme.border.opacity(0.2))
+
+                    checkInButtonSection
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 20)
+                }
+                .background(Color.theme.background.opacity(0.98))
             }
-            .padding(AppSpacing.l)
+            .frame(maxWidth: min(420, UIScreen.main.bounds.width * 0.92))
+            .frame(maxHeight: min(680, UIScreen.main.bounds.height * 0.85))
             .background(
                 ZStack {
-                    // Background fill
-                    RoundedRectangle(cornerRadius: 20)
+                    // Premium card background
+                    RoundedRectangle(cornerRadius: 28)
                         .fill(Color.theme.background)
-                    
-                    // Simplified border without blur for better performance
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.theme.accent, lineWidth: 1.5)
+
+                    // Accent border glow
+                    RoundedRectangle(cornerRadius: 28)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.theme.accent.opacity(0.3),
+                                    Color.theme.accent.opacity(0.1)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
                 }
+                .shadow(color: Color.theme.accent.opacity(0.15), radius: 30, x: 0, y: 15)
+                .shadow(color: Color.black.opacity(0.2), radius: 15, x: 0, y: 8)
             )
-            .frame(maxWidth: UIScreen.main.bounds.width * 0.85)
-            .frame(maxHeight: UIScreen.main.bounds.height * 0.5)
+            .clipShape(RoundedRectangle(cornerRadius: 28))
             
             // Success animation overlay - simplified
             if showingSuccessAnimation {
@@ -169,93 +217,170 @@ struct SimpleCheckInSheet: View {
     // MARK: - View Components
     
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.xxs) {
-            Text("Day \(dayNumber) of 100")
-                .font(AppTypography.font(size: 18, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.accent)
-            
-            Text(challenge.title)
-                .font(AppTypography.font(size: 22, weight: .bold, design: .rounded))
-                .foregroundColor(.theme.text)
-            
-            HStack(spacing: AppSpacing.s) {
-                HStack(spacing: 4) {
-                    Text("🔥")
-                        .font(AppTypography.subhead())
-                    Text("\(challenge.streakCount) day streak")
-                        .font(AppTypography.subhead())
+        VStack(spacing: 16) {
+            // Day badge
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 48, height: 48)
+
+                    Text("\(dayNumber)")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Day \(dayNumber) of 100")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.theme.accent)
+
+                    Text("\(Int(challenge.progressPercentage * 100))% Complete")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundColor(.theme.subtext)
                 }
-                
+
                 Spacer()
-                
-                Text("\(Int(challenge.progressPercentage * 100))% complete")
-                    .font(AppTypography.subhead())
-                    .foregroundColor(.theme.accent)
             }
-            .padding(.top, AppSpacing.xxs)
+
+            // Challenge title
+            Text(challenge.title)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundColor(.theme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(2)
+
+            // Streak info
+            HStack(spacing: 12) {
+                HStack(spacing: 6) {
+                    Text("🔥")
+                        .font(.system(size: 18))
+                    Text("\(challenge.streakCount) day streak")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundColor(.theme.text)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(Color.theme.accent.opacity(0.12))
+                )
+
+                Spacer()
+            }
         }
     }
     
     private var journalSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.s) {
-            HStack {
-                Image(systemName: "pencil.line")
-                    .foregroundColor(.theme.accent)
-                Text("Journal Entry")
-                    .font(AppTypography.headline())
-                    .foregroundColor(.theme.text)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.theme.accent.opacity(0.15))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "pencil.line")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.theme.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Journal Entry")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(.theme.text)
+
+                    Text("Optional - Capture your thoughts")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.theme.subtext)
+                }
             }
-            
+
             ZStack(alignment: .topLeading) {
                 if journalText.isEmpty {
-                    Text("Write your thoughts...")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext.opacity(0.7))
-                        .padding(.top, 8)
-                        .padding(.leading, 4)
+                    Text("How did it go today? Any insights or reflections...")
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundColor(.theme.subtext.opacity(0.6))
+                        .padding(.top, 12)
+                        .padding(.leading, 16)
+                        .padding(.trailing, 16)
                 }
-                
+
                 TextEditor(text: $journalText)
-                    .font(AppTypography.body())
+                    .font(.system(size: 15, weight: .regular, design: .rounded))
                     .foregroundColor(.theme.text)
-                    .frame(height: 80)
+                    .frame(height: 100)
                     .focused($isJournalFocused)
-                    .opacity(journalText.isEmpty ? 0.25 : 1)
-                    .cornerRadius(8)
                     .scrollContentBackground(.hidden)
+                    .padding(8)
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
-                            Button("Done") {
+                            Button {
                                 dismissKeyboard()
+                            } label: {
+                                Text("Done")
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .foregroundColor(.theme.accent)
                             }
                         }
                     }
             }
-            .padding(AppSpacing.s)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.theme.surface.opacity(0.5))
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.theme.surface)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.theme.border, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                isJournalFocused ? Color.theme.accent.opacity(0.4) : Color.theme.border.opacity(0.3),
+                                lineWidth: isJournalFocused ? 2 : 1
+                            )
                     )
             )
         }
     }
     
     private var photoSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.s) {
-            HStack {
-                Image(systemName: "camera")
-                    .foregroundColor(.theme.accent)
-                    
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.theme.accent.opacity(0.15))
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.theme.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Photo")
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(.theme.text)
+
+                    Text("Optional - Capture your progress")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.theme.subtext)
+                }
+
                 Spacer()
-                
-                Text("Photos remaining: \(photosRemaining)/\(photoLimit)")
-                    .font(AppTypography.caption1())
-                    .foregroundColor(.theme.subtext)
+
+                if photosRemaining < photoLimit {
+                    Text("\(selectedImages.count)/\(photoLimit)")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.theme.accent)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.accent.opacity(0.12))
+                        )
+                }
             }
             
             // Display selected images
@@ -308,25 +433,29 @@ struct SimpleCheckInSheet: View {
                     // Show photo options using proper SwiftUI confirmationDialog
                     let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                     impactFeedback.impactOccurred()
-                    
+
                     // Show the confirmation dialog
                     showingPhotoOptions = true
                 } label: {
-                    HStack {
-                        Image(systemName: "photo")
-                            .font(AppTypography.body())
-                        Text("Add Photo")
-                            .font(AppTypography.subhead())
+                    HStack(spacing: 8) {
+                        Image(systemName: "photo.on.rectangle")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("Choose Photo")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
                     }
                     .foregroundColor(.theme.accent)
-                    .padding(.vertical, AppSpacing.s)
-                    .padding(.horizontal, AppSpacing.m)
                     .frame(maxWidth: .infinity)
+                    .frame(height: 48)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.theme.accent, lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.theme.accent.opacity(0.4), lineWidth: 1.5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14)
+                                    .fill(Color.theme.accent.opacity(0.06))
+                            )
                     )
                 }
+                .buttonStyle(AppScaleButtonStyle())
                 .confirmationDialog("Add Photo", isPresented: $showingPhotoOptions) {
                     Button("Take Photo") {
                         // Use a slight delay to avoid animation conflicts
@@ -343,34 +472,6 @@ struct SimpleCheckInSheet: View {
                             self.showingPhotoLibrary = true // Use separate state variable
                         }
                     }
-                }
-            } else if !entitlementsAdapter.hasProAccess && selectedImages.count >= 1 {
-                // Upgrade prompt for non-Pro users who hit the limit
-                Button {
-                    showUpgradePrompt = true
-                } label: {
-                    HStack {
-                        Image(systemName: "crown")
-                            .font(AppTypography.body())
-                        Text("Upgrade to Add More Photos")
-                            .font(AppTypography.subhead())
-                    }
-                    .foregroundColor(.yellow)
-                    .padding(.vertical, AppSpacing.s)
-                    .padding(.horizontal, AppSpacing.m)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.yellow, lineWidth: 1)
-                    )
-                }
-                .alert("Upgrade to Pro", isPresented: $showUpgradePrompt) {
-                    Button("Not Now", role: .cancel) { }
-                    Button("Upgrade") {
-                        // TODO: Trigger paywall via navigation
-                    }
-                } message: {
-                    Text("Pro users can add up to 3 photos per check-in. Upgrade to unlock this feature!")
                 }
             }
         }
@@ -442,20 +543,35 @@ struct SimpleCheckInSheet: View {
             dismissKeyboard()
             handleCheckIn()
         } label: {
-            Text("Complete Check-In")
-                .font(AppTypography.title3(.semibold))
-                .foregroundColor(colorScheme == .dark ? .black : .white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppSpacing.m)
-                .background(
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 20, weight: .bold))
+
+                Text("Complete Check-In")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .background(
+                ZStack {
                     LinearGradient(
-                        gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
+                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.85)],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 8, x: 0, y: 4)
-                )
+
+                    // Subtle shine effect
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.2), Color.clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .shadow(color: Color.theme.accent.opacity(0.4), radius: 12, x: 0, y: 6)
+            .shadow(color: Color.black.opacity(0.15), radius: 4, x: 0, y: 2)
         }
         .disabled(!hasRequiredInput)
         .opacity(hasRequiredInput ? 1.0 : 0.6)

@@ -69,7 +69,7 @@ struct ProgressDailyCheckIn: Identifiable {
 // MARK: - Main View
 struct ProgressView: View {
     @EnvironmentObject var viewModel: ProgressDashboardViewModel
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userStatsService: UserStatsService
@@ -191,15 +191,6 @@ struct ProgressView: View {
             print("ProgressView - Manual refresh triggered")
             await refreshData()
         }
-        .onChange(of: subscriptionService.isProUser) { isPro in
-            // Refresh data when user upgrades to Pro to ensure analytics are accurate
-            if isPro {
-                Task {
-                    print("ProgressView - User upgraded to Pro, refreshing analytics")
-                    await refreshData()
-                }
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: BadgeService.badgesDidUpdateNotification)) { _ in
             // Force refresh when badges are updated
             Task {
@@ -268,15 +259,12 @@ struct ProgressView: View {
                 }
             }
         }
-        .sheet(isPresented: $subscriptionService.showPaywall, onDismiss: {
-            // Check subscription status when paywall is dismissed
-            Task {
-                await subscriptionService.refreshSubscriptionStatus()
-            }
-        }) {
-            PaywallView()
-                .environmentObject(subscriptionService)
-        }
+        // Note: showPaywall removed from SubscriptionStore
+        // TODO: Implement paywall presentation via navigation state if needed
+        // .sheet(isPresented: $showPaywall) {
+        //     PaywallView()
+        //         .environmentObject(subscriptionStore)
+        // }
     }
     
     // New redesigned progress content based on requirements
@@ -302,84 +290,34 @@ struct ProgressView: View {
         .padding(.horizontal)
     }
     
-    // 1. Hero Summary Section
+    // 1. Hero Summary Section - Enhanced with better centering
     private var heroSummarySection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Hero headline
-            VStack(alignment: .leading, spacing: AppSpacing.s) {
-                Text("You've checked in \(viewModel.currentStreak) days in a row!")
-                    .font(AppTypography.title2(.bold))
-                    .foregroundColor(Color.theme.text)
-                    .padding(.horizontal, AppSpacing.s)
-                    .multilineTextAlignment(.leading)
-            }
-            
-            // Stats in a horizontal layout
-            HStack(spacing: AppSpacing.m) {
-                // Streak with flame emoji
-                VStack(alignment: .center, spacing: 4) {
-                    HStack(spacing: 4) {
-                        Text("🔥")
-                            .font(AppTypography.title3())
-                        Text("\(viewModel.currentStreak)")
-                            .font(AppTypography.title3(.bold))
-                            .foregroundColor(Color.theme.text)
-                    }
-                    Text("Current Streak")
-                        .font(AppTypography.caption1())
-                        .foregroundColor(Color.theme.subtext)
+        VStack(spacing: AppSpacing.m) {
+            // Hero headline - centered
+            VStack(spacing: AppSpacing.xs) {
+                if viewModel.currentStreak > 0 {
+                    Text("You've checked in \(viewModel.currentStreak) \(viewModel.currentStreak == 1 ? "day" : "days") in a row!")
+                        .font(AppTypography.title2(.bold))
+                        .foregroundColor(Color.theme.text)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Ready to build your streak!")
+                        .font(AppTypography.title2(.bold))
+                        .foregroundColor(Color.theme.text)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+            }
 
-                // Momentum badge (feature gated)
-                if FeatureGateService.shared.isEnabled("momentum_predictor"),
-                   let momentum = MomentumService.shared.currentState {
-                    VStack(alignment: .center, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(momentum.emoji)
-                            Text(momentum.label)
-                                .font(AppTypography.caption1())
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding(.top, 4)
-                    .transition(.opacity)
-                    .frame(maxWidth: .infinity)
-                }
-                
-                // Percent complete - use global completion percentage from userStatsService
-                VStack(alignment: .center, spacing: 4) {
-                    Text("\(Int(userStatsService.userStats.overallCompletionPercentage * 100))%")
-                        .font(AppTypography.title3(.bold))
-                        .foregroundColor(Color.theme.text)
-                    Text("Complete")
-                        .font(AppTypography.caption1())
-                        .foregroundColor(Color.theme.subtext)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Days active
-                VStack(alignment: .center, spacing: 4) {
-                    Text("\(viewModel.totalChallenges)")
-                        .font(AppTypography.title3(.bold))
-                        .foregroundColor(Color.theme.text)
-                    Text("Challenges")
-                        .font(AppTypography.caption1())
-                        .foregroundColor(Color.theme.subtext)
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, AppSpacing.s)
-            
-            // Optional radial ring progress chart - update to use global completion percentage
+            // Radial progress ring - centered
             ZStack {
                 // Background ring
                 Circle()
                     .stroke(lineWidth: 16)
                     .opacity(0.2)
                     .foregroundColor(Color.theme.accent)
-                
+
                 // Progress ring
                 Circle()
                     .trim(from: 0.0, to: CGFloat(min(userStatsService.userStats.overallCompletionPercentage, 1.0)))
@@ -387,27 +325,108 @@ struct ProgressView: View {
                     .foregroundColor(Color.theme.accent)
                     .rotationEffect(Angle(degrees: 270.0))
                     .animation(.easeInOut(duration: 1.0), value: userStatsService.userStats.overallCompletionPercentage)
-                
+
                 // Center content
-                VStack(spacing: 0) {
+                VStack(spacing: 4) {
                     Text("\(Int(userStatsService.userStats.overallCompletionPercentage * 100))%")
-                        .font(AppTypography.title1(.bold))
+                        .font(AppTypography.largeTitle(.bold))
                         .foregroundColor(Color.theme.text)
 
-                    Text("complete")
+                    Text("Complete")
                         .font(AppTypography.caption1())
                         .foregroundColor(Color.theme.subtext)
                 }
             }
-            .frame(width: 130, height: 130)
-            .padding(.top, AppSpacing.s)
-            .frame(maxWidth: .infinity)
+            .frame(width: 140, height: 140)
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            // Stats grid - properly centered
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: AppSpacing.m),
+                GridItem(.flexible(), spacing: AppSpacing.m)
+            ], spacing: AppSpacing.m) {
+                // Current Streak
+                statCard(
+                    icon: "flame.fill",
+                    value: "\(viewModel.currentStreak)",
+                    label: "Current Streak",
+                    color: .orange
+                )
+
+                // Longest Streak
+                statCard(
+                    icon: "trophy.fill",
+                    value: "\(viewModel.longestStreak)",
+                    label: "Longest Streak",
+                    color: .yellow
+                )
+
+                // Total Challenges
+                statCard(
+                    icon: "list.bullet.rectangle",
+                    value: "\(viewModel.totalChallenges)",
+                    label: "Total Challenges",
+                    color: .blue
+                )
+
+                // Active Days
+                statCard(
+                    icon: "checkmark.circle.fill",
+                    value: "\(viewModel.activeDaysThisYear)",
+                    label: "Active Days",
+                    color: .green
+                )
+            }
+
+            // Momentum badge (feature gated) - centered
+            if FeatureGateService.shared.isEnabled("momentum_predictor"),
+               let momentum = MomentumService.shared.currentState {
+                HStack(spacing: 8) {
+                    Text(momentum.emoji)
+                        .font(AppTypography.title3())
+                    Text(momentum.label)
+                        .font(AppTypography.body(.medium))
+                        .foregroundColor(.theme.text)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.theme.accent.opacity(0.1))
+                )
+                .frame(maxWidth: .infinity, alignment: .center)
+                .transition(.opacity)
+            }
         }
-        .padding()
+        .padding(AppSpacing.m)
         .background(
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+
+    // Helper for stat cards
+    private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(AppTypography.title2())
+                .foregroundColor(color)
+
+            Text(value)
+                .font(AppTypography.title3(.bold))
+                .foregroundColor(Color.theme.text)
+
+            Text(label)
+                .font(AppTypography.caption1())
+                .foregroundColor(Color.theme.subtext)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background)
         )
     }
     
@@ -416,7 +435,7 @@ struct ProgressView: View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
             // Improved section header with Pro badge and expand/collapse toggle
             HStack {
-                // Header with optional PRO badge
+                // Header
                 HStack(spacing: AppSpacing.xs) {
                     Image(systemName: "trophy.fill")
                         .font(AppTypography.body())
@@ -425,22 +444,6 @@ struct ProgressView: View {
                 Text("Milestones & Badges")
                     .font(AppTypography.title3(.bold))
                     .foregroundColor(Color.theme.text)
-                    
-                    if subscriptionService.isProUser {
-                        Text("PRO")
-                            .font(AppTypography.caption2(.bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.theme.accent, Color.theme.accent.opacity(0.8)]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(6)
-                    }
                 }
                 
                 Spacer()
@@ -466,21 +469,19 @@ struct ProgressView: View {
                     .cornerRadius(8)
                 }
                 
-                // Category filter menu (Pro feature teaser)
+                // Category filter menu
                 Menu {
                     ForEach(BadgeCategory.allCases, id: \.self) { category in
                         Button(action: {
-                            // This would be implemented as a Pro feature
-                            if !subscriptionService.isProUser {
-                                viewModel.showProUpgradeSheet = true
-                            }
+                            // Filter badges by category
+                            // TODO: Implement category filtering
                         }) {
                             Label(category.rawValue, systemImage: category.icon)
                         }
                     }
-                    
+
                     Divider()
-                    
+
                     Button(action: {
                         // Reset filter
                     }) {
@@ -491,7 +492,6 @@ struct ProgressView: View {
                         .foregroundColor(.theme.accent)
                         .font(AppTypography.title3())
                 }
-                .disabled(!subscriptionService.isProUser)
             }
             
             // Milestone badges section - always visible (collapsed view)
@@ -593,22 +593,6 @@ struct ProgressView: View {
             RoundedRectangle(cornerRadius: 20)
                 .fill(Color.theme.surface)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-        )
-        .overlay(
-            // Enhanced visual treatment for Pro users
-            Group {
-                if subscriptionService.isProUser {
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.yellow.opacity(0.4), Color.yellow.opacity(0.1)]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.5
-                        )
-                }
-            }
         )
     }
     
@@ -761,28 +745,27 @@ struct ProgressView: View {
         )
     }
     
-    // New 4. Advanced Analytics Section (combines previous sections)
+    // 4. Enhanced Advanced Analytics Section - Completely Redesigned
     private var advancedAnalyticsSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.m) {
-            // Enhanced header
-            HStack(spacing: AppSpacing.s) {
-                // Analytics icon
-                Image(systemName: "chart.xyaxis.line")
-                    .font(AppTypography.title2(.semibold))
-                    .foregroundColor(.theme.accent)
+            // Section header with refresh button
+            HStack {
+                HStack(spacing: 8) {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(AppTypography.title3())
+                        .foregroundColor(.theme.accent)
 
-                Text("Advanced Analytics")
-                    .font(AppTypography.headline(.bold))
-                    .foregroundColor(.theme.text)
+                    Text("Analytics & Insights")
+                        .font(AppTypography.title3(.bold))
+                        .foregroundColor(.theme.text)
+                }
 
                 Spacer()
 
-                // Refresh button for all users
+                // Refresh button
                 Button(action: {
-                    // Refresh analytics data
                     let feedbackGenerator = UIImpactFeedbackGenerator(style: .light)
                     feedbackGenerator.impactOccurred()
-
                     Task {
                         await viewModel.refreshAnalyticsData()
                     }
@@ -790,150 +773,411 @@ struct ProgressView: View {
                     Image(systemName: "arrow.clockwise")
                         .font(AppTypography.body())
                         .foregroundColor(.theme.accent)
+                        .padding(8)
+                        .background(Color.theme.accent.opacity(0.1))
+                        .clipShape(Circle())
                 }
-                .padding(.trailing, 8)
             }
-            .padding(.horizontal, AppSpacing.s)
+            .padding(.horizontal, AppSpacing.m)
+            .padding(.top, AppSpacing.s)
 
-            // Show analytics for all users
-            VStack(spacing: AppSpacing.m) {
-                    // Check-in rates - row 1
-                    HStack(spacing: AppSpacing.m) {
-                        // Weekly check-in rate
-                        metricCard(
-                            title: "Last 7 Days",
-                            value: "\(Int(viewModel.weeklyCheckInRate * 100))%",
-                            icon: "calendar.badge.clock",
-                            color: .blue
-                        )
-                        
-                        // Monthly check-in rate
-                        metricCard(
-                            title: "Last 30 Days",
-                            value: "\(Int(viewModel.monthlyCheckInRate * 100))%",
-                            icon: "calendar",
-                            color: .green
-                        )
-                    }
-                    
-                    // Streaks - row 2
-                    HStack(spacing: AppSpacing.m) {
-                        // Longest streak ever
-                        metricCard(
-                            title: "Longest Streak",
-                            value: "\(viewModel.longestStreak) days",
-                            icon: "flame.fill",
-                            color: .orange
-                        )
-                        
-                        // Total active days this year
-                        metricCard(
-                            title: "Active Days (Year)",
-                            value: "\(viewModel.activeDaysThisYear)",
-                            icon: "checkmark.circle.fill",
-                            color: .theme.accent
-                        )
-                    }
-                    
-                    // Overall check-in rate - row 3
-                    HStack(spacing: AppSpacing.m) {
-                        // Overall rate
-                        metricCard(
-                            title: "Overall Consistency",
-                            value: "\(Int(viewModel.totalCheckInRate * 100))%",
-                            icon: "chart.pie.fill",
-                            color: .purple
-                        )
-                    }
-                    
-                    // Row 3 - Special metrics
-                    VStack(spacing: AppSpacing.s) {
-                        // Projected completion
-                        HStack(spacing: AppSpacing.s) {
-                            Image(systemName: "calendar.badge.clock")
-                                .foregroundColor(.blue)
-                                .font(AppTypography.headline())
-                                .frame(width: 24, height: 24)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                            Text("Projected Completion")
-                                .font(AppTypography.subhead(.medium))
-                                .foregroundColor(.theme.subtext)
+            // Performance Trend Insight Card
+            performanceTrendCard
 
-                            if let projectedDate = viewModel.projectedCompletionDate {
-                                Text(projectedDate, style: .date)
-                                        .font(AppTypography.body(.bold))
-                                    .foregroundColor(.theme.text)
-                            } else {
-                                Text("Set a goal to see projection")
-                                    .font(AppTypography.body(.medium))
-                                    .foregroundColor(.theme.text)
-                            }
-                        }
-                        
-                        Spacer()
-                        }
-                        .padding()
-                        .background(Color.theme.surface.opacity(0.6))
-                        .cornerRadius(12)
-                        
-                        // Average check-in time
-                        if let avgTime = viewModel.averageCheckInTime {
-                            HStack(spacing: AppSpacing.s) {
-                                Image(systemName: "clock.fill")
-                                    .foregroundColor(.purple)
-                                    .font(AppTypography.headline())
-                                    .frame(width: 24, height: 24)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Average Check-in Time")
-                                .font(AppTypography.subhead(.medium))
-                                .foregroundColor(.theme.subtext)
-
-                                    Text(avgTime)
-                                        .font(AppTypography.body(.bold))
-                                .foregroundColor(.theme.text)
-                        }
-                                
-                                Spacer()
-                            }
-                            .padding()
-                            .background(Color.theme.surface.opacity(0.6))
-                            .cornerRadius(12)
-                        }
-                        
-                        // Best streak month
-                        if let bestMonth = viewModel.bestStreakMonth {
-                            HStack(spacing: AppSpacing.s) {
-                                Image(systemName: "trophy.fill")
-                                    .foregroundColor(.yellow)
-                                    .font(AppTypography.headline())
-                                    .frame(width: 24, height: 24)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Best Streak Month")
-                            .font(AppTypography.subhead(.medium))
-                            .foregroundColor(.theme.subtext)
-
-                                    Text("\(bestMonth.month), \(bestMonth.consistency)% consistency")
-                                        .font(AppTypography.body(.bold))
-                                        .foregroundColor(.theme.text)
-                                }
-                                
-                                    Spacer()
-                                }
-                            .padding()
-                            .background(Color.theme.surface.opacity(0.6))
-                            .cornerRadius(12)
-                        }
-                    }
-                }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.theme.surface)
-                    .shadow(color: Color.theme.shadow.opacity(0.1), radius: 8, x: 0, y: 4)
+            // Key Metrics Grid
+            LazyVGrid(columns: [
+                GridItem(.flexible(), spacing: AppSpacing.m),
+                GridItem(.flexible(), spacing: AppSpacing.m)
+            ], spacing: AppSpacing.m) {
+                // Weekly consistency
+                enhancedMetricCard(
+                    title: "This Week",
+                    value: "\(Int(viewModel.weeklyCheckInRate * 100))%",
+                    subtitle: "Check-in Rate",
+                    icon: "calendar.badge.clock",
+                    color: trendColor(for: viewModel.weeklyCheckInRate),
+                    trend: getTrend(current: viewModel.weeklyCheckInRate, baseline: viewModel.monthlyCheckInRate)
                 )
+
+                // Monthly consistency
+                enhancedMetricCard(
+                    title: "This Month",
+                    value: "\(Int(viewModel.monthlyCheckInRate * 100))%",
+                    subtitle: "Check-in Rate",
+                    icon: "calendar",
+                    color: trendColor(for: viewModel.monthlyCheckInRate),
+                    trend: getTrend(current: viewModel.monthlyCheckInRate, baseline: viewModel.totalCheckInRate)
+                )
+
+                // Active days this year
+                enhancedMetricCard(
+                    title: "Active Days",
+                    value: "\(viewModel.activeDaysThisYear)",
+                    subtitle: "This Year",
+                    icon: "checkmark.circle.fill",
+                    color: .green,
+                    trend: nil
+                )
+
+                // Overall consistency
+                enhancedMetricCard(
+                    title: "Overall",
+                    value: "\(Int(viewModel.totalCheckInRate * 100))%",
+                    subtitle: "Consistency",
+                    icon: "chart.pie.fill",
+                    color: .purple,
+                    trend: nil
+                )
+            }
+            .padding(.horizontal, AppSpacing.m)
+
+            // Insights Section
+            insightsSection
+                .padding(.horizontal, AppSpacing.m)
+
+            // Additional Metrics
+            VStack(spacing: AppSpacing.s) {
+                // Best month
+                if let bestMonth = viewModel.bestStreakMonth {
+                    insightRow(
+                        icon: "trophy.fill",
+                        iconColor: .yellow,
+                        title: "Best Month",
+                        value: "\(bestMonth.month) • \(bestMonth.consistency)% consistency"
+                    )
+                }
+
+                // Average check-in time
+                if let avgTime = viewModel.averageCheckInTime {
+                    insightRow(
+                        icon: "clock.fill",
+                        iconColor: .blue,
+                        title: "Avg. Check-in Time",
+                        value: avgTime
+                    )
+                }
+
+                // Projected completion
+                if let projectedDate = viewModel.projectedCompletionDate {
+                    insightRow(
+                        icon: "flag.checkered",
+                        iconColor: .green,
+                        title: "Projected Finish",
+                        value: projectedDate.formatted(date: .abbreviated, time: .omitted)
+                    )
+                }
+            }
+            .padding(.horizontal, AppSpacing.m)
+            .padding(.bottom, AppSpacing.s)
+        }
+        .padding(.vertical, AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.theme.surface)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+
+    // Performance trend card with actionable insights
+    private var performanceTrendCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
+                    .font(AppTypography.title3())
+                    .foregroundColor(.theme.accent)
+
+                Text("Performance Trend")
+                    .font(AppTypography.headline(.bold))
+                    .foregroundColor(.theme.text)
+
+                Spacer()
+            }
+
+            // Trend analysis
+            if viewModel.weeklyCheckInRate > viewModel.monthlyCheckInRate {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.up.right")
+                        .foregroundColor(.green)
+
+                    Text("Improving")
+                        .font(AppTypography.body(.bold))
+                        .foregroundColor(.green)
+
+                    Spacer()
+                }
+
+                Text("You're \(Int((viewModel.weeklyCheckInRate - viewModel.monthlyCheckInRate) * 100))% more consistent this week than your monthly average!")
+                    .font(AppTypography.subhead())
+                    .foregroundColor(.theme.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if viewModel.weeklyCheckInRate < viewModel.monthlyCheckInRate && viewModel.monthlyCheckInRate > 0 {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.down.right")
+                        .foregroundColor(.orange)
+
+                    Text("Needs Attention")
+                        .font(AppTypography.body(.bold))
+                        .foregroundColor(.orange)
+
+                    Spacer()
+                }
+
+                Text("Your consistency this week is below your average. Try to check in daily to rebuild momentum!")
+                    .font(AppTypography.subhead())
+                    .foregroundColor(.theme.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: 8) {
+                    Image(systemName: "equal")
+                        .foregroundColor(.blue)
+
+                    Text("Steady")
+                        .font(AppTypography.body(.bold))
+                        .foregroundColor(.blue)
+
+                    Spacer()
+                }
+
+                Text("You're maintaining a consistent pace. Keep up the great work!")
+                    .font(AppTypography.subhead())
+                    .foregroundColor(.theme.subtext)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.accent.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(Color.theme.accent.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .padding(.horizontal, AppSpacing.m)
+    }
+
+    // Insights section with actionable recommendations
+    private var insightsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "lightbulb.fill")
+                    .font(AppTypography.body())
+                    .foregroundColor(.yellow)
+
+                Text("Insights")
+                    .font(AppTypography.headline(.bold))
+                    .foregroundColor(.theme.text)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                // Streak insight
+                if viewModel.currentStreak > 0 {
+                    insightBullet(
+                        text: "You're on a \(viewModel.currentStreak)-day streak! Keep it going to earn more badges.",
+                        icon: "flame.fill",
+                        color: .orange
+                    )
+                } else {
+                    insightBullet(
+                        text: "Start a new streak today! Consistency is key to success.",
+                        icon: "flag.fill",
+                        color: .blue
+                    )
+                }
+
+                // Completion insight
+                if userStatsService.userStats.overallCompletionPercentage < 0.25 {
+                    insightBullet(
+                        text: "You're just getting started! Focus on building daily habits.",
+                        icon: "arrow.up.forward",
+                        color: .green
+                    )
+                } else if userStatsService.userStats.overallCompletionPercentage >= 0.75 {
+                    insightBullet(
+                        text: "Amazing progress! You're in the final stretch!",
+                        icon: "trophy.fill",
+                        color: .yellow
+                    )
+                } else {
+                    insightBullet(
+                        text: "Great momentum! You're over \(Int(userStatsService.userStats.overallCompletionPercentage * 100))% complete.",
+                        icon: "chart.line.uptrend.xyaxis",
+                        color: .purple
+                    )
+                }
+
+                // Weekly check-in insight
+                if viewModel.weeklyCheckInRate >= 0.85 {
+                    insightBullet(
+                        text: "Exceptional consistency this week! You're crushing it!",
+                        icon: "star.fill",
+                        color: .yellow
+                    )
+                } else if viewModel.weeklyCheckInRate < 0.5 && viewModel.weeklyCheckInRate > 0 {
+                    insightBullet(
+                        text: "Try to increase your check-ins this week for better results.",
+                        icon: "target",
+                        color: .orange
+                    )
+                }
+            }
+        }
+        .padding(AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.theme.background)
+        )
+    }
+
+    // Helper for insight bullet points
+    private func insightBullet(text: String, icon: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(AppTypography.caption1())
+                .foregroundColor(color)
+                .frame(width: 20, height: 20)
+
+            Text(text)
+                .font(AppTypography.subhead())
+                .foregroundColor(.theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    // Enhanced metric card with trend indicators
+    private func enhancedMetricCard(title: String, value: String, subtitle: String, icon: String, color: Color, trend: TrendDirection?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(AppTypography.body())
+                    .foregroundColor(color)
+
+                Spacer()
+
+                // Trend indicator
+                if let trend = trend {
+                    HStack(spacing: 2) {
+                        Image(systemName: trend.icon)
+                            .font(AppTypography.caption2(.bold))
+                        Text(trend.label)
+                            .font(AppTypography.caption2(.medium))
+                    }
+                    .foregroundColor(trend.color)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(trend.color.opacity(0.15))
+                    )
+                }
+            }
+
+            Text(value)
+                .font(AppTypography.title2(.bold))
+                .foregroundColor(.theme.text)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AppTypography.caption1(.medium))
+                    .foregroundColor(.theme.subtext)
+
+                Text(subtitle)
+                    .font(AppTypography.caption2())
+                    .foregroundColor(.theme.subtext.opacity(0.7))
+            }
+        }
+        .padding(AppSpacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background)
+        )
+    }
+
+    // Helper for insight rows
+    private func insightRow(icon: String, iconColor: Color, title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(AppTypography.body())
+                .foregroundColor(iconColor)
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle()
+                        .fill(iconColor.opacity(0.15))
+                )
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(AppTypography.subhead(.medium))
+                    .foregroundColor(.theme.subtext)
+
+                Text(value)
+                    .font(AppTypography.body(.bold))
+                    .foregroundColor(.theme.text)
+            }
+
+            Spacer()
+        }
+        .padding(AppSpacing.m)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.theme.background)
+        )
+    }
+
+    // Helper to determine trend color
+    private func trendColor(for rate: Double) -> Color {
+        if rate >= 0.8 {
+            return .green
+        } else if rate >= 0.5 {
+            return .blue
+        } else if rate >= 0.3 {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+
+    // Trend direction enum
+    private enum TrendDirection {
+        case up, down, stable
+
+        var icon: String {
+            switch self {
+            case .up: return "arrow.up"
+            case .down: return "arrow.down"
+            case .stable: return "minus"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .up: return .green
+            case .down: return .orange
+            case .stable: return .blue
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .up: return "Up"
+            case .down: return "Down"
+            case .stable: return "Steady"
+            }
+        }
+    }
+
+    // Helper to calculate trend
+    private func getTrend(current: Double, baseline: Double) -> TrendDirection {
+        let difference = current - baseline
+        if abs(difference) < 0.05 {
+            return .stable
+        } else if difference > 0 {
+            return .up
+        } else {
+            return .down
         }
     }
 
@@ -954,25 +1198,23 @@ struct ProgressView: View {
                             .foregroundColor(.secondary)
                     }
 
-                    Text("At this pace, you’ll reach Day 100 on \(forecast.predictedDate.formatted(.dateTime.month().day()))")
+                    Text("At this pace, you'll reach Day 100 on \(forecast.predictedDate.formatted(.dateTime.month().day()))")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
 
-                    if subscriptionService.isProUser {
-                        // Chart for Pro users
-                        let trend = ForecastService.shared.trendPointsSync(limitDays: 30)
-                        Chart {
-                            ForEach(trend) { p in
-                                LineMark(
-                                    x: .value("Day", p.day),
-                                    y: .value("Completion", p.percent)
-                                )
-                            }
+                    // Trend chart
+                    let trend = ForecastService.shared.trendPointsSync(limitDays: 30)
+                    Chart {
+                        ForEach(trend) { p in
+                            LineMark(
+                                x: .value("Day", p.day),
+                                y: .value("Completion", p.percent)
+                            )
                         }
-                        .frame(height: 120)
-                        .chartYScale(domain: 0...1)
-                        .chartXAxis(.hidden)
                     }
+                    .frame(height: 120)
+                    .chartYScale(domain: 0...1)
+                    .chartXAxis(.hidden)
                 }
                 .padding()
                 .background(DS.Colors.surface)
@@ -1001,51 +1243,6 @@ struct ProgressView: View {
         )
     }
     
-    // Helper for consistent metric cards
-    private func metricCard(title: String, value: String, icon: String, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(color)
-                    .font(AppTypography.body())
-                
-                Text(title)
-                    .font(AppTypography.subhead(.medium))
-                    .foregroundColor(.theme.subtext)
-            }
-            
-            Text(value)
-                .font(AppTypography.title3(.bold))
-                .foregroundColor(.theme.text)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-        .background(Color.theme.surface.opacity(0.6))
-        .cornerRadius(12)
-    }
-    
-    // Placeholder for blurred metrics (free users)
-    private func metricCardPlaceholder() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 16, height: 16)
-                
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 80, height: 14)
-            }
-            
-            Rectangle()
-                .fill(Color.gray.opacity(0.3))
-                .frame(width: 60, height: 20)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.theme.surface.opacity(0.6))
-        .cornerRadius(12)
-    }
     
     // 5. Daily Spark Section
     private var dailySparkSection: some View {
@@ -1301,7 +1498,7 @@ struct ProgressView: View {
 struct ProgressAnalyticsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var viewModel: ProgressDashboardViewModel
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @State private var isRefreshing = false
     
     var body: some View {
@@ -1383,15 +1580,12 @@ struct ProgressAnalyticsView: View {
                 .background(Color.clear)
             }
         }
-        .sheet(isPresented: $subscriptionService.showPaywall, onDismiss: {
-            // Check subscription status when paywall is dismissed
-            Task {
-                await subscriptionService.refreshSubscriptionStatus()
-            }
-        }) {
-            PaywallView()
-                .environmentObject(subscriptionService)
-        }
+        // Note: showPaywall removed from SubscriptionStore
+        // TODO: Implement paywall presentation via navigation state if needed
+        // .sheet(isPresented: $showPaywall) {
+        //     PaywallView()
+        //         .environmentObject(subscriptionStore)
+        // }
     }
 }
 

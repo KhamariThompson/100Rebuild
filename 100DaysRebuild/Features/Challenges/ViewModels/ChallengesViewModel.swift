@@ -442,73 +442,24 @@ class ChallengesViewModel: ObservableObject {
     /// Perform check-in to a challenge
     func checkInToChallenge(_ challenge: Challenge, note: String = "", image: UIImage? = nil) async -> Result<Void, Error> {
         isLoading = true
-        
+
         do {
-            guard let userId = userSession.currentUser?.uid else {
+            guard userSession.currentUser != nil else {
                 throw NSError(domain: "CheckInError", code: 401, userInfo: [NSLocalizedDescriptionKey: "User not authenticated"])
             }
-            
-            // Call CheckInService but don't await it
-            // This creates a fire-and-forget background task
-            Task.detached {
-                do {
-                    // Basic check-in - fast path for core update
-                    try await CheckInService.shared.checkIn(for: challenge.id.uuidString)
-                    
-                    // Handle the photo and note in the background
-                    if let image = image {
-                        // Upload image directly using Firebase Storage
-                        let storage = Storage.storage()
-                        let storageRef = storage.reference()
-                        let imagePath = "check-ins/\(challenge.id)/\(Date().timeIntervalSince1970).jpg"
-                        let imageRef = storageRef.child(imagePath)
-                        
-                        // Compress the image
-                        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-                            print("Failed to compress image for upload")
-                            return
-                        }
-                        
-                        // Upload the image
-                        let metadata = StorageMetadata()
-                        metadata.contentType = "image/jpeg"
-                        
-                        _ = try await imageRef.putDataAsync(imageData, metadata: metadata)
-                    }
-                    
-                    if !note.isEmpty {
-                        // Save the note in the background
-                        let checkInsRef = Firestore.firestore()
-                            .collection("users").document(userId)
-                            .collection("challenges").document(challenge.id.uuidString)
-                            .collection("checkIns")
-                        
-                        let today = Calendar.current.startOfDay(for: Date())
-                        let todayQuery = checkInsRef.whereField("date", isGreaterThanOrEqualTo: today)
-                            .whereField("date", isLessThan: Calendar.current.date(byAdding: .day, value: 1, to: today)!)
-                            .limit(to: 1)
-                        
-                        let snapshot = try await todayQuery.getDocuments()
-                        if let doc = snapshot.documents.first {
-                            try await doc.reference.updateData(["note": note])
-                        }
-                    }
-                    
-                    // Update user stats in the background
-                    // Remove these calls since they're not necessary and UserStatsService doesn't have these methods
-                    // try? await UserStatsService.shared.incrementDailyStreak(userId: userId)
-                    // try? await UserStatsService.shared.incrementTotalCheckIns(userId: userId)
-                    
-                    print("Background check-in complete for \(challenge.id)")
-                } catch {
-                    print("Background check-in failed: \(error)")
-                }
-            }
-            
+
+            // Call CheckInService with photo and note - it handles everything
+            // This is fire-and-forget, returns immediately
+            try await CheckInService.shared.checkIn(
+                for: challenge.id.uuidString,
+                note: note.isEmpty ? nil : note,
+                photo: image
+            )
+
             // Return success immediately to update UI quickly
             isLoading = false
             return .success(())
-            
+
         } catch {
             isLoading = false
             showError = true

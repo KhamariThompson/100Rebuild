@@ -355,9 +355,9 @@ class AuthService {
                 // Continue with Firebase sign out even if RevenueCat fails
             }
             
-            // Reset the SubscriptionService to clear all subscription state
-            await SubscriptionService.shared.reset()
-            print("AuthService: Reset SubscriptionService state")
+            // Reset the SubscriptionStore to clear all subscription state
+            await SubscriptionStore.shared.reset()
+            print("AuthService: Reset SubscriptionStore state")
             
             // 2. Sign out from Firebase
             try Auth.auth().signOut()

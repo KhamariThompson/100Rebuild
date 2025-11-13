@@ -57,8 +57,27 @@ final class RevenueCatManager {
             #endif
         }
 
+        // Get and validate API key
+        let apiKey = Constants.RevenueCat.apiKey
+
+        #if !DEBUG
+        // Production builds: verify API key is set and is production key
+        if apiKey.isEmpty {
+            fatalError("❌ FATAL: RevenueCat API key not set in Info.plist for Release build")
+        }
+        // Production keys start with "appl_" for iOS
+        if !apiKey.hasPrefix("appl_") {
+            print("⚠️ WARNING: RevenueCat API key may not be a production key (expected prefix: appl_)")
+        }
+        print("✅ RevenueCat: Using production API key in Release build")
+        #else
+        if apiKey.isEmpty {
+            print("⚠️ WARNING: RevenueCat API key not set in Info.plist")
+        }
+        #endif
+
         Purchases.configure(
-            with: Configuration.Builder(withAPIKey: Constants.RevenueCat.apiKey)
+            with: Configuration.Builder(withAPIKey: apiKey)
                 .with(appUserID: currentUserId)
                 .with(purchasesAreCompletedBy: .revenueCat, storeKitVersion: .storeKit2)
                 .with(userDefaults: UserDefaults.standard)
@@ -67,7 +86,8 @@ final class RevenueCatManager {
         )
 
         // Set delegate directly - we're already on main thread
-        Purchases.shared.delegate = SubscriptionService.shared
+        // SubscriptionStore is the SSOT and implements PurchasesDelegate
+        Purchases.shared.delegate = SubscriptionStore.shared
 
         configured = true
     }

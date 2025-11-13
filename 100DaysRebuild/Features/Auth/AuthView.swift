@@ -216,7 +216,7 @@ struct AuthView: View {
 struct AuthModeSelector: View {
     @ObservedObject var viewModel: AuthViewModel
     @Environment(\.colorScheme) private var colorScheme
-    
+
     var body: some View {
         HStack(spacing: 0) {
             // Sign In Button
@@ -229,7 +229,7 @@ struct AuthModeSelector: View {
                 Text("Sign In")
                     .font(AppTypography.body())
                     .foregroundStyle(viewModel.authMode == .emailSignIn ?
-                        DS.Colors.primaryButtonFg(colorScheme) :
+                        Color.black :
                         Color.theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
@@ -240,14 +240,14 @@ struct AuthModeSelector: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .stroke(
-                                viewModel.authMode == .emailSignIn 
-                                ? Color.white.opacity(colorScheme == .dark ? 0.1 : 0) 
+                                viewModel.authMode == .emailSignIn
+                                ? Color.white.opacity(colorScheme == .dark ? 0.1 : 0)
                                 : Color.theme.border.opacity(0.5),
                                 lineWidth: 1
                             )
                     )
             }
-            
+
             // Sign Up Button
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -257,7 +257,7 @@ struct AuthModeSelector: View {
                 Text("Sign Up")
                     .font(AppTypography.body())
                     .foregroundStyle(viewModel.authMode == .emailSignUp ?
-                        DS.Colors.primaryButtonFg(colorScheme) : Color.theme.subtext)
+                        Color.black : Color.theme.subtext)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(
@@ -267,8 +267,8 @@ struct AuthModeSelector: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
                             .stroke(
-                                viewModel.authMode == .emailSignUp 
-                                ? Color.white.opacity(colorScheme == .dark ? 0.1 : 0) 
+                                viewModel.authMode == .emailSignUp
+                                ? Color.white.opacity(colorScheme == .dark ? 0.1 : 0)
                                 : Color.theme.border.opacity(0.5),
                                 lineWidth: 1
                             )
@@ -455,8 +455,8 @@ private extension AuthView {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 } else {
                     Text(viewModel.authMode == .emailSignIn ? "Sign In" : "Create Account")
-                        .font(AppTypography.headline())
-                        .foregroundStyle(DS.Colors.primaryButtonFg(colorScheme))
+                        .font(AppTypography.headline(.semibold))
+                        .foregroundColor(.white)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -642,15 +642,15 @@ private extension AuthView {
             // Reset button
             Button(action: resetPassword) {
                 Text("Send Reset Link")
-                    .font(AppTypography.headline())
-                    .foregroundStyle(DS.Colors.primaryButtonFg(colorScheme))
+                    .font(AppTypography.headline(.semibold))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .background(
                         RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                            .fill(!viewModel.email.isEmpty && viewModel.networkConnected ? 
+                            .fill(!viewModel.email.isEmpty && viewModel.networkConnected ?
                                 Color.theme.accent : Color.gray.opacity(0.3))
-                            .shadow(color: !viewModel.email.isEmpty && viewModel.networkConnected ? 
+                            .shadow(color: !viewModel.email.isEmpty && viewModel.networkConnected ?
                                 Color.theme.accent.opacity(0.15) : Color.clear, radius: 4, x: 0, y: 1)
                     )
             }
@@ -722,7 +722,7 @@ private extension AuthView {
                             }
                         }
                     )
-                    .signInWithAppleButtonStyle(.white) // Always white background with black text
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                     .frame(height: CalAIDesignTokens.buttonHeight)
                     .cornerRadius(CalAIDesignTokens.buttonRadius)
                     .overlay(
@@ -731,7 +731,7 @@ private extension AuthView {
                     )
                 }
                 
-                // Google Sign In - styled to match Apple button
+                // Google Sign In - styled to match Apple button with theme adaptation
                 Button {
                     Task {
                         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -739,22 +739,29 @@ private extension AuthView {
                             print("Failed to get root view controller")
                             return
                         }
-                        
+
                         viewModel.isLoading = true
                         await viewModel.signInWithGoogle()
                     }
                 } label: {
-                    Text("Continue with Google")
-                        .font(AppTypography.headline())
-                        .foregroundStyle(DS.Colors.primaryButtonFg(.light)) // Light mode coloring (black on white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: CalAIDesignTokens.buttonHeight)
-                        .background(Color.white)
-                        .cornerRadius(CalAIDesignTokens.buttonRadius)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
-                                .stroke(Color.theme.border.opacity(0.5), lineWidth: 1)
-                        )
+                    HStack(spacing: 8) {
+                        // Google logo
+                        Image(systemName: "g.circle.fill")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+
+                        Text("Continue with Google")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(colorScheme == .dark ? Color.white : Color.black)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: CalAIDesignTokens.buttonHeight)
+                    .background(colorScheme == .dark ? Color.white.opacity(0.15) : Color.white)
+                    .cornerRadius(CalAIDesignTokens.buttonRadius)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: CalAIDesignTokens.buttonRadius)
+                            .stroke(colorScheme == .dark ? Color.white.opacity(0.3) : Color.black.opacity(0.2), lineWidth: 1)
+                    )
                 }
                 .buttonStyle(AuthScaleButtonStyle())
                 .disabled(!viewModel.networkConnected || viewModel.isLoading)

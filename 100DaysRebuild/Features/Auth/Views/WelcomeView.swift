@@ -217,8 +217,7 @@ struct WelcomeView: View {
                     author: "Sarah Martinez",
                     role: "Marketing Director",
                     days: "156",
-                    avatarColor: Color(red: 0.2, green: 0.6, blue: 0.9),
-                    avatarIcon: "person.fill"
+                    avatarImage: "avatar1"
                 )
 
                 enhancedTestimonialCard(
@@ -226,8 +225,7 @@ struct WelcomeView: View {
                     author: "Michael Chen",
                     role: "Software Engineer",
                     days: "127",
-                    avatarColor: Color(red: 0.3, green: 0.7, blue: 0.5),
-                    avatarIcon: "person.fill"
+                    avatarImage: "avatar2"
                 )
 
                 enhancedTestimonialCard(
@@ -235,8 +233,7 @@ struct WelcomeView: View {
                     author: "Jessica Williams",
                     role: "Fitness Coach",
                     days: "89",
-                    avatarColor: Color(red: 0.9, green: 0.5, blue: 0.6),
-                    avatarIcon: "person.fill"
+                    avatarImage: "avatar3"
                 )
 
                 enhancedTestimonialCard(
@@ -244,8 +241,7 @@ struct WelcomeView: View {
                     author: "David Thompson",
                     role: "Product Manager",
                     days: "203",
-                    avatarColor: Color(red: 0.7, green: 0.4, blue: 0.9),
-                    avatarIcon: "person.fill"
+                    avatarImage: "avatar4"
                 )
             }
         }
@@ -278,32 +274,32 @@ struct WelcomeView: View {
         author: String,
         role: String,
         days: String,
-        avatarColor: Color,
-        avatarIcon: String
+        avatarImage: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             // Header with avatar and info
             HStack(spacing: 12) {
-                // Avatar
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    avatarColor,
-                                    avatarColor.opacity(0.8)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                // Avatar - Using actual profile image or fallback to SF Symbol
+                Group {
+                    if let uiImage = UIImage(named: avatarImage) {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 48, height: 48)
+                            .clipShape(Circle())
+                    } else {
+                        // Fallback to SF Symbol if image not found
+                        Circle()
+                            .fill(Color.theme.accent.opacity(0.2))
+                            .frame(width: 48, height: 48)
+                            .overlay(
+                                Image(systemName: "person.circle.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 48, height: 48)
+                                    .foregroundColor(.theme.accent)
                             )
-                        )
-                        .frame(width: 48, height: 48)
-
-                    Image(systemName: avatarIcon)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .foregroundColor(.white)
+                    }
                 }
 
                 // Name and role
@@ -365,13 +361,13 @@ struct WelcomeView: View {
 
     private var ctaSection: some View {
         VStack(spacing: 16) {
-            // Primary CTA
+            // Primary CTA - Gradient with black text for better contrast
             Button(action: {
                 isShowingAuthView = true
             }) {
                 Text("Get Started Free")
-                    .font(AppTypography.headline(.semibold))
-                    .foregroundColor(DS.Colors.primaryButtonFg(colorScheme))
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
                     .background(
@@ -388,7 +384,7 @@ struct WelcomeView: View {
                     .shadow(color: Color.theme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
             }
 
-            // Sign in with Apple
+            // Sign in with Apple - Black button with consistent styling
             SignInWithAppleButton(
                 text: .signIn,
                 onRequest: { request in
@@ -403,7 +399,7 @@ struct WelcomeView: View {
                     }
                 }
             )
-            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .signInWithAppleButtonStyle(.black)
             .frame(height: 56)
             .cornerRadius(16)
 
@@ -444,17 +440,26 @@ struct WelcomeView: View {
         .padding(.horizontal, 24)
         .padding(.bottom, 40)
         .background(
-            LinearGradient(
-                colors: [
-                    Color.theme.background.opacity(0),
-                    Color.theme.background.opacity(0.95),
-                    Color.theme.background
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 300)
-            .offset(y: -100)
+            ZStack(alignment: .bottom) {
+                // Blur effect for better blending
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                    .frame(height: 280)
+
+                // Gradient overlay for smooth transition
+                LinearGradient(
+                    colors: [
+                        Color.theme.background.opacity(0),
+                        Color.theme.background.opacity(0.85),
+                        Color.theme.background.opacity(0.95),
+                        Color.theme.background
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 280)
+            }
+            .ignoresSafeArea(edges: .bottom)
         )
     }
 

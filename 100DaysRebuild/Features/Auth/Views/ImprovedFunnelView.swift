@@ -743,34 +743,45 @@ struct ImprovedFunnelView: View {
     }
 
     private func completeFunnel() {
-        userSession.completeFunnel()
+        Task {
+            do {
+                // CHANGED: completeFunnel() is now async - await the Firestore write
+                try await userSession.completeFunnel()
+                print("✅ ImprovedFunnelView: Funnel completion saved successfully")
 
-        // Save user's name to Firestore profile
-        if !funnelModel.answers.userName.isEmpty,
-           let userId = userSession.currentUser?.uid {
-            Task {
-                await saveUserName(userId: userId, name: funnelModel.answers.userName)
+                // Save user's name to Firestore profile
+                if !funnelModel.answers.userName.isEmpty,
+                   let userId = userSession.currentUser?.uid {
+                    await saveUserName(userId: userId, name: funnelModel.answers.userName)
+                }
+
+                analyticsService.trackEvent("funnel_completed", properties: [
+                    "total_steps": totalSteps,
+                    "time_spent": Date().timeIntervalSince(startTime),
+                    "user_name_provided": !funnelModel.answers.userName.isEmpty
+                ])
+
+                // Start the 5-minute welcome offer window ONLY for new users (not legacy)
+                let migrationManager = MigrationManager.shared
+                let isLegacy = migrationManager.isInLegacyGracePeriod()
+
+                if !isLegacy {
+                    subscriptionStore.startFiveMinuteWindow()
+                    print("⏱️  ImprovedFunnelView: Started 5-minute window for new user")
+                } else {
+                    print("⏭️  ImprovedFunnelView: Skipped 5-minute window for legacy user")
+                }
+
+                onComplete()
+
+            } catch {
+                // Handle funnel completion error
+                print("❌ ImprovedFunnelView: Failed to complete funnel - \(error.localizedDescription)")
+                // TODO: Show error message to user
+                // For now, still call onComplete() to avoid blocking user
+                onComplete()
             }
         }
-
-        analyticsService.trackEvent("funnel_completed", properties: [
-            "total_steps": totalSteps,
-            "time_spent": Date().timeIntervalSince(startTime),
-            "user_name_provided": !funnelModel.answers.userName.isEmpty
-        ])
-
-        // Start the 5-minute welcome offer window ONLY for new users (not legacy)
-        let migrationManager = MigrationManager.shared
-        let isLegacy = migrationManager.isInLegacyGracePeriod()
-
-        if !isLegacy {
-            subscriptionStore.startFiveMinuteWindow()
-            print("⏱️  ImprovedFunnelView: Started 5-minute window for new user")
-        } else {
-            print("⏭️  ImprovedFunnelView: Skipped 5-minute window for legacy user")
-        }
-
-        onComplete()
     }
 
     private func saveUserName(userId: String, name: String) async {

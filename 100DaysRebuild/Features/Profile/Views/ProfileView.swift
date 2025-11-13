@@ -8,10 +8,13 @@ import FirebaseAuth
 
 struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var badgeService: BadgeService
+    #if DEBUG
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    #endif
     @StateObject private var viewModel = ProfileViewModel()
     @Environment(\.colorScheme) private var colorScheme
     
@@ -273,7 +276,9 @@ struct ProfileView: View {
                 }
             }
             .environmentObject(userSession)
+            #if DEBUG
             .environmentObject(subscriptionService)
+            #endif
             .environmentObject(ThemeManager.shared)
         }
         .sheet(isPresented: $isShowingUsernamePrompt) {
@@ -373,7 +378,7 @@ struct ProfileView: View {
             }
             
             // Pro badge if user is subscribed
-            if subscriptionService.isProUser {
+            if subscriptionStore.isPro {
                 HStack {
                     Image(systemName: "crown.fill")
                         .foregroundColor(.yellow)
@@ -961,7 +966,7 @@ struct ProfileView_Previews: PreviewProvider {
     static var previews: some View {
         ProfileView()
             .environmentObject(UserSession.shared)
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
             .environmentObject(NotificationService.shared)
             .environmentObject(NavigationRouter())
     }

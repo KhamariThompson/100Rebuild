@@ -46,7 +46,7 @@ class ChallengeService: ObservableObject {
     static let shared = ChallengeService()
 
     private let challengeStore = ChallengeStore.shared
-    private let subscriptionService = SubscriptionService.shared
+    private let subscriptionStore = SubscriptionStore.shared
     // No challenge limits - unlimited for all users
 
     @Published var isDeleting = false

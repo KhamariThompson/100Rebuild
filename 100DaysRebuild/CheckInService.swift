@@ -140,24 +140,54 @@ public class CheckInService {
     }
     
     // Main check-in function with robust error handling
-    public func checkIn(for challengeId: String, durationInMinutes: Int? = nil) async throws -> Bool {
+    public func checkIn(
+        for challengeId: String,
+        durationInMinutes: Int? = nil,
+        note: String? = nil,
+        photo: UIImage? = nil
+    ) async throws -> Bool {
         guard let userId = Auth.auth().currentUser?.uid else {
             throw CheckInError.authRequired
         }
-        
+
         if !NetworkMonitor.shared.isConnected {
             // Queue check-in for later processing
+            // Note: Photo uploads are skipped in offline mode for now
             savePendingCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
-            
+
             // Return success immediately for offline mode
             return true
         }
-        
+
+        // Upload photo to Firebase Storage if provided
+        var photoURL: String? = nil
+        if let photo = photo {
+            let checkInId = UUID().uuidString
+            do {
+                let url = try await PhotoStorageService.shared.uploadCheckInPhoto(
+                    image: photo,
+                    challengeId: challengeId,
+                    checkInId: checkInId
+                )
+                photoURL = url.absoluteString
+            } catch {
+                print("Failed to upload photo: \(error.localizedDescription)")
+                // Continue with check-in even if photo upload fails
+            }
+        }
+
         // Fire and forget - run all operations in background from the main actor.
         Task { @MainActor in
             do {
                 // Perform the check-in operation (internally the heavy work runs off the actor)
-                let _ = try await self.performCheckIn(userId: userId, challengeId: challengeId, date: Date(), durationInMinutes: durationInMinutes)
+                let _ = try await self.performCheckIn(
+                    userId: userId,
+                    challengeId: challengeId,
+                    date: Date(),
+                    durationInMinutes: durationInMinutes,
+                    note: note,
+                    photoURL: photoURL
+                )
 
                 // Run badge evaluation in background with even lower priority
                 Task.detached(priority: .background) {
@@ -167,13 +197,20 @@ public class CheckInService {
                 print("Background check-in failed: \(error.localizedDescription)")
             }
         }
-        
+
         // Return success immediately to avoid UI delay
         return true
     }
     
     // Perform the actual check-in operation
-    nonisolated private func performCheckIn(userId: String, challengeId: String, date: Date, durationInMinutes: Int? = nil) async throws -> Bool {
+    nonisolated private func performCheckIn(
+        userId: String,
+        challengeId: String,
+        date: Date,
+        durationInMinutes: Int? = nil,
+        note: String? = nil,
+        photoURL: String? = nil
+    ) async throws -> Bool {
         // Run the Firestore transaction
         let db = Firestore.firestore()
 
@@ -240,6 +277,16 @@ public class CheckInService {
 
                 if let duration = durationInMinutes {
                     checkInData["durationInMinutes"] = duration
+                }
+
+                // Add note if provided
+                if let note = note, !note.isEmpty {
+                    checkInData["note"] = note
+                }
+
+                // Add photo URL if provided
+                if let photoURL = photoURL {
+                    checkInData["photoURL"] = photoURL
                 }
 
                 try transaction.setData(checkInData, forDocument: checkInRef)

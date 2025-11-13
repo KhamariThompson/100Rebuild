@@ -1,7 +1,7 @@
 import Foundation
 
 /// Simple entitlement policy wrapper to provide a single SSOT for entitlement checks.
-/// Proxies to `SubscriptionService` so callers can uniformly check entitlements.
+/// Proxies to `SubscriptionStore` (the authoritative subscription SSOT).
 @MainActor
 final class EntitlementPolicy {
     static let shared = EntitlementPolicy()
@@ -15,7 +15,7 @@ final class EntitlementPolicy {
     func isEntitled(_ entitlement: Entitlement) -> Bool {
         switch entitlement {
         case .pro:
-            return SubscriptionService.shared.isProUser
+            return SubscriptionStore.shared.isPro
         }
     }
 }

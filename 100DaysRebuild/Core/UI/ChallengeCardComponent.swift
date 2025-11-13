@@ -60,22 +60,49 @@ public struct ChallengeCardComponent: View {
         VStack(alignment: .leading, spacing: 16) {
             // Challenge title with icon
             HStack(alignment: .center, spacing: 12) {
-                // Challenge icon
-                Image(systemName: getChallengeIcon(title: challenge.title))
-                    .font(AppTypography.body(.semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.theme.accent)
-                    .clipShape(Circle())
-                
-                // Challenge title
-                Text(challenge.title)
-                    .font(AppTypography.body(.semibold))
-                    .foregroundColor(.theme.text)
-                    .lineLimit(1)
-                
+                // Challenge icon with gradient background
+                ZStack {
+                    LinearGradient(
+                        colors: [Color.theme.accent, Color.theme.accent.opacity(0.7)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: Color.theme.accent.opacity(0.3), radius: 4, x: 0, y: 2)
+
+                    Image(systemName: getChallengeIcon(title: challenge.title))
+                        .font(AppTypography.headline(.semibold))
+                        .foregroundColor(.white)
+                }
+
+                // Challenge title and timer badge
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(challenge.title)
+                        .font(AppTypography.callout(.semibold))
+                        .foregroundColor(.theme.text)
+                        .lineLimit(2)
+
+                    // Timer badge for timed challenges
+                    if challenge.isTimed {
+                        HStack(spacing: 4) {
+                            Image(systemName: "timer")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text("Timed Challenge")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.theme.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(Color.theme.accent.opacity(0.15))
+                        )
+                    }
+                }
+
                 Spacer()
-                
+
                 // Streak counter - animated conditionally
                 HStack(spacing: 4) {
                     Text(challenge.streakEmoji)
@@ -83,17 +110,20 @@ public struct ChallengeCardComponent: View {
                         .opacity(1.0)
                         .scaleEffect(isAnimating ? 1.1 : 1.0)
                         .animation(Animation.spring(response: 0.3, dampingFraction: 0.6, blendDuration: 0).repeatCount(3, autoreverses: true), value: isAnimating)
-                    
+
                     Text("\(challenge.streakCount)")
-                        .font(AppTypography.subhead(.medium))
-                        .foregroundColor(.theme.subtext)
+                        .font(AppTypography.subhead(.semibold))
+                        .foregroundColor(.theme.text)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
                 .background(
                     Capsule()
-                        .fill(Color.theme.surface)
-                        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
+                        .fill(Color.theme.accent.opacity(0.15))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color.theme.accent.opacity(0.3), lineWidth: 1)
+                        )
                 )
                 .opacity(localHasStreakExpired ? 0.8 : 1.0)
             }
@@ -135,11 +165,38 @@ public struct ChallengeCardComponent: View {
             // Action Button based on state
             checkInButton
         }
-        .padding(16)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.theme.surface)
-                .shadow(color: Color.theme.shadow.opacity(0.1), radius: 2, x: 0, y: 2)
+            ZStack {
+                // Gradient overlay for depth
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.theme.surface,
+                                Color.theme.surface.opacity(0.95)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                // Border for definition
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.theme.accent.opacity(0.1),
+                                Color.theme.border.opacity(0.2)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            }
+            .shadow(color: Color.theme.shadow.opacity(0.08), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.theme.shadow.opacity(0.04), radius: 2, x: 0, y: 1)
         )
         .onAppear {
             updateLocalExpiredStatus()
@@ -297,18 +354,34 @@ public struct ChallengeCardComponent: View {
             } else {
                 // Needs check-in today (includes new challenges or restarted challenges)
                 Button(action: handleCheckIn) {
-                    HStack {
-                        Text("Mark Complete ✅")
-                            .font(AppTypography.callout(.medium))
-                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                    HStack(spacing: 8) {
+                        if challenge.isTimed {
+                            Image(systemName: "timer")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Start Timer")
+                                .font(AppTypography.callout(.semibold))
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Mark Complete")
+                                .font(AppTypography.callout(.semibold))
+                        }
                     }
+                    .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(height: 48)
                     .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.theme.accent)
-                            .shadow(color: Color.theme.accent.opacity(0.15), radius: 3, x: 0, y: 1)
+                        LinearGradient(
+                            colors: [
+                                Color.theme.accent,
+                                Color.theme.accent.opacity(0.85)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
+                    .cornerRadius(14)
+                    .shadow(color: Color.theme.accent.opacity(0.4), radius: 8, x: 0, y: 4)
                 }
                 .buttonStyle(AppScaleButtonStyle())
             }

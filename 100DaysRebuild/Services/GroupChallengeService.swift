@@ -20,7 +20,7 @@ class GroupChallengeService: ObservableObject {
     nonisolated(unsafe) private let firestore = Firestore.firestore()
     private let userSession = UserSession.shared
     private let friendService = FriendService.shared
-    private let subscriptionService = SubscriptionService.shared
+    private let subscriptionStore = SubscriptionStore.shared
     private var cancellables = Set<AnyCancellable>()
     private var challengesListener: ListenerRegistration?
     private var participatingChallengesListener: ListenerRegistration?
@@ -79,8 +79,8 @@ class GroupChallengeService: ObservableObject {
         }
         
         // Check if user is Pro for group challenges with more than 2 participants
-        if maxParticipants > 2 && !subscriptionService.isProUser {
-            subscriptionService.showPaywall = true
+        if maxParticipants > 2 && !subscriptionStore.isPro {
+            // Note: showPaywall removed from SubscriptionStore - handle in UI layer = true
             throw GroupChallengeError.proFeatureRequired
         }
         

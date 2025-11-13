@@ -35,19 +35,8 @@ class LoadingStateManager: ObservableObject {
         self.isLoading = true
         self.loadingProgress = nil
 
-        // Safety timeout to prevent infinite loading states
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 20_000_000_000) // 20 seconds
-            guard let self = self else { return }
-
-            // Only timeout if this is still the active operation
-            if self.activeOperations[operationId] == uuid {
-                self.endLoading(operationId: operationId)
-
-                // Log warning about long operation
-                print("WARNING: Loading operation \(operationId) timed out after 20 seconds")
-            }
-        }
+        // PRODUCTION: No safety timeouts - operations must explicitly call endLoading()
+        // Services are responsible for their own timeout handling
     }
     
     /// Update loading progress (0.0 to 1.0)
@@ -76,16 +65,8 @@ class LoadingStateManager: ObservableObject {
         self.errorMessage = message
         self.isShowingError = true
 
-        // Auto-dismiss after delay if requested
-        if autoDismiss {
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-                guard let self = self else { return }
-                if self.errorMessage == message {
-                    self.isShowingError = false
-                }
-            }
-        }
+        // PRODUCTION: Auto-dismiss uses debounce publisher (setupErrorTimeout) instead of Task.sleep
+        // This prevents blocking the main thread
     }
     
     /// Dismiss current error message

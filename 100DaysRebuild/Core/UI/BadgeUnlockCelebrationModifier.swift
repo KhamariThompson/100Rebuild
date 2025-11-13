@@ -200,7 +200,7 @@ struct BadgeUnlockCelebrationModifier: ViewModifier {
                         .fill(color)
                 )
         }
-        .buttonStyle(ScaleButtonStyle())
+        .buttonStyle(BadgeScaleButtonStyle())
         .opacity(animationProgress)
         .padding(.top, 16)
     }
@@ -300,7 +300,7 @@ extension View {
 }
 
 // Simple scale button style
-struct ScaleButtonStyle: ButtonStyle {
+struct BadgeScaleButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.95 : 1.0)

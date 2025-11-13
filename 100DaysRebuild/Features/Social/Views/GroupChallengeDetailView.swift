@@ -6,7 +6,7 @@ struct GroupChallengeDetailView: View {
     let challengeId: String
     @StateObject private var viewModel = GroupChallengeViewModel()
     @Environment(\.presentationMode) private var presentationMode
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
 
     var body: some View {
         ZStack {

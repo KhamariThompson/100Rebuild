@@ -102,19 +102,35 @@ struct PaywallView: View {
                 animateContent = true
             }
 
-            // Compute founders gate state
-            let fw = store.getFiveMinuteWindow()
-            foundersGate = FoundersGateState(
-                windowActive: fw?.isActive ?? false,
-                introEligible: isAnnualIntroEligible,
-                foundersConsumed: fw?.foundersOfferConsumed ?? false,
-                campaignLive: Constants.FoundersCampaign.isLive
-            )
+            // Compute founders gate state with server-backed check
+            Task {
+                let fw = store.getFiveMinuteWindow()
 
-            // Determine which annual product to show
-            selectedAnnualProductId = foundersGate?.shouldShowIntroProduct == true
-                ? Constants.ProductID.annualIntro
-                : Constants.ProductID.annualNoIntro
+                // Check server for founder's offer consumption (prevents reinstall exploit)
+                let serverConsumed = await store.hasConsumedFoundersOfferServer()
+
+                // Conservative offline rule: if server check fails, don't show offer
+                let consumed: Bool
+                if let serverConsumed = serverConsumed {
+                    consumed = serverConsumed
+                } else {
+                    // Offline/error: fall back to NOT showing offer (conservative)
+                    consumed = true
+                    print("⚠️ PaywallView: Unable to verify founders offer server state - defaulting to consumed for safety")
+                }
+
+                foundersGate = FoundersGateState(
+                    windowActive: fw?.isActive ?? false,
+                    introEligible: isAnnualIntroEligible,
+                    foundersConsumed: consumed,
+                    campaignLive: Constants.FoundersCampaign.isLive
+                )
+
+                // Determine which annual product to show based on server-validated state
+                selectedAnnualProductId = foundersGate?.shouldShowIntroProduct == true
+                    ? Constants.ProductID.annualIntro
+                    : Constants.ProductID.annualNoIntro
+            }
 
             // Track paywall view with detailed analytics (only once)
             if !hasTrackedView {
@@ -153,7 +169,7 @@ struct PaywallView: View {
                         .foregroundStyle(Color.primary.opacity(0.95))
                 }
             }
-            .buttonStyle(ScaleButtonStyle())
+            .buttonStyle(PaywallScaleButtonStyle())
 
             Spacer()
 
@@ -177,7 +193,7 @@ struct PaywallView: View {
                         .fill(Color.primary.opacity(0.12))
                 )
             }
-            .buttonStyle(ScaleButtonStyle())
+            .buttonStyle(PaywallScaleButtonStyle())
             .disabled(isPurchasing)
             .opacity(isPurchasing ? 0.5 : 1.0)
         }
@@ -608,10 +624,10 @@ struct PaywallView: View {
                 "was_intro": (purchasedProductId == Constants.ProductID.annualIntro)
             ])
 
-            // Mark founders offer as consumed if they purchased the intro product
+            // Mark founders offer as consumed if they purchased the intro product (persists to server)
             if purchasedProductId == Constants.ProductID.annualIntro {
-                store.markFoundersOfferConsumed()
-                print("✅ PaywallView: Marked founders offer as consumed")
+                await store.markFoundersOfferConsumed()
+                print("✅ PaywallView: Marked founders offer as consumed and persisted to server")
             }
 
             // CRITICAL: Only grant app access after successful Pro purchase
@@ -665,6 +681,16 @@ struct PaywallView: View {
 
         isPurchasing = false
         dismiss()
+    }
+}
+
+// MARK: - Button Style
+
+struct PaywallScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 

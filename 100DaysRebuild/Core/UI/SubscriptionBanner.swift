@@ -2,22 +2,18 @@ import SwiftUI
 
 /// A banner that shows subscription renewal issues or expiration warnings
 struct SubscriptionBanner: View {
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var entitlementsAdapter: EntitlementsAdapter
     @State private var showBanner = false
 
     var body: some View {
         VStack {
-            if subscriptionService.subscriptionRenewalIssue && showBanner {
-                // Billing issue banner
-                renewalIssueBanner
-            } else if let expirationDate = subscriptionService.subscriptionExpirationDate,
-                     expirationDate < Date().addingTimeInterval(3 * 24 * 60 * 60), // 3 days
-                     showBanner {
-                // Expiration warning banner
-                expirationWarningBanner(date: expirationDate)
-            }
-            
+            // Note: subscriptionRenewalIssue and subscriptionExpirationDate removed from SubscriptionStore
+            // TODO: Implement via customerInfo if needed
+            // if subscriptionStore.state.isProUser && showBanner {
+            //     // Billing issue banner would go here
+            // }
+
             Spacer()
         }
         .animation(.easeInOut, value: showBanner)
@@ -125,7 +121,7 @@ struct SubscriptionBanner: View {
 struct SubscriptionBanner_Previews: PreviewProvider {
     static var previews: some View {
         SubscriptionBanner()
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
             .environmentObject(EntitlementsAdapter.shared)
     }
 } 

@@ -33,9 +33,8 @@ class AppStateCoordinator: ObservableObject {
     private weak var networkMonitor: NetworkMonitor?
     
     private init() {
-        // Delay setup to reduce initialization pressure. Use a Task on the main actor
+        // PRODUCTION: Setup immediately, no delays
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
             self?.setupObservers()
         }
     }
@@ -43,7 +42,9 @@ class AppStateCoordinator: ObservableObject {
     deinit {
         // Cleanup happens automatically when the object is deallocated
         // Cannot access main actor-isolated properties from deinit
+        #if DEBUG
         print("✅ AppStateCoordinator released")
+        #endif
     }
     
     private func setupObservers() {
@@ -82,8 +83,10 @@ class AppStateCoordinator: ObservableObject {
     // Refresh all core data in the app to ensure consistency
     @MainActor
     private func refreshAllData() async {
+        #if DEBUG
         print("AppStateCoordinator: Refreshing all data after network restored")
-        
+        #endif
+
         // Post a notification to let all parts of the app know data has been refreshed
         NotificationCenter.default.post(name: .appDataRefreshed, object: nil)
     }
@@ -96,7 +99,7 @@ class AppStateCoordinator: ObservableObject {
     func attemptRecovery() {
         Task { @MainActor in
             appState = .initializing
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+            // PRODUCTION: No delays, recover immediately
             setupObservers()
         }
     }

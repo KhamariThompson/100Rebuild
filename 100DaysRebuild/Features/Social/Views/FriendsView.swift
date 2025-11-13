@@ -8,7 +8,7 @@ struct FriendsView: View {
     @State private var isSearching = false
     @State private var selectedTab = 0
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @StateObject private var friendSuggestionEngine = FriendSuggestionEngine.shared
     @StateObject private var contactSyncService = ContactSyncService.shared
     @StateObject private var friendService = FriendService.shared
@@ -579,6 +579,6 @@ struct FriendRequestRow: View {
 struct FriendsView_Previews: PreviewProvider {
     static var previews: some View {
         FriendsView()
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
     }
 } 

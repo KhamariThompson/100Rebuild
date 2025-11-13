@@ -1,3 +1,8 @@
+#if DEBUG
+// ⚠️ DEPRECATED: This service is disabled in Release builds
+// All Release builds should use SubscriptionStore instead
+// This remains available in DEBUG builds only for legacy test code
+
 import Foundation
 import StoreKit
 import RevenueCat
@@ -11,6 +16,8 @@ class SubscriptionService: NSObject, ObservableObject {
     /// Set to false to reduce console spam (legacy service - use SubscriptionStore instead)
     private let verboseLogging = false
 
+    // ⚠️ DEPRECATED: Use SubscriptionStore instead
+    // This service is deprecated and will be removed in future releases
     @Published private(set) var isProUser: Bool = false
     @Published private(set) var availableProducts: [Product] = []
     @Published private(set) var renewalDate: Date?
@@ -26,14 +33,13 @@ class SubscriptionService: NSObject, ObservableObject {
     @Published private(set) var currentRevenueCatUID: String = ""
 
     /// Computed property that returns true if user has Pro access
-    /// This includes:
-    /// 1. Active RevenueCat subscription
-    /// 2. Legacy user in grace period
+    /// ⚠️ DEPRECATED: Use SubscriptionStore.shared.isPro instead
     var hasProAccess: Bool {
-        return hasActiveSubscription || migrationManager.isInLegacyGracePeriod()
+        return isProUser
     }
 
     /// Check if user has an active RevenueCat subscription
+    /// ⚠️ DEPRECATED: Use SubscriptionStore.shared.isPro instead
     var hasActiveSubscription: Bool {
         return isProUser
     }
@@ -2176,4 +2182,9 @@ extension SubscriptionService: PurchasesDelegate {
 
 enum StoreError: Error {
     case failedVerification
-} 
+}
+
+#else
+// Release builds: SubscriptionService not available
+// Use SubscriptionStore.shared instead
+#endif

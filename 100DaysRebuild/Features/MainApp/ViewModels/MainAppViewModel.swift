@@ -21,8 +21,11 @@ class MainAppViewModel: ObservableObject {
     
     deinit {
         print("✅ MainAppViewModel released")
-        // Safe to call nonisolated cleanup from deinit
-        nonisolatedCleanup()
+        // Cleanup synchronously to avoid retain cycles
+        // Set operations are thread-safe and don't require MainActor
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
+        print("🧹 MainAppViewModel cleanup complete")
     }
     
     // MARK: - Public Methods
@@ -52,11 +55,25 @@ class MainAppViewModel: ObservableObject {
     // MARK: - Private Methods
     
     private func setupAppLifecycleHandling() {
-        // Listen for app becoming active to check for expired challenges
+        // CONSOLIDATED: Single subscription for app becoming active
+        // Handles both expired challenges AND subscription verification
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in
-                Task {
-                    await self?.checkForExpiredChallenges()
+                guard let self = self else { return }
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    // Check for expired challenges
+                    await self.checkForExpiredChallenges()
+
+                    // Verify subscription status
+                    print("🔐 RevenueCat: MainAppViewModel - App became active, verifying subscription status")
+                    await SubscriptionStore.shared.load()
+
+                    // Identify current user if needed
+                    if let currentUser = Auth.auth().currentUser {
+                        print("🔐 RevenueCat: MainAppViewModel - Identifying current user")
+                        await SubscriptionStore.shared.identifyUser(currentUser.uid)
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -96,7 +113,7 @@ class MainAppViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Also listen for subscription status changes via notification
+        // Listen for subscription status changes via notification
         NotificationCenter.default.publisher(for: NSNotification.Name("SubscriptionStatusChanged"))
             .sink { [weak self] notification in
                 guard let self = self else { return }
@@ -109,30 +126,13 @@ class MainAppViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Add listener for when the app becomes active to validate subscription status
-        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
-            .sink { [weak self] _ in
-                guard let _ = self else { return }
-                print("🔐 RevenueCat: MainAppViewModel - App became active, verifying subscription status")
-                Task {
-                    // Force refresh subscription status
-                    await SubscriptionStore.shared.load()
-
-                    // Identify current user if needed
-                    if let currentUser = Auth.auth().currentUser {
-                        print("🔐 RevenueCat: MainAppViewModel - Identifying current user")
-                        await SubscriptionStore.shared.identifyUser(currentUser.uid)
-                    }
-                }
-            }
-            .store(in: &cancellables)
-
         // Listen for auth state changes to refresh subscription status
         NotificationCenter.default.publisher(for: NSNotification.Name("AuthStateChanged"))
             .sink { [weak self] _ in
-                guard let _ = self else { return }
-                print("🔐 RevenueCat: MainAppViewModel - Auth state changed, verifying subscription status")
-                Task {
+                guard let self = self else { return }
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    print("🔐 RevenueCat: MainAppViewModel - Auth state changed, verifying subscription status")
                     // Verify subscription status when auth state changes
                     if let currentUser = Auth.auth().currentUser {
                         await SubscriptionStore.shared.identifyUser(currentUser.uid)
@@ -143,21 +143,7 @@ class MainAppViewModel: ObservableObject {
     }
     
     private func setupCleanup() {
-        // Store the workItem for cleanup
-        NotificationCenter.default.publisher(for: UIApplication.willTerminateNotification)
-            .sink { [weak self] _ in
-                self?.nonisolatedCleanup()
-            }
-            .store(in: &cancellables)
-    }
-    
-    /// Cleanup method that can be safely called from any thread
-    /// Set and Cancellable operations are thread-safe
-    nonisolated private func nonisolatedCleanup() {
-        print("🧹 MainAppViewModel cleaning up")
-        Task { @MainActor in
-            cancellables.forEach { $0.cancel() }
-            cancellables.removeAll()
-        }
+        // Cleanup will happen in deinit, no need for willTerminate handling
+        // which can cause retain cycles
     }
 } 

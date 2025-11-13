@@ -1,0 +1,324 @@
+================================================================================
+  ROUTING STATE MACHINE - CURRENT IMPLEMENTATION (FLAWED)
+================================================================================
+
+LEGEND:
+  ◯ = State/Route
+  → = Transition
+  [condition] = Gate/Check
+  ⚠️ = Critical Issue
+  ✅ = Correct behavior
+  ❌ = Incorrect behavior
+
+================================================================================
+NODES (Routes)
+================================================================================
+
+◯ Splash         - Initial loading screen
+◯ Auth           - WelcomeView (SignUp/SignIn)
+◯ Loading        - Wait for entitlements (max 4s)
+◯ Funnel         - ImprovedFunnelView (onboarding questions)
+◯ Paywall        - PaywallView or FoundersOfferView
+◯ MainPro        - Main app (requires Pro access)
+
+================================================================================
+EDGES (Transitions with Conditions)
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FROM: Splash                                                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  Splash → Auth
+    [!isAuthenticated]
+    ✅ CORRECT: Not signed in → show auth
+
+  Splash → Loading
+    [isAuthenticated AND !entitlementsLoaded AND elapsed < 4s]
+    ✅ CORRECT: Wait for subscription data
+
+  Splash → (continues to routing logic below)
+    [isAuthenticated AND (entitlementsLoaded OR timeout > 4s)]
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FROM: Auth (after successful signup/signin)                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  Auth → Funnel
+    [isAuthenticated AND isPro=false AND isNewSignup=true AND !hasCompletedFunnel]
+    ✅ CORRECT: New post-cutoff user within 10min window → show funnel
+    ⚠️ ISSUE: Only works within 10-minute grace period!
+
+  Auth → Paywall
+    [isAuthenticated AND isPro=false AND isNewSignup=false AND !hasCompletedFunnel]
+    ❌ CRITICAL BUG: New post-cutoff user after 10min → SKIPS FUNNEL
+    This violates requirement: "Never SignUp → Paywall"
+
+  Auth → MainPro
+    [isAuthenticated AND isPro=true]
+    ✅ CORRECT: Grandfathered or paid user → immediate app access
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FROM: Funnel (after completion)                                         │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  Funnel → Paywall
+    [completeFunnel() called → sets hasCompletedFunnel=true]
+    [isPro=false → routes to .paywall]
+    ✅ CORRECT: Funnel complete, not Pro → show paywall
+    ⚠️ ISSUE: hasCompletedFunnel stored in UserDefaults (device-local)
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FROM: Paywall (after purchase or dismissal)                             │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  Paywall → MainPro
+    [purchase successful → isPro=true]
+    ✅ CORRECT: Purchased Pro → grant access
+
+  Paywall → Paywall
+    [dismissed → isPro=false]
+    ✅ CORRECT: Non-Pro users blocked at paywall
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ SPECIAL CASES                                                            │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  (Any) → Auth
+    [sign out triggered]
+    ✅ CORRECT: Sign out returns to auth
+
+  (Any) → Loading
+    [entitlements refresh in progress]
+    ✅ CORRECT: Show loading during refresh
+
+  Offline First Run → Paywall
+    [isAuthenticated AND accountCreatedAt=nil AND entitlementsLoaded=false]
+    ❌ BUG: Offline user sees Paywall (can't purchase OR complete funnel)
+
+================================================================================
+CRITICAL FLOWS - CURRENT BEHAVIOR
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 1: New Post-Cutoff User (Fresh, Within 10min)                      │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: 2025-11-02T00:00:00Z
+  now: 2025-11-02T00:05:00Z (5 minutes later)
+  isPro: false
+  hasCompletedFunnel: false
+
+  Auth (WelcomeView)
+    → [signup successful]
+  Loading (4s max)
+    → [entitlements loaded, isPro=false]
+  Funnel (ImprovedFunnelView)
+    → [user completes questions, completeFunnel() called]
+    → [hasCompletedFunnel=true saved to UserDefaults + Firestore]
+    → [isPro=false, hasCompletedFunnel=true]
+  Paywall (FoundersOfferView)
+    → [user purchases OR dismisses]
+
+  ✅ CORRECT: SignUp → Funnel → Paywall
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 2: New Post-Cutoff User (24 Hours Later)                           │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: 2025-11-02T00:00:00Z
+  now: 2025-11-03T00:00:00Z (24 hours later)
+  isPro: false
+  hasCompletedFunnel: false (if never completed) OR true (if completed before)
+
+  Auth (already signed in, auto-login)
+    → [isAuthenticated=true]
+  Loading (4s max)
+    → [entitlements loaded, isPro=false]
+    → [isNewSignup = false (24h > 10min)]
+    → [hasCompletedFunnel = false]
+    → [completedOnboarding = false]
+  Paywall
+    → [DIRECT to paywall, SKIPPED FUNNEL]
+
+  ❌ CRITICAL BUG: SignUp → [wait 24h] → Paywall (SKIPPED FUNNEL)
+
+  This violates: "Never SignUp → Paywall"
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 3: New Post-Cutoff User (Reinstall)                                │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: 2025-11-02T00:00:00Z (from Firestore)
+  now: 2025-11-04T00:00:00Z (2 days later, fresh install)
+  isPro: false
+  hasCompletedFunnel: false (LOST - UserDefaults wiped on reinstall)
+  Firestore users/{uid}.funnelCompleted: true (from before)
+
+  Auth (WelcomeView - signin)
+    → [login successful]
+  Loading
+    → [loadUserProfile() loads accountCreatedAt from Firestore]
+    → [hasCompletedFunnel checks UserDefaults['onboardingCompletedAt'] → nil]
+    → [isNewSignup = false (48h > 10min)]
+  Paywall
+    → [DIRECT to paywall, even though user completed funnel on device A]
+
+  ❌ CRITICAL BUG: Reinstall loses hasCompletedFunnel → wrong route
+
+  Alternative outcome: User might be forced to redo funnel
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 4: Grandfathered User (Pre-Cutoff, Within 1yr)                     │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: 2025-10-15T00:00:00Z (before Nov 1 cutoff)
+  now: 2025-11-12T00:00:00Z
+  isPro: true (Grandfather Pro active)
+  hasCompletedFunnel: false
+
+  Auth (WelcomeView - signin or fresh signup)
+    → [isAuthenticated=true]
+  Loading
+    → [loadUserProfile() sets accountCreatedAt]
+    → [SubscriptionStore.setProfile() triggers recomputeState()]
+    → [isGrandfathered = true (created < cutoff AND < 1yr)]
+    → [isPro = rcIsPro OR isGrandfathered = true]
+  MainPro (main app)
+
+  ✅ CORRECT: Grandfathered user gets immediate free access
+
+  Funnel is optional/skippable for grandfathered users
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 5: Grandfathered User (After Free Year Expires)                    │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: 2024-10-15T00:00:00Z (before cutoff)
+  now: 2025-11-12T00:00:00Z (1yr + 28 days later)
+  isPro: false (Grandfather expired, no RC Pro)
+  hasCompletedFunnel: false
+
+  Auth (already signed in)
+  Loading
+    → [SubscriptionStore.recomputeState(): isGrandfathered=false (expired)]
+    → [isPro = false]
+    → [isNewSignup = false]
+    → [hasCompletedFunnel = false]
+  Paywall (blocked from app)
+
+  ✅ CORRECT: Expired grandfather users must subscribe
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ FLOW 6: Offline First Run                                               │
+└──────────────────────────────────────────────────────────────────────────┘
+
+  accountCreatedAt: null (Firestore offline)
+  now: 2025-11-12T00:00:00Z
+  isPro: false (RevenueCat offline)
+  hasCompletedFunnel: false
+  entitlementsLoaded: false
+
+  Auth (WelcomeView - signup while offline)
+    → [signup succeeds with cached auth]
+  Loading (4s timeout)
+    → [entitlementsLoaded=false, but timeout expires]
+    → [accountCreatedAt=nil → isNewSignup=false]
+    → [hasCompletedFunnel=false]
+  Paywall (shown while offline)
+    → [cannot purchase - no network]
+    → [cannot complete funnel - needs Firestore write]
+
+  ❌ BUG: Offline user stuck at paywall (can't proceed)
+
+  Better: Show Funnel (allow offline completion, sync later)
+
+================================================================================
+GATE SUMMARY
+================================================================================
+
+PRIMARY GATES (AppRouter.swift:88-150):
+
+  1. isAuthenticated
+     Source: UserSession.isAuthenticated (Firebase Auth state)
+     ✅ Reliable: Session-based, handles token refresh
+
+  2. isPro
+     Source: SubscriptionStore.isPro (RC Pro OR Grandfather Pro)
+     ✅ Reliable: Server-backed (RevenueCat + Firestore)
+
+  3. accountCreatedAt
+     Source: Firestore users/{userId}.accountCreatedAt
+     ✅ Reliable: Server-backed, backfilled from Auth.metadata
+
+  4. isNewSignup (TIME-BASED)
+     Source: now - accountCreatedAt < 10min
+     ❌ UNRELIABLE: Fails across sessions/reinstalls/devices
+
+  5. hasCompletedFunnel
+     Source: UserDefaults['onboardingCompletedAt'] != nil
+     ❌ UNRELIABLE: Device-local, lost on reinstall
+
+  6. completedOnboarding
+     Source: Firestore users/{userId}.hasCompletedOnboarding
+     ⚠️ UNUSED: Never set by funnel, unclear purpose
+
+FEATURE FLAGS (Constants.swift:134-154):
+
+  7. routingV2Enabled
+     Always true in Release
+     ✅ Safe: Compile-time controlled
+
+  8. overrideNoFunnel
+     Always false in Release
+     ✅ Safe: DEBUG-only bypass
+
+================================================================================
+CRITICAL ISSUES SUMMARY
+================================================================================
+
+❌ ISSUE #1: Time-based isNewSignup gate
+   Location: AppRouter.swift:125-129
+   Problem: After 10min, post-cutoff users route to Paywall, skipping Funnel
+   Impact: Violates "Never SignUp → Paywall" requirement
+
+❌ ISSUE #2: UserDefaults-based hasCompletedFunnel
+   Location: UserSessionExtensions.swift:26-28
+   Problem: Device-local storage lost on reinstall/device change
+   Impact: Users may redo funnel OR get wrong route
+
+⚠️ ISSUE #3: Two overlapping onboarding flags
+   Locations: UserSession.swift:55 vs UserSessionExtensions.swift:26
+   Problem: hasCompletedOnboarding vs hasCompletedFunnel semantic confusion
+   Impact: Routing logic unclear, maintenance burden
+
+⚠️ ISSUE #4: Offline routing broken
+   Location: AppRouter.swift:94-106
+   Problem: Offline users timeout → route to Paywall (can't proceed)
+   Impact: Poor UX, users stuck
+
+================================================================================
+RECOMMENDED FIXES (Phase B)
+================================================================================
+
+1. REMOVE time-based isNewSignup gate
+   → Use hasCompletedFunnel (server-backed) as SSOT
+
+2. MIGRATE hasCompletedFunnel to Firestore
+   → Primary: Firestore users/{userId}.funnelCompleted
+   → Secondary: UserDefaults (cache only)
+
+3. CONSOLIDATE onboarding flags
+   → Keep funnelCompleted (Firestore)
+   → Remove hasCompletedOnboarding OR clarify semantic difference
+
+4. IMPROVE offline handling
+   → Allow Funnel offline (sync funnelCompleted when online)
+   → Block Paywall if offline (can't purchase anyway)
+
+5. ENFORCE routing invariants
+   → Post-cutoff users: MUST see Funnel before Paywall
+   → Grandfathered users: MAY skip Funnel (free access)
+   → Offline users: Allow Funnel (delay Paywall until online)
+
+================================================================================

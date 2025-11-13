@@ -68,6 +68,7 @@ class AppRouter: ObservableObject {
         isAuthenticated: Bool,
         accountCreatedAt: Date?,
         completedOnboarding: Bool,
+        hasCompletedFunnel: Bool,
         isPro: Bool,
         entitlementsLoaded: Bool,
         now: Date = Date()
@@ -120,27 +121,19 @@ class AppRouter: ObservableObject {
         // Routing only uses SubscriptionStore.state.isPro; grandfather block above is debug-only
         #endif
 
-        // Step 5: Determine if user is "new signup"
-        let isNewSignup: Bool = {
-            guard let acctAt = accountCreatedAt else { return false }
-            let elapsed = now.timeIntervalSince(acctAt)
-            return elapsed < Constants.Onboarding.newSignupGracePeriod
-        }()
-
-        // Step 6: Make routing decision
+        // Step 5: Make routing decision (SIMPLIFIED - removed time-based gates)
         // Users MUST have Pro to access main app (includes RC Pro + Grandfather Pro)
         let route: Route
         if effectiveIsProUser {
-            // User has Pro (either from subscription or legacy grace period)
+            // User has Pro (RC Pro OR Grandfather Pro) - grant app access
             route = .mainPro
-        } else if completedOnboarding {
-            // User completed onboarding but doesn't have Pro - show paywall
-            route = .paywall
-        } else if isNewSignup {
-            // New user - show funnel first
+        } else if !hasCompletedFunnel {
+            // User hasn't completed funnel - MUST complete it first
+            // This enforces: SignUp → Funnel (mandatory for all non-Pro users)
             route = .funnel
         } else {
-            // No Pro access and not recently signed up - show paywall
+            // User completed funnel but doesn't have Pro - block at paywall
+            // This enforces: Funnel → Paywall (block until purchase)
             route = .paywall
         }
 

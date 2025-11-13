@@ -116,8 +116,10 @@ struct MainAppView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showNotificationSettings)) { _ in
             viewModel.handleNotificationSettingsRequest()
         }
-        .onAppear { [weak viewModel] in
-            viewModel?.onAppear(updateSafeArea: updateSafeAreaInsets)
+        .onAppear {
+            // IMPORTANT: Never use [weak viewModel] with @StateObject
+            // SwiftUI owns the StateObject lifecycle
+            viewModel.onAppear(updateSafeArea: updateSafeAreaInsets)
         }
         .onChange(of: UIDevice.current.orientation) { newValue in
             viewModel.handleOrientationChange(updateSafeArea: updateSafeAreaInsets)

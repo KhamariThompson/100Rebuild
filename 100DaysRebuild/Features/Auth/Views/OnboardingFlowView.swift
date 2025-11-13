@@ -230,17 +230,26 @@ struct OnboardingFlowView: View {
     }
     
     private func completeOnboarding() {
-        // Mark funnel as completed and store timestamp
-        userSession.completeFunnel()
+        Task {
+            do {
+                // CHANGED: completeFunnel() is now async - await the Firestore write
+                try await userSession.completeFunnel()
+                print("✅ OnboardingFlowView: Funnel completion saved successfully")
 
-        // Track completion analytics
-        analyticsService.trackEvent("funnel_completed", properties: [
-            "time_spent": "\(Date().timeIntervalSince(funnelStartTime))"
-        ])
+                // Track completion analytics
+                analyticsService.trackEvent("funnel_completed", properties: [
+                    "time_spent": "\(Date().timeIntervalSince(funnelStartTime))"
+                ])
 
-        // Note: We do NOT call userSession.completeOnboarding() here
-        // That only happens after successful Pro purchase
-        // The funnel completion just marks that they've finished the questionnaire
+                // Note: We do NOT call userSession.completeOnboarding() here
+                // That only happens after successful Pro purchase
+                // The funnel completion just marks that they've finished the questionnaire
+
+            } catch {
+                print("❌ OnboardingFlowView: Failed to complete funnel - \(error.localizedDescription)")
+                // TODO: Show error to user
+            }
+        }
     }
     
     // Track when the funnel started

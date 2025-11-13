@@ -41,7 +41,7 @@ class NotificationService: NSObject, ObservableObject {
     @Published var isStreakExpirationWarningEnabled: Bool = false
     @Published var streakExpirationWarningHours: Int = 3 // Default to 3 hours before expiration
     
-    private let subscriptionService = SubscriptionService.shared
+    private let subscriptionStore = SubscriptionStore.shared
     private let userSession = UserSession.shared
     
     @Published var isAuthorized = false
@@ -94,11 +94,9 @@ class NotificationService: NSObject, ObservableObject {
     
     /// Helper to check if Pro features can be used
     private func requireProSubscription() async throws {
-        guard subscriptionService.isProUser else {
-            // Show paywall on the main thread
-            await MainActor.run {
-                subscriptionService.showPaywall = true
-            }
+        guard subscriptionStore.isPro else {
+            // Not Pro - cannot use notification features
+            // Note: showPaywall removed from SubscriptionStore - handle in UI layer
             throw NotificationError.proFeature
         }
     }

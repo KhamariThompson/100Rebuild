@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ReminderTabView: View {
     @StateObject private var viewModel = RemindersViewModel()
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @State private var showingPermissionAlert = false
     
@@ -236,7 +236,7 @@ struct ReminderTabView: View {
 struct ReminderTabView_Previews: PreviewProvider {
     static var previews: some View {
         ReminderTabView()
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
             .environmentObject(NotificationService.shared)
     }
 } 

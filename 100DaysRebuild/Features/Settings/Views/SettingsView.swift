@@ -48,12 +48,14 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var userSession: UserSession
-    @EnvironmentObject var subscriptionService: SubscriptionService
     @EnvironmentObject var subscriptionStore: SubscriptionStore
     @EnvironmentObject var notificationService: NotificationService
     @EnvironmentObject var themeManager: ThemeManager
     @EnvironmentObject var router: NavigationRouter
-    
+    #if DEBUG
+    @EnvironmentObject var subscriptionService: SubscriptionService
+    #endif
+
     // Section focus
     var initialSection: SettingsSectionType?
     @State private var scrollToSection: SettingsSectionType?
@@ -163,7 +165,7 @@ struct SettingsView: View {
                     .environmentObject(themeManager)
             case .paywall:
                 PaywallView()
-                    .environmentObject(subscriptionService)
+                    .environmentObject(subscriptionStore)
                     .environmentObject(themeManager)
             case .emailComposer:
                 emailComposerView()
@@ -174,11 +176,13 @@ struct SettingsView: View {
                 ])
             }
         }
-        .sheet(isPresented: $subscriptionService.showPaywall) {
-            PaywallView()
-                .environmentObject(subscriptionService)
-                .environmentObject(themeManager)
-        }
+        // Note: showPaywall removed from SubscriptionStore
+        // TODO: Implement paywall presentation via navigation state if needed
+        // .sheet(isPresented: $showPaywall) {
+        //     PaywallView()
+        //         .environmentObject(subscriptionStore)
+        //         .environmentObject(themeManager)
+        // }
         .sheet(isPresented: $isShowingUsernameSetup) {
             UsernameSetupView()
                 .environmentObject(userSession)
@@ -261,7 +265,7 @@ struct SettingsView: View {
                     .environmentObject(themeManager)
             case .paywall:
                 PaywallView()
-                    .environmentObject(subscriptionService)
+                    .environmentObject(subscriptionStore)
                     .environmentObject(themeManager)
             case .emailComposer:
                 emailComposerView()
@@ -788,10 +792,19 @@ struct SettingsView: View {
                                         .foregroundColor(Color.theme.accent)
                                 }
                             }
-                        } else if subscriptionStore.state.rcIsPro, let renewalDate = subscriptionService.renewalDate {
-                            Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
+                        } else if subscriptionStore.state.rcIsPro {
+                            #if DEBUG
+                            if let renewalDate = subscriptionService.renewalDate {
+                                Text("Renews \(renewalDate.formatted(date: .abbreviated, time: .omitted))")
+                                    .font(AppTypography.caption1())
+                                    .foregroundColor(Color.theme.subtext)
+                            }
+                            #else
+                            // In Release, renewal date would come from subscriptionStore if needed
+                            Text("Active Subscription")
                                 .font(AppTypography.caption1())
                                 .foregroundColor(Color.theme.subtext)
+                            #endif
                         }
                     }
                     .padding(.vertical, 14)
@@ -810,7 +823,12 @@ struct SettingsView: View {
                     } else if subscriptionStore.state.isGrandfatherActive {
                         // Grandfathered users should be able to upgrade before expiration
                         Button {
+                            #if DEBUG
                             subscriptionService.presentSubscriptionSheet()
+                            #else
+                            // In Release, use alternative paywall presentation
+                            activeSheet = .paywall
+                            #endif
                         } label: {
                             SettingsRow(
                                 icon: "crown.fill",
@@ -825,7 +843,12 @@ struct SettingsView: View {
                         // Should not reach here since Pro is required to access app
                         // But keep as fallback
                         Button {
+                            #if DEBUG
                             subscriptionService.presentSubscriptionSheet()
+                            #else
+                            // In Release, use alternative paywall presentation
+                            activeSheet = .paywall
+                            #endif
                         } label: {
                             SettingsRow(
                                 icon: "star.circle.fill",
@@ -1554,10 +1577,15 @@ struct SettingsView: View {
     
     private func restorePurchases() {
         isRestoringPurchases = true
-        
+
         Task {
             do {
+                #if DEBUG
                 try await subscriptionService.restorePurchases()
+                #else
+                // In Release, use SubscriptionStore
+                try await subscriptionStore.restorePurchases()
+                #endif
                 
                 await MainActor.run {
                     isRestoringPurchases = false

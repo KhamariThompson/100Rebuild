@@ -181,9 +181,11 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
     }
 
     /// Mark that the user has consumed the founders intro offer
-    func markFoundersOfferConsumed() {
+    /// This persists to BOTH local UserDefaults AND Firestore for reinstall protection
+    func markFoundersOfferConsumed() async {
         loadFoundersWindow()
 
+        // Update local state
         if var window = foundersWindow {
             window.foundersOfferConsumed = true
             foundersWindow = window
@@ -192,6 +194,60 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
             // Create a consumed state even if window never started
             foundersWindow = FoundersWindowState(version: 1, startedAt: nil, foundersOfferConsumed: true)
             saveFoundersWindow()
+        }
+
+        // Persist to Firestore for server-backed enforcement
+        await persistFoundersOfferConsumption()
+    }
+
+    /// Persist Founder's Offer consumption to Firestore
+    /// This prevents reinstall exploits by storing server-side record
+    private func persistFoundersOfferConsumption() async {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            print("⚠️ SubscriptionStore: Cannot persist founders offer - no user logged in")
+            return
+        }
+
+        do {
+            let db = Firestore.firestore()
+            try await db.collection("users").document(userId).updateData([
+                "foundersOfferConsumedAt": Timestamp(date: Date())
+            ])
+            print("✅ SubscriptionStore: Persisted founders offer consumption to Firestore")
+        } catch {
+            print("❌ SubscriptionStore: Failed to persist founders offer consumption: \(error.localizedDescription)")
+            // Non-fatal - local state still updated
+        }
+    }
+
+    /// Check if user has already consumed the Founder's Offer (server-backed check)
+    /// Returns true if consumed, false if not, nil if unable to fetch (offline/error)
+    func hasConsumedFoundersOfferServer() async -> Bool? {
+        guard let userId = Auth.auth().currentUser?.uid else {
+            return nil
+        }
+
+        do {
+            let db = Firestore.firestore()
+            let doc = try await db.collection("users").document(userId).getDocument()
+
+            // Check server record
+            if let consumedAt = doc.data()?["foundersOfferConsumedAt"] as? Timestamp {
+                print("✅ SubscriptionStore: Server shows founders offer consumed at \(consumedAt.dateValue())")
+                return true
+            }
+
+            // Also check declined flag (if implemented)
+            if let declinedAt = doc.data()?["foundersOfferDeclinedAt"] as? Timestamp {
+                print("✅ SubscriptionStore: Server shows founders offer declined at \(declinedAt.dateValue())")
+                return true  // Declined counts as consumed (no re-offer)
+            }
+
+            print("✅ SubscriptionStore: Server shows no founders offer consumption")
+            return false
+        } catch {
+            print("⚠️ SubscriptionStore: Unable to fetch founders offer status from server: \(error.localizedDescription)")
+            return nil  // Unable to determine - caller should handle conservatively
         }
     }
 
@@ -251,6 +307,9 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
 
     /// Reset the store to default state. Used on sign-out to clear subscription state.
     func reset() async {
+        #if DEBUG
+        print("🔐 SubscriptionStore.reset - Clearing all state")
+        #endif
         // Clear runtime state
         isLoading = false
         error = nil
@@ -260,6 +319,8 @@ final class SubscriptionStore: NSObject, ObservableObject, PurchasesDelegate {
         // Clear grandfather state
         customerInfo = nil
         profile = nil
+        // Force recompute to ensure clean state
+        recomputeState()
     }
 
     // MARK: - Grandfather Pro Logic

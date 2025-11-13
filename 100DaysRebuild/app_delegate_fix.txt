@@ -1,1 +1,0 @@
-// Fix 1: Proper Firebase initialization in AppDelegate

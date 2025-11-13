@@ -9,7 +9,10 @@ struct SocialView: View {
     @EnvironmentObject var router: NavigationRouter
     @EnvironmentObject var userSession: UserSession
     @EnvironmentObject var networkMonitor: NetworkMonitor
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
+    #if DEBUG
     @EnvironmentObject var subscriptionService: SubscriptionService
+    #endif
     @State private var scrollOffset: CGFloat = 0
     @State private var showUsernameSetup = false
     @State private var showNewChallengeModal = false
@@ -118,7 +121,7 @@ struct SocialView: View {
                 }
             }
             .environmentObject(userSession)
-            .environmentObject(subscriptionService)
+            .environmentObject(subscriptionStore)
             .environmentObject(ThemeManager.shared)
         }
         .onAppear {

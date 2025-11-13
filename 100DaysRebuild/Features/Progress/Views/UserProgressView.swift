@@ -2,7 +2,7 @@ import SwiftUI
 
 struct UserProgressView: View {
     @StateObject private var viewModel = UserProgressViewMock()
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     
     var body: some View {
         NavigationView {
@@ -22,7 +22,7 @@ class UserProgressViewMock: ObservableObject {
 // Separate content view to simplify structure
 struct UserProgressContent: View {
     let viewModel: UserProgressViewMock
-    @EnvironmentObject var subscriptionService: SubscriptionService
+    @EnvironmentObject var subscriptionStore: SubscriptionStore
     
     var body: some View {
         ScrollView {
@@ -119,6 +119,6 @@ struct ProgressStatCard: View {
 struct UserProgressView_Previews: PreviewProvider {
     static var previews: some View {
         UserProgressView()
-            .environmentObject(SubscriptionService.shared)
+            .environmentObject(SubscriptionStore.shared)
     }
 } 

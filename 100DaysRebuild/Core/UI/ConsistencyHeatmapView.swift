@@ -21,7 +21,9 @@ public struct ConsistencyHeatmapView: View {
     @State private var animateCurrentDay = false
     @State private var availableMonths: [YearMonth] = []
     @State private var selectedYearMonth: YearMonth?
-    
+    @State private var selectedDate: Date? = nil
+    @State private var showingDayDetail = false
+
     // Day column and week row labels
     private let weekdayLabels = ["S", "M", "T", "W", "T", "F", "S"]
     
@@ -230,11 +232,11 @@ public struct ConsistencyHeatmapView: View {
             VStack(alignment: .leading, spacing: AppSpacing.s) {
                 // Title and view switcher row
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text("Consistency Heatmap")
-                            .font(AppTypography.headline(.semibold))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
                             .foregroundColor(.theme.text)
-                        
+
                         Button(action: {
                             withAnimation {
                                 showHistoryPicker.toggle()
@@ -242,11 +244,11 @@ public struct ConsistencyHeatmapView: View {
                         }) {
                             HStack(spacing: 4) {
                                 Text(formattedDateRange())
-                                    .font(AppTypography.caption1(.medium))
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                                     .foregroundColor(.theme.accent)
-                                
+
                                 Image(systemName: "chevron.down")
-                                    .font(AppTypography.caption2(.semibold))
+                                    .font(.system(size: 11, weight: .bold))
                                     .foregroundColor(.theme.accent)
                                     .rotationEffect(Angle(degrees: showHistoryPicker ? 180 : 0))
                             }
@@ -276,17 +278,17 @@ public struct ConsistencyHeatmapView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(selectedTimeRange.title)
-                                .font(AppTypography.caption1(.medium))
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
                                 .foregroundColor(.theme.subtext)
-                            
+
                             Image(systemName: "chevron.down")
-                                .font(AppTypography.caption2())
+                                .font(.system(size: 11, weight: .semibold))
                                 .foregroundColor(.theme.subtext)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.theme.background.opacity(0.5))
-                        .cornerRadius(6)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.theme.surface.opacity(0.8))
+                        .cornerRadius(8)
                     }
                 }
                 
@@ -301,33 +303,33 @@ public struct ConsistencyHeatmapView: View {
                                 if let months = groupedMonths[year]?.sorted(by: { $0.month > $1.month }) {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("\(year)")
-                                            .font(AppTypography.subhead(.semibold))
+                                            .font(.system(size: 16, weight: .bold, design: .rounded))
                                             .foregroundColor(.theme.text)
                                             .padding(.top, 4)
-                                        
+
                                         ForEach(months) { yearMonth in
                                             Button(action: {
                                                 navigateToMonth(yearMonth)
                                             }) {
                                                 HStack {
                                                     Text(yearMonth.displayString)
-                                                        .font(AppTypography.caption1())
+                                                        .font(.system(size: 14, weight: .medium, design: .rounded))
                                                         .foregroundColor(.theme.text)
-                                                    
+
                                                     Spacer()
-                                                    
+
                                                     if YearMonth.from(date: currentStartDate) == yearMonth {
                                                         Image(systemName: "checkmark")
-                                                            .font(AppTypography.caption1())
+                                                            .font(.system(size: 13, weight: .semibold))
                                                             .foregroundColor(.theme.accent)
                                                     }
                                                 }
-                                                .padding(.vertical, 6)
-                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 8)
+                                                .padding(.horizontal, 10)
                                                 .background(
-                                                    RoundedRectangle(cornerRadius: 6)
-                                                        .fill(YearMonth.from(date: currentStartDate) == yearMonth ? 
-                                                              Color.theme.accent.opacity(0.1) : Color.clear)
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .fill(YearMonth.from(date: currentStartDate) == yearMonth ?
+                                                              Color.theme.accent.opacity(0.12) : Color.clear)
                                                 )
                                             }
                                         }
@@ -462,6 +464,13 @@ public struct ConsistencyHeatmapView: View {
                                     let cell = currentGridData[weekIndex][dayIndex]
                                     heatmapCell(for: cell, size: 16)
                                         .frame(maxWidth: .infinity)
+                                        .onTapGesture {
+                                            // Only allow tapping on past days with check-ins
+                                            if cell.intensity > 0 && !cell.isFuture {
+                                                selectedDate = cell.date
+                                                showingDayDetail = true
+                                            }
+                                        }
                                 }
                             }
                             .frame(maxWidth: .infinity)
@@ -479,43 +488,64 @@ public struct ConsistencyHeatmapView: View {
                 .padding(.bottom, 8)
             
             // Legend row
-            HStack(spacing: AppSpacing.xs) {
-                // Simple check-in vs no check-in legend
-                HStack(spacing: 8) {
+            VStack(spacing: AppSpacing.s) {
+                // First row - check-in indicators
+                HStack(spacing: AppSpacing.m) {
                     // No check-in
                     HStack(spacing: 4) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.gray.opacity(0.2))
-                            .frame(width: 24, height: 12)
-                        
+                            .frame(width: 20, height: 10)
+
                         Text("No Check-in")
-                            .font(AppTypography.subhead())
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
-                    
+
                     // Check-in
                     HStack(spacing: 4) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(colorScheme == .light ? Color.black : Color.white)
-                            .frame(width: 24, height: 12)
-                        
-                        Text("Check-in")
-                            .font(AppTypography.subhead())
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(colorScheme == .light ? Color.black : Color.white)
+                                .frame(width: 20, height: 10)
+
+                            // Small dot indicator
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    Circle()
+                                        .fill(Color.theme.accent)
+                                        .frame(width: 2, height: 2)
+                                        .offset(x: -1, y: 1)
+                                }
+                                Spacer()
+                            }
+                            .frame(width: 20, height: 10)
+                        }
+
+                        Text("Check-in (Tap)")
+                            .font(AppTypography.caption1())
+                            .foregroundColor(.theme.subtext)
+                    }
+
+                    // Today indicator
+                    HStack(spacing: 4) {
+                        Circle()
+                            .stroke(Color.theme.accent, lineWidth: 1)
+                            .frame(width: 8, height: 8)
+
+                        Text("Today")
+                            .font(AppTypography.caption1())
                             .foregroundColor(.theme.subtext)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
-                
-                // Today indicator
-                HStack(spacing: 4) {
-                    Circle()
-                        .stroke(Color.theme.accent, lineWidth: 1)
-                        .frame(width: 8, height: 8)
-                    
-                    Text("Today")
-                        .font(AppTypography.subhead())
-                        .foregroundColor(.theme.subtext)
-                }
+                .frame(maxWidth: .infinity)
+
+                // Hint text
+                Text("Tap any check-in day to view details, photos, and notes")
+                    .font(AppTypography.caption2())
+                    .foregroundColor(.theme.subtext.opacity(0.7))
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
@@ -528,6 +558,11 @@ public struct ConsistencyHeatmapView: View {
             // Start the animation for today's cell when the view appears
             withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 animateCurrentDay = true
+            }
+        }
+        .sheet(isPresented: $showingDayDetail) {
+            if let selectedDate = selectedDate {
+                CheckInDayDetailView(date: selectedDate, challengeId: nil)
             }
         }
     }
@@ -545,7 +580,7 @@ public struct ConsistencyHeatmapView: View {
         let isToday = cell.isToday
         let isFuture = cell.isFuture
         let hasCheckIn = intensity > 0
-        
+
         // Simplified color scheme: Black/White for check-ins (depending on mode), gray for no check-ins
         let color: Color
         if hasCheckIn {
@@ -553,20 +588,20 @@ public struct ConsistencyHeatmapView: View {
         } else {
             color = isFuture ? Color.gray.opacity(0.1) : Color.gray.opacity(0.2)
         }
-        
+
         return ZStack {
             // Base cell
             RoundedRectangle(cornerRadius: 4)
                 .fill(color)
                 .frame(width: size, height: size)
-            
+
             // Today indicator
             if isToday {
                 RoundedRectangle(cornerRadius: 4)
                     .stroke(Color.theme.accent, lineWidth: 1)
                     .frame(width: size, height: size)
             }
-            
+
             // Pulse animation for today's check-in
             if hasCheckIn && isToday {
                 RoundedRectangle(cornerRadius: 4)
@@ -574,6 +609,21 @@ public struct ConsistencyHeatmapView: View {
                     .frame(width: size, height: size)
                     .scaleEffect(animateCurrentDay ? 1.2 : 1.0)
                     .opacity(animateCurrentDay ? 0.4 : 0.8)
+            }
+
+            // Small indicator dot for tappable cells (has check-in, not future)
+            if hasCheckIn && !isFuture {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Circle()
+                            .fill(Color.theme.accent)
+                            .frame(width: 3, height: 3)
+                            .offset(x: -1, y: 1)
+                    }
+                    Spacer()
+                }
+                .frame(width: size, height: size)
             }
         }
         .cornerRadius(4)

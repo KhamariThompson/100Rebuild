@@ -7,7 +7,7 @@ struct FriendProfileView: View {
     let friendUsername: String
     
     @StateObject private var viewModel = FriendProfileViewModel()
-    @EnvironmentObject private var subscriptionService: SubscriptionService
+    @EnvironmentObject private var subscriptionStore: SubscriptionStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
@@ -421,7 +421,7 @@ struct FriendProfileView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
             FriendProfileView(friendId: "123", friendUsername: "john_doe")
-                .environmentObject(SubscriptionService.shared)
+                .environmentObject(SubscriptionStore.shared)
         }
         .preferredColorScheme(.dark)
     }
